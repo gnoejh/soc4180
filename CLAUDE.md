@@ -253,6 +253,11 @@ so `|body_pos|` of `knee_link` gives 0.194 m when the real thigh is **0.341 m**
 (shin 0.300 m, so reach is an annulus from 0.041 m to 0.641 m). Getting this
 wrong silently produced a reachability table calling 0.50 m unreachable.
 
+The week-3 circle demo tracks to 8.4e-05 m. A taller circle leaves the reachable
+set and pins at 2.68e-03 m regardless of iteration count — that invariance is
+deliberate teaching material, not a solver defect. Do not "fix" it by raising
+`iterations`; it does nothing.
+
 `render_poses` draws a sequence of `qpos` without stepping physics — use it for
 anything demonstrating kinematics, so the robot does not fall over mid-lesson.
 

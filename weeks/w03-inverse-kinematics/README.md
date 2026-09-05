@@ -33,6 +33,15 @@ The `stand` keyframe has every leg joint at exactly zero, so the Jacobian's
 smallest singular value is ~9e-07 and its condition number ~2e+06. This is why
 every gait in the course starts crouched.
 
+## Reachability, shown not asserted
+
+The circle demo tracks to **8.4e-05 m**. Stretching it 2 cm taller pushes its
+lowest point outside the leg's reach, and the residual jumps to **2.68e-03 m at
+279°** — and stays there at 12, 40 or 120 iterations.
+
+That invariance is the diagnostic worth teaching: **a residual that will not
+shrink with more iterations is a geometry problem, not a solver problem.**
+
 ## Note on the demo
 
 The circle-tracing demo renders with `render_poses` — **kinematics only, physics

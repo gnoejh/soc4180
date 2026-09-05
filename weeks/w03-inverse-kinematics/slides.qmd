@@ -255,7 +255,7 @@ errors = []
 seed = crouch.copy()
 
 for angle in np.linspace(0, 2 * np.pi, 90):
-    goal = centre + np.array([0.09 * np.cos(angle), 0.0, 0.06 * np.sin(angle)])
+    goal = centre + np.array([0.09 * np.cos(angle), 0.0, 0.04 * np.sin(angle)])
     r = kin.ik_legs(model, scratch, data.qpos[:3], data.qpos[3:7],
                     {**feet, "left": (goal, feet["left"][1])}, seed_qpos=seed)
     q = seed.copy(); q[:3] = data.qpos[:3]; q[3:7] = data.qpos[3:7]
@@ -268,6 +268,40 @@ print(f"90 targets, worst residual error = {max(errors):.2e} m")
 frames = soc4180.render_poses(model, poses, width=560, height=460)
 soc4180.show_video(frames, fps=30)
 ```
+
+---
+
+## Ask for one centimetre more {.smaller}
+
+Stretch the circle vertically and the solver stops tracking — but only in one
+place:
+
+```{python}
+worst, where = 0.0, None
+seed = crouch.copy()
+for angle in np.linspace(0, 2 * np.pi, 90):
+    goal = centre + np.array([0.09 * np.cos(angle), 0.0, 0.06 * np.sin(angle)])
+    r = kin.ik_legs(model, scratch, data.qpos[:3], data.qpos[3:7],
+                    {**feet, "left": (goal, feet["left"][1])},
+                    seed_qpos=seed, iterations=120)
+    q = seed.copy(); q[:3] = data.qpos[:3]; q[3:7] = data.qpos[3:7]
+    for side in ("left", "right"):
+        q[kin.leg_qpos_indices(model, side)] = r[side]
+    seed = q
+    if r["error"] > worst:
+        worst, where = r["error"], np.degrees(angle)
+
+print(f"worst residual {worst:.2e} m, at {where:.0f} degrees around the circle")
+```
+
+**120 iterations changes nothing** — the error is identical at 12. That is the
+signature of a target that is *unreachable*, not one the solver ran out of time
+on. At the bottom of the circle the foot is asked to go below what the leg can
+reach with the pelvis where it is: the annulus from the start of the lecture,
+met from the outside.
+
+A residual that will not shrink with more iterations is a **geometry** problem.
+Only a residual that shrinks slowly is a solver problem.
 
 ---
 

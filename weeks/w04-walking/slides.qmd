@@ -1,0 +1,428 @@
+---
+title: "Week 4 — Making a Humanoid Walk"
+subtitle: "LIPM, ZMP, and an analytic gait · SOC4180 Robot and AI"
+author: "Hong Jeong"
+format:
+  revealjs:
+    output-file: slides.html
+  ipynb:
+    output-file: lab.ipynb
+jupyter: python3
+---
+
+::: {.content-visible when-format="ipynb"}
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gnoejh/soc4180/blob/main/weeks/w04-walking/lab.ipynb)
+
+**Before you start, two things:**
+
+1. **Runtime → Change runtime type → T4 GPU.** Not for training — MuJoCo renders
+   video through EGL on Colab, and that needs the GPU runtime.
+2. **File → Save a copy in Drive.** This notebook is opened from GitHub and is
+   *not* saved. Without a copy, your work disappears when you close the tab.
+:::
+
+## Today the robot walks
+
+No reinforcement learning. No training. No neural network.
+
+Everything today comes from **one linear differential equation** and the inverse
+kinematics you wrote in Week 3.
+
+This is **Layer 4** — control and planning — doing the whole job on its own. When
+we replace parts of it with learning in Week 8 onward, this is what gets replaced,
+and you will know exactly what it was.
+
+---
+
+## Why walking is hard
+
+Standing still is a solved problem: put the centre of mass over the feet.
+
+Walking means **deliberately falling and catching yourself, twice a second.**
+
+- A humanoid is **underactuated** — no motor connects the robot to the ground,
+  so you cannot simply command the body where to go
+- The only way to push the body is **through a foot that is touching the floor**
+- To move forward you must first become unbalanced
+- The support region *changes shape* every step, and briefly is one small foot
+
+---
+
+## The two ways to walk
+
+**Static walking** keeps the centre of mass over the support foot at all times.
+The robot can freeze at any instant and stay upright. It is slow, and it looks
+like a robot from 1985.
+
+**Dynamic walking** allows the centre of mass to leave the support region,
+relying on momentum to carry it to the next foothold. It is faster, more
+efficient, and how humans actually move — but freeze it mid-step and it falls.
+
+We build the dynamic kind. The tool that makes it tractable is a model so
+simplified it seems like cheating.
+
+---
+
+## Centre of pressure, and the ZMP
+
+The floor can only **push**, never pull. All the little contact forces under a
+foot sum to one resultant force, and the point where it acts is the
+**centre of pressure (CoP)**.
+
+The CoP **cannot leave the support polygon** — the convex hull of the contact
+points. That is not a control law, it is geometry: there is no floor outside the
+foot to push with.
+
+In walking this point is usually called the **Zero Moment Point (ZMP)**. The
+balance criterion for the whole semester:
+
+> **ZMP inside the support polygon ⟹ the foot does not rotate about its edge.**
+> Outside, the robot tips, and no ankle torque can stop it.
+
+---
+
+## Our support polygon {.smaller}
+
+Each G1 foot has four contact spheres. Their spread *is* the polygon:
+
+```{python}
+try:
+    import soc4180
+except ImportError:
+    %pip install -q "soc4180 @ git+https://github.com/gnoejh/soc4180.git"
+    import soc4180
+
+import numpy as np
+import mujoco
+
+model = soc4180.load_g1()
+
+pts = [(model.geom_pos[g][0], model.geom_pos[g][1])
+       for g in range(model.ngeom)
+       if mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_BODY, model.geom_bodyid[g])
+       == "left_ankle_roll_link"
+       and model.geom_type[g] == mujoco.mjtGeom.mjGEOM_SPHERE]
+pts = np.array(pts)
+print("contact points in the foot frame (x, y):")
+print(pts)
+print(f"\nfoot length {np.ptp(pts[:,0]):.3f} m, width {np.ptp(pts[:,1]):.3f} m")
+```
+
+A single foot gives you about 17 cm by 6 cm to balance a 33 kg robot on. That is
+the entire margin.
+
+---
+
+## The Linear Inverted Pendulum Model
+
+Replace the robot with a point mass on a massless leg, and impose one
+assumption: **the centre of mass stays at constant height.**
+
+That assumption removes the vertical dynamics and linearises everything:
+
+$$\ddot{x} = \omega^2\,(x - p), \qquad \omega = \sqrt{g / z_c}$$
+
+where $p$ is the ZMP. Read it as: **the mass accelerates away from the ZMP**, and
+faster the further away it gets. Balancing is unstable, which is why it needs
+constant attention.
+
+$\omega$ is the only parameter, and $1/\omega$ is the natural timescale of
+falling.
+
+---
+
+## Solving it exactly {.smaller}
+
+The equation is linear with constant coefficients, so it has a closed-form
+solution — no integration, no optimisation:
+
+$$x(t) = p + (x_0 - p)\cosh(\omega t) + \frac{v_0}{\omega}\sinh(\omega t)$$
+
+```{python}
+lipm = soc4180.LIPM(com_height=0.60)
+print(f"omega   = {lipm.omega:.3f} rad/s")
+print(f"1/omega = {1/lipm.omega:.3f} s   <- how long you have to react")
+
+for t in (0.0, 0.1, 0.2, 0.4):
+    x, v = lipm.evolve(x0=0.0, v0=0.0, zmp=0.05, t=t)
+    print(f"  t={t:.1f}s  released 5 cm from the ZMP:  x={x:+.4f} m  v={v:+.4f} m/s")
+```
+
+Released at rest, the mass runs away exponentially. `cosh` and `sinh` *are*
+falling over, written down.
+
+---
+
+## The trick: run it backwards {.smaller}
+
+We do not want to know where the robot falls. We want to know **what launch
+velocity puts it where we need it** at the end of the step.
+
+That is a two-point boundary value problem, and because the model is linear it
+also has a closed form:
+
+$$v_0 = \omega\,\frac{x_T - p - (x_0 - p)\cosh(\omega T)}{\sinh(\omega T)}$$
+
+```{python}
+T = 0.65
+v0 = lipm.bvp_velocity(x0=-0.07, xT=+0.07, zmp=0.0, T=T)
+xT, vT = lipm.evolve(-0.07, v0, 0.0, T)
+print(f"required launch velocity : {v0:+.4f} m/s")
+print(f"arrives at               : {xT:+.4f} m  (asked for +0.0700)")
+print(f"with velocity            : {vT:+.4f} m/s")
+```
+
+**Each step is one boundary value problem.** Chain them — every step starting
+where the last ended — and you have a gait.
+
+---
+
+## The sideways problem {.smaller}
+
+Forward motion is a straight line. Sideways is an oscillation, and it is the part
+that makes walking *look* like walking.
+
+Demand that each step be the mirror of the last, $(y, v) \to (-y, -v)$. Working
+that through the step map forces $y_0 = 0$: **the centre of mass is always on the
+midline at the moment support switches.**
+
+```{python}
+w = 0.119                       # stance foot offset
+vy = lipm.lateral_periodic_velocity(zmp_y=w, step_time=T)
+sway = [lipm.evolve(0.0, vy, w, f*T)[0] for f in np.linspace(0, 1, 41)]
+print(f"launch velocity toward the stance foot : {vy:+.4f} m/s")
+print(f"maximum sway                           : {max(sway):.4f} m")
+print(f"stance foot is at                      : {w:.4f} m")
+print(f"returns to midline at t=T              : {sway[-1]:+.6f} m")
+```
+
+The body sways **toward** the supporting foot, gravity turns it around, and it
+arrives back at the centre exactly when the other foot is ready. The sway is not
+decoration — it is what buys time to swing a leg.
+
+---
+
+## Planning the footsteps
+
+```{python}
+params = soc4180.GaitParams()
+print(f"step length {params.step_length} m, step time {params.step_time} s, "
+      f"clearance {params.step_height} m")
+print(f"double support {params.double_support*100:.0f}% at each end of the step\n")
+
+for k, (support, support_xy, swing_from, swing_to) in enumerate(
+        soc4180.footstep_plan(params)[:5]):
+    print(f"  step {k}: stand on {support:5s} at x={support_xy[0]:+.2f}  "
+          f"swing {swing_from[0]:+.2f} -> {swing_to[0]:+.2f}")
+```
+
+The first step is a half stride, because both feet start level and a full stride
+would over-reach.
+
+---
+
+## Swinging the leg
+
+The swing foot needs a path that **starts and ends at rest**. A foot still moving
+when it lands will slip or trip, and a foot that leaves abruptly drags.
+
+- Horizontal: a cycloid-like blend, zero velocity at both ends
+- Vertical: lift and lower, peaking at mid-swing
+- **Double support**: for the first and last 20% of the step, *both* feet stay
+  planted so weight can transfer
+
+That double-support margin is not a detail. Without it the robot is on one foot
+100% of the time and falls within a few steps — you will test this.
+
+---
+
+## Assembling the controller
+
+Every control cycle, at 500 Hz:
+
+1. Which step are we in, and how far through it?
+2. **Where should the body be?** → the LIPM boundary value problem
+3. **Where should each foot be?** → planted, or on its swing path
+4. **What joint angles achieve that?** → inverse kinematics, both legs
+5. Send those angles to the position servos
+
+Steps 2–3 are this week. Step 4 is Week 3's work, reused unchanged. That is the
+payoff of building the layers separately.
+
+---
+
+## One trap: the singularity {.smaller}
+
+The G1's `stand` keyframe has **every leg joint at exactly zero** — a perfectly
+straight leg. That is a kinematic singularity: the Jacobian has no direction that
+shortens the leg, so IK cannot lower the body from it, at all.
+
+```{python}
+from soc4180 import kinematics as kin
+
+data = soc4180.keyframe_data(model, "stand")
+mujoco.mj_forward(model, data)
+print("'stand' left-leg joint angles:", np.round(data.qpos[kin.leg_qpos_indices(model, "left")], 3))
+
+controller = soc4180.WalkingController(model)
+print("nominal crouch used instead   :",
+      np.round(controller.nominal[kin.leg_qpos_indices(model, "left")], 3))
+```
+
+Every gait therefore starts from a **crouch**. Humans do this too: you do not
+walk with locked knees.
+
+---
+
+## Watch it walk {.smaller}
+
+```{python}
+controller = soc4180.WalkingController(model, soc4180.GaitParams(n_steps=12))
+data = controller.initial_data()
+
+frames = soc4180.render_rollout(
+    model, data,
+    duration=controller.total_time, fps=30, width=640, height=480,
+    ctrl_fn=controller.ctrl_fn(),
+    track="pelvis", distance=2.6, azimuth=135,
+)
+print(f"walked {data.qpos[0]:+.2f} m in {data.time:.1f} s "
+      f"({data.qpos[0]/data.time:.2f} m/s), pelvis still at {data.qpos[2]:.2f} m")
+soc4180.show_video(frames, fps=30)
+```
+
+---
+
+## What you just watched
+
+A 29-degree-of-freedom humanoid walking, driven by:
+
+- one second-order linear ODE
+- a closed-form solution to a boundary value problem, once per step
+- a cycloid
+- inverse kinematics
+
+**No training. No data. No reward function.** Roughly two hundred lines.
+
+Remember this when a walking policy takes 150 million simulation steps to learn
+the same thing. Learning buys robustness, not the gait itself.
+
+---
+
+## Now measure it {.smaller}
+
+Belief is not evidence. Where did the ZMP actually go?
+
+```{python}
+controller = soc4180.WalkingController(model, soc4180.GaitParams(n_steps=12))
+data = controller.initial_data()
+
+log = []
+while data.time < controller.total_time:
+    data.ctrl[:] = controller.control(data.time)
+    mujoco.mj_step(model, data)
+    zx, zy = controller.zmp(data)
+    log.append((data.time, data.qpos[0], data.qpos[1], data.qpos[2], zx, zy))
+
+log = np.array(log)
+walking = log[log[:, 0] > controller.params.settle_time]
+grounded = walking[~np.isnan(walking[:, 4])]
+
+print(f"travelled     {log[-1,1]:+.3f} m")
+print(f"pelvis height [{log[:,3].min():.3f}, {log[:,3].max():.3f}] m — never fell")
+print(f"ZMP y range   [{grounded[:,5].min():+.3f}, {grounded[:,5].max():+.3f}] m")
+print(f"stance feet at +-{controller.params.stance_width:.3f} m")
+```
+
+---
+
+## The model is wrong, usefully {.smaller}
+
+```{python}
+import matplotlib.pyplot as plt
+
+w = controller.params.stance_width
+fig, ax = plt.subplots(2, 1, figsize=(9, 5), sharex=True)
+
+ax[0].plot(grounded[:, 0], grounded[:, 5], lw=1.2, label="measured ZMP $y$")
+ax[0].plot(walking[:, 0], walking[:, 2], lw=1.2, label="pelvis $y$")
+for s in (+w, -w):
+    ax[0].axhline(s, ls="--", lw=0.8, color="0.4")
+ax[0].set_ylabel("lateral (m)"); ax[0].legend(loc="upper right", fontsize=8)
+ax[0].set_title("dashed = stance foot centres")
+
+ax[1].plot(walking[:, 0], walking[:, 1], lw=1.2)
+ax[1].set_ylabel("forward $x$ (m)"); ax[1].set_xlabel("time (s)")
+fig.tight_layout()
+plt.show()
+```
+
+---
+
+## Where the LIPM breaks {.smaller}
+
+The measured ZMP swings **wider than the feet**. The theory says that cannot
+happen — and the theory is right; the assumptions are what failed:
+
+| LIPM assumes | The G1 actually |
+| --- | --- |
+| A point mass | Has a swinging leg with real momentum |
+| Constant CoM height | Bobs as the stance leg compresses |
+| Massless legs | Carries ~30% of its mass below the hips |
+| Instant support exchange | Rolls weight across a finite foot |
+| Perfectly rigid position control | Uses servos of finite stiffness that sag |
+
+It walks anyway. **A model does not have to be true to be useful — it has to be
+wrong in ways that do not matter yet.** Week 13 is where they start to matter.
+
+---
+
+## The honest limitations {.smaller}
+
+This controller is **open loop**. It never looks at the IMU, never measures where
+the body actually is, and never corrects.
+
+Consequences you can see in the data:
+
+- it **drifts sideways** over many steps, with nothing to pull it back
+- it cannot recover from a push, at all
+- it walks on flat ground only — one unexpected step and it is over
+- the gait is fixed at design time; asking for a different speed means
+  re-deriving
+
+Every one of these is a reason the field moved to learned policies. **Not because
+the mathematics is wrong** — you just watched it work — but because hand-derived
+control is brittle outside the conditions it was derived for.
+
+---
+
+## Exercises {.smaller}
+
+Break it deliberately, and record what fails and why.
+
+1. **Remove double support.** Set `double_support=0.0`. How many steps before it
+   falls? Which direction, and why that direction?
+2. **Rush it.** Reduce `step_time` toward 0.35 s. Find the value where it fails.
+   Compare it to $1/\omega$ — is the failure point near the model's own timescale?
+3. **Overstride.** Increase `step_length`. Where does it break, and is it the
+   swing leg reaching its limit or the balance failing?
+4. **Ice.** Set the floor friction to 0.2 (`model.geom_friction[0, 0] = 0.2`).
+   The ZMP argument assumes no slipping — what actually happens?
+5. **Moon.** Set gravity to $-1.62\ \mathrm{m/s^2}$ **without** changing the
+   controller. Predict the failure from $\omega = \sqrt{g/z_c}$ before running it.
+6. **Instrument it.** Plot the ZMP against the *support polygon of the current
+   stance foot* rather than a fixed line, and measure what fraction of the walk
+   is genuinely inside.
+
+---
+
+## Next week
+
+**Week 5 — actuation and PD control.** Today we assumed the joints simply go
+where they are told. They do not: they are position servos with finite gain,
+and that is why the pelvis sagged below its commanded height all through this
+lecture.
+
+We tune those gains, measure tracking error against torque saturation, and then
+build a gait with **no model at all** — a central pattern generator — to compare
+against today's.

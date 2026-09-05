@@ -206,6 +206,36 @@ one.** Assert direction and magnitude instead (`fell more than 0.5 m`,
 `stayed above 0.7 m`). `set_seed` makes a run repeatable on one machine; it does
 not make it identical across machines.
 
+## Walking (week 4)
+
+`kinematics.py` (damped least-squares leg IK) and `walking.py` (LIPM + footstep
+gait) make the G1 walk **~1.0 m in 9 s, open loop, with no learning**. Two bugs
+cost real time here; do not reintroduce them.
+
+**The `stand` keyframe is a kinematic singularity.** Every leg joint is exactly
+zero, i.e. a perfectly straight leg, so the Jacobian has no direction that
+shortens it and IK cannot lower the body at all (the knee range is
+`[-0.087, 2.880]`, so it also clips immediately). Seed IK from the bent-knee
+crouch in `WalkingController.nominal`, never from `stand`.
+
+**Chain the LIPM boundary value problems.** Each step's CoM trajectory must start
+where the previous step ended (`_build_segments`). Computing each step absolutely
+instead teleports the commanded pelvis backwards by half a stride at every
+support exchange — the robot then falls, and it looks like a balance problem
+rather than the bookkeeping error it is.
+
+Verified behaviour, useful as regression checks:
+
+- total vertical ground reaction ≈ body weight (~327 N)
+- measured ZMP y reaches ±0.26 m against stance feet at ±0.119 m — **outside the
+  support polygon**. The LIPM's assumptions fail (point mass, constant height,
+  massless legs, stiff servos), not the ZMP criterion. Teach this; do not "fix" it.
+- the gait is genuinely sensitive: several nearby `GaitParams` settings fall over.
+  Defaults came from a sweep, so re-sweep before changing one.
+
+`render_rollout(..., track="pelvis")` follows a body with the camera. Any
+locomotion video needs it — the robot leaves a fixed frame in about two seconds.
+
 ## Pedagogical constraints that drive the code
 
 - **A robot must walk by week ~4 using analytic control (LIPM/ZMP), long before

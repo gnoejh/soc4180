@@ -64,15 +64,32 @@ def render_rollout(
     height: int = 480,
     camera: int | str = -1,
     ctrl_fn=None,
+    track: str | None = None,
+    distance: float = 3.0,
+    azimuth: float = 120.0,
+    elevation: float = -15.0,
 ) -> list[np.ndarray]:
     """Step the model forward and return one RGB frame per video frame.
 
     ``ctrl_fn(model, data) -> None`` is called before each physics step, which is
     where a controller writes into ``data.ctrl``. With no ``ctrl_fn`` the robot
     simply falls under gravity, which is the honest week-1 starting point.
+
+    ``track`` names a body the camera should follow. A walking robot leaves a
+    fixed frame within a couple of seconds, so any locomotion video needs this.
     """
     if data is None:
         data = mujoco.MjData(model)
+
+    cam = camera
+    track_id = -1
+    if track is not None:
+        track_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, track)
+        if track_id < 0:
+            raise ValueError(f"no body named {track!r} to track")
+        cam = mujoco.MjvCamera()
+        cam.type = mujoco.mjtCamera.mjCAMERA_FREE
+        cam.distance, cam.azimuth, cam.elevation = distance, azimuth, elevation
 
     frames: list[np.ndarray] = []
     with mujoco.Renderer(model, height=height, width=width) as renderer:
@@ -81,7 +98,9 @@ def render_rollout(
                 ctrl_fn(model, data)
             mujoco.mj_step(model, data)
             if len(frames) < data.time * fps:
-                renderer.update_scene(data, camera=camera)
+                if track_id >= 0:
+                    cam.lookat[:] = data.xpos[track_id]
+                renderer.update_scene(data, camera=cam)
                 frames.append(renderer.render())
     return frames
 

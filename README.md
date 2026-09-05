@@ -13,6 +13,7 @@ Every lab runs in **Google Colab with zero installation**.
 | --- | --- | --- | --- |
 | [00](weeks/w00-robot-stack/) | What a Robot Is — the five-layer stack | [![Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gnoejh/soc4180/blob/main/weeks/w00-robot-stack/lab.ipynb) | CPU |
 | [01](weeks/w01-intro/) | Robots, Simulation, and MuJoCo | [![Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gnoejh/soc4180/blob/main/weeks/w01-intro/lab.ipynb) | CPU |
+| [04](weeks/w04-walking/) | Making a humanoid walk — LIPM & ZMP | [![Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gnoejh/soc4180/blob/main/weeks/w04-walking/lab.ipynb) | GPU (render) |
 
 Week 00 is the day-one lecture, taught before Week 01.
 
@@ -78,6 +79,8 @@ src/soc4180/     shared helpers, installed as a package
   render.py      GL backend + ffmpeg selection, rollout rendering, video
   models.py      Menagerie robots, pinned
   sim.py         keyframes, actuation on/off, hold controllers
+  kinematics.py  leg FK/IK (damped least squares)
+  walking.py     LIPM, footstep planning, the analytic gait
   seeding.py     reproducibility
   checkpoints.py pre-trained policy loading (the RL-week safety net)
 weeks/wNN-*/     slides.qmd (source) -> slides.html + lab.ipynb

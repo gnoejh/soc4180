@@ -6,6 +6,7 @@ machine, so labs behave the same locally and in Colab.
 
 # MUST be first: selects MUJOCO_GL before any submodule imports mujoco.
 from ._gl import GL_BACKEND, is_colab
+from .kinematics import fk_foot, ik_legs, leg_chain, leg_qpos_indices
 from .models import (
     MENAGERIE_COMMIT,
     MENAGERIE_VERSION,
@@ -16,7 +17,7 @@ from .models import (
     load_robot,
     robot_path,
 )
-from .render import render_rollout, save_video, show_video
+from .render import render_poses, render_rollout, save_video, show_video
 from .seeding import set_seed
 from .walking import GaitParams, LIPM, WalkingController, footstep_plan
 from .sim import actuation_disabled, hold, keyframe_data, keyframe_names
@@ -30,12 +31,17 @@ __all__ = [
     "MENAGERIE_VERSION",
     "__version__",
     "by_category",
+    "fk_foot",
+    "ik_legs",
+    "leg_chain",
+    "leg_qpos_indices",
     "humanoids",
     "license_of",
     "load_g1",
     "load_robot",
     "robot_path",
     "is_colab",
+    "render_poses",
     "render_rollout",
     "save_video",
     "hold",

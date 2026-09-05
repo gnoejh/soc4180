@@ -1,0 +1,330 @@
+---
+title: "Week 3 — Inverse Kinematics"
+subtitle: "Put the foot *there* · SOC4180 Robot and AI"
+author: "Hong Jeong"
+format:
+  revealjs:
+    output-file: slides.html
+  ipynb:
+    output-file: lab.ipynb
+jupyter: python3
+---
+
+::: {.content-visible when-format="ipynb"}
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gnoejh/soc4180/blob/main/weeks/w03-inverse-kinematics/lab.ipynb)
+
+**Before you start, two things:**
+
+1. **Runtime → Change runtime type → T4 GPU.** Not for training — MuJoCo renders
+   video through EGL on Colab, and that needs the GPU runtime.
+2. **File → Save a copy in Drive.** This notebook is opened from GitHub and is
+   *not* saved. Without a copy, your work disappears when you close the tab.
+:::
+
+## Reversing last week
+
+Last week: **angles in, foot position out.** One answer, always, computed in
+twelve lines.
+
+This week: **foot position in, angles out.** And now the question misbehaves.
+
+- there may be **no** solution — the target is out of reach
+- there may be **many** — knee forward or knee back
+- there may be **infinitely many** — more joints than constraints
+- near some poses the answer exists but **explodes**
+
+Every one of those is a real situation the Week 4 walker has to survive.
+
+---
+
+## Nothing is falling today
+
+Inverse kinematics is a statement about **geometry**, not balance. A pose that
+solves perfectly may be one the robot cannot hold for a moment.
+
+So today we render **kinematics only** — poses placed and drawn, physics never
+stepped. Nothing falls over, because nothing is being simulated.
+
+Keeping that separation clear now is what lets Week 4 combine them deliberately.
+
+---
+
+## The easy case: two links in a plane {.smaller}
+
+Ignore the hip's roll and yaw and the ankle. What is left is a thigh and a shin —
+two links, one plane. The law of cosines solves it outright.
+
+With thigh $\ell_1$, shin $\ell_2$, and a target a distance $d$ from the hip:
+
+$$\cos\theta_{\text{knee}} = \frac{d^2 - \ell_1^2 - \ell_2^2}{2\,\ell_1\ell_2}$$
+
+```{python}
+try:
+    import soc4180
+except ImportError:
+    %pip install -q "soc4180 @ git+https://github.com/gnoejh/soc4180.git"
+    import soc4180
+
+import numpy as np
+import mujoco
+from soc4180 import kinematics as kin
+
+model = soc4180.load_g1()
+data = soc4180.keyframe_data(model, "stand")
+mujoco.mj_forward(model, data)
+
+def anchor(body_name):
+    """World position of a body's joint axis — where the link actually pivots."""
+    b = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, body_name)
+    j = model.body_jntadr[b]
+    return data.xpos[b] + data.xmat[b].reshape(3, 3) @ model.jnt_pos[j]
+
+thigh = np.linalg.norm(anchor("left_knee_link") - anchor("left_hip_pitch_link"))
+shin = np.linalg.norm(anchor("left_ankle_pitch_link") - anchor("left_knee_link"))
+print(f"thigh  l1 = {thigh:.4f} m")
+print(f"shin   l2 = {shin:.4f} m")
+print(f"reach is an annulus: {abs(thigh-shin):.4f} m to {thigh+shin:.4f} m")
+```
+
+---
+
+## What the closed form tells you {.smaller}
+
+```{python}
+def knee_angle(d, l1=thigh, l2=shin):
+    """Interior knee angle for a hip-to-foot distance d, or None if unreachable."""
+    c = (d**2 - l1**2 - l2**2) / (2 * l1 * l2)
+    if abs(c) > 1.0:
+        return None                      # outside the annulus: no solution
+    return np.arccos(c)
+
+for dist in (0.02, 0.20, 0.40, 0.60, 0.64, 0.70):
+    a = knee_angle(dist)
+    print(f"  d={dist:.2f} m -> " +
+          ("unreachable" if a is None else f"knee bend {np.degrees(np.pi - a):6.1f} deg"))
+```
+
+Three lessons in one table:
+
+- Reachable distances form an **annulus**, not a disc — too close is as
+  impossible as too far
+- $\arccos$ returns one angle, but $-\theta$ works equally well: **two solutions**,
+  knee-forward and knee-back. Humans use one of them; the mathematics does not care
+- As $d$ approaches $\ell_1+\ell_2$ the knee straightens, and the sensitivity of
+  angle to distance **diverges**
+
+---
+
+## Why we cannot stop there
+
+The closed form handles two joints in a plane. A real foot pose is **six
+numbers** — three position, three orientation — and the leg has six joints.
+
+Deriving closed-form IK for all six is possible, and it is:
+
+- specific to this exact robot, and wrong for any other
+- painful to extend when a joint limit or an obstacle intrudes
+- brittle: a small model change invalidates the derivation
+
+So we use a method that needs no derivation at all, works for any chain, and
+degrades gracefully when the problem is ill-posed.
+
+---
+
+## Differential IK
+
+Do not solve for the angles. Solve for a **change** in the angles that reduces
+the error, then repeat.
+
+From last week, $\dot{\mathbf{x}} = J(q)\,\dot{q}$. Ask for the joint change that
+produces a desired foot motion $\mathbf{e}$:
+
+$$J\,\Delta q = \mathbf{e}$$
+
+For our square $6\times6$ Jacobian you might just invert it. **Do not.** Near a
+singularity $J$ is nearly rank-deficient, $J^{-1}$ becomes enormous, and the
+solver commands joint velocities no motor could produce.
+
+---
+
+## Damped least squares {.smaller}
+
+Instead of demanding an exact solution, ask for a compromise: reduce the error
+*and* keep the joint motion small.
+
+$$\Delta q = J^{\mathsf{T}}\left(J J^{\mathsf{T}} + \lambda^2 I\right)^{-1}\mathbf{e}$$
+
+$\lambda$ trades accuracy against stability. Away from singularities it barely
+matters; near one it is the difference between a smooth motion and a violent
+lunge.
+
+```{python}
+jac_p, jac_r = np.zeros((3, model.nv)), np.zeros((3, model.nv))
+mujoco.mj_jacSite(model, data, jac_p, jac_r, kin.foot_site_id(model, "left"))
+J = np.vstack([jac_p, jac_r])[:, kin.leg_dof_indices(model, "left")]
+
+err = np.array([0.0, 0.0, -0.05, 0, 0, 0])       # ask to lower the foot 5 cm
+for lam in (0.0, 1e-3, 1e-2, 1e-1):
+    M = J @ J.T + lam**2 * np.eye(6)
+    dq = J.T @ np.linalg.solve(M, err)
+    print(f"  lambda={lam:<6}  |dq| = {np.linalg.norm(dq):10.2f} rad")
+```
+
+---
+
+## That table is a singularity {.smaller}
+
+Those numbers are not a quirk of the example. The `stand` keyframe has **every
+leg joint at exactly zero** — a perfectly straight leg.
+
+```{python}
+print("stand pose:", np.round(data.qpos[kin.leg_qpos_indices(model, "left")], 4))
+sv = np.linalg.svd(J, compute_uv=False)
+print(f"singular values      : {np.round(sv, 5)}")
+print(f"smallest             : {sv[-1]:.2e}   <- effectively zero")
+print(f"condition number     : {sv[0]/sv[-1]:.3e}")
+```
+
+A straight leg has **no direction that shortens it**. The Jacobian has lost a
+rank, undamped IK divides by nearly zero, and no amount of iteration helps —
+the information simply is not there.
+
+---
+
+## The consequence, measured {.smaller}
+
+Ask the solver to lower the pelvis 8 cm, from each of two seeds:
+
+```{python}
+scratch = mujoco.MjData(model)
+sid = {s: kin.foot_site_id(model, s) for s in ("left", "right")}
+feet = {s: (data.site_xpos[sid[s]].copy(), data.site_xmat[sid[s]].reshape(3, 3).copy())
+        for s in ("left", "right")}
+base = data.qpos[:3].copy() - [0, 0, 0.08]
+
+straight = data.qpos.copy()                       # the 'stand' singularity
+crouch = soc4180.WalkingController(model).nominal  # bent knees
+
+for label, seed in (("straight-leg seed", straight), ("crouched seed", crouch)):
+    r = kin.ik_legs(model, scratch, base, data.qpos[3:7], feet,
+                    seed_qpos=seed, iterations=40)
+    print(f"  {label:20s} residual error = {r['error']:.2e}   knee = {r['left'][3]:+.3f} rad")
+```
+
+**The same request, the same solver, a different starting pose — and one of them
+simply cannot be solved.** This is why every gait in this course starts from a
+crouch, and why humans do not walk with locked knees.
+
+---
+
+## Reaching a target {.smaller}
+
+With the crouch as a seed, IK is exact. Move the foot somewhere new:
+
+```{python}
+target = feet["left"][0] + np.array([0.15, 0.0, 0.05])
+r = kin.ik_legs(model, scratch, data.qpos[:3], data.qpos[3:7],
+                {**feet, "left": (target, feet["left"][1])}, seed_qpos=crouch)
+
+q = crouch.copy()
+q[:3] = data.qpos[:3]; q[3:7] = data.qpos[3:7]
+for s in ("left", "right"):
+    q[kin.leg_qpos_indices(model, s)] = r[s]
+achieved, _ = soc4180.fk_foot(model, q, "left")
+
+print(f"requested : {np.round(target, 5)}")
+print(f"achieved  : {np.round(achieved, 5)}")
+print(f"error     : {np.linalg.norm(achieved - target):.2e} m")
+print(f"joint angles: {np.round(r['left'], 3)}")
+```
+
+Checked with **last week's** forward kinematics, not with the solver's own
+opinion of itself.
+
+---
+
+## Trace a circle {.smaller}
+
+The real test of a solver is a whole path, not one point. Kinematics only — the
+robot is placed, never simulated:
+
+```{python}
+poses = []
+centre = feet["left"][0] + np.array([0.05, 0.0, 0.06])
+errors = []
+seed = crouch.copy()
+
+for angle in np.linspace(0, 2 * np.pi, 90):
+    goal = centre + np.array([0.09 * np.cos(angle), 0.0, 0.06 * np.sin(angle)])
+    r = kin.ik_legs(model, scratch, data.qpos[:3], data.qpos[3:7],
+                    {**feet, "left": (goal, feet["left"][1])}, seed_qpos=seed)
+    q = seed.copy(); q[:3] = data.qpos[:3]; q[3:7] = data.qpos[3:7]
+    for s in ("left", "right"):
+        q[kin.leg_qpos_indices(model, s)] = r[s]
+    seed = q                      # warm start from the previous solution
+    poses.append(q.copy()); errors.append(r["error"])
+
+print(f"90 targets, worst residual error = {max(errors):.2e} m")
+frames = soc4180.render_poses(model, poses, width=560, height=460)
+soc4180.show_video(frames, fps=30)
+```
+
+---
+
+## Two habits worth keeping
+
+**Warm starting.** Each solve begins from the previous answer. It converges in
+fewer iterations, and — more importantly — it picks the solution *near* the last
+one, so the leg does not flip between knee-forward and knee-back mid-path.
+
+**Joint limits, every iteration.** The solver clamps after each step. Without
+that, IK cheerfully returns a mathematically perfect pose that the robot's
+mechanical stops forbid.
+
+Both matter next week, where this runs 500 times a second while the robot is
+actually falling forwards.
+
+---
+
+## What Week 4 does with this {.smaller}
+
+You now have everything the walker needs:
+
+| This week | Week 4 |
+| --- | --- |
+| Place a foot at a target | Place it on a planned footstep |
+| Trace a path | Follow a swing trajectory |
+| Pelvis given, legs solved | Pelvis follows the LIPM |
+| Crouch to avoid singularity | Every gait starts crouched |
+| Warm starting | 500 solves per second, each seeded by the last |
+
+Next week the targets stop being ours to choose. They come from a **balance
+model**, and the robot walks.
+
+---
+
+## Exercises {.smaller}
+
+1. **Both elbows.** The knee has two solutions. Force the other one by seeding
+   with a negative knee angle. Does the solver find it, and does the foot end up
+   in the same place?
+2. **Out of reach.** Ask for a foot target 0.8 m from the hip. What does the
+   residual error do, and what pose does the solver settle into?
+3. **Damping sweep.** Trace the circle with $\lambda = 0$ and $\lambda = 1$.
+   Compare worst-case error against the largest single joint step.
+4. **No warm start.** Re-seed every solve from the crouch instead of the previous
+   pose. Watch for discontinuities in the joint trajectories, and plot them.
+5. **Wrong anchor.** Feed IK a target orientation tilted 20° from flat. Is it
+   reachable? What does that imply about walking on a slope?
+6. **Count the iterations.** Instrument `ik_legs` to report iterations used per
+   solve along the circle. Where on the path is it working hardest, and why?
+
+---
+
+## Next week
+
+**Week 4 — the robot walks.** Footstep planning, the linear inverted pendulum,
+and the analytic gait that carries a 29-DOF humanoid across the floor with no
+learning of any kind.
+
+Bring the crouch.

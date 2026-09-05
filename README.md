@@ -13,6 +13,8 @@ Every lab runs in **Google Colab with zero installation**.
 | --- | --- | --- | --- |
 | [00](weeks/w00-robot-stack/) | What a Robot Is — the five-layer stack | [![Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gnoejh/soc4180/blob/main/weeks/w00-robot-stack/lab.ipynb) | CPU |
 | [01](weeks/w01-intro/) | Robots, Simulation, and MuJoCo | [![Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gnoejh/soc4180/blob/main/weeks/w01-intro/lab.ipynb) | CPU |
+| [02](weeks/w02-transforms/) | Transforms and forward kinematics | [![Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gnoejh/soc4180/blob/main/weeks/w02-transforms/lab.ipynb) | GPU (render) |
+| [03](weeks/w03-inverse-kinematics/) | Inverse kinematics | [![Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gnoejh/soc4180/blob/main/weeks/w03-inverse-kinematics/lab.ipynb) | GPU (render) |
 | [04](weeks/w04-walking/) | Making a humanoid walk — LIPM & ZMP | [![Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gnoejh/soc4180/blob/main/weeks/w04-walking/lab.ipynb) | GPU (render) |
 
 Week 00 is the day-one lecture, taught before Week 01.

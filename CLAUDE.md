@@ -11,7 +11,7 @@ labs, taught through MuJoCo simulation. The spine is a **walking humanoid**
 **Simulation only. No hardware exists.** Never propose a lab that needs a
 physical robot.
 
-Weeks 0 and 1 are built and verified end to end. Weeks 2–15 are designed but not
+Weeks 0-4 are built and verified end to end (0, 1 and 4 also confirmed on Colab). Weeks 2–15 are designed but not
 written. **Week 0 is the day-one stack/vocabulary lecture and is taught before
 Week 1**; later weeks are expected to name which layer they belong to.
 
@@ -227,6 +227,23 @@ Consequence: **never assert exact float values from a fall, and never autograde
 one.** Assert direction and magnitude instead (`fell more than 0.5 m`,
 `stayed above 0.7 m`). `set_seed` makes a run repeatable on one machine; it does
 not make it identical across machines.
+
+## Kinematics (weeks 2-3)
+
+`fk_foot` composes the leg chain by hand and matches MuJoCo's `site_xpos` to
+**~1e-16**. Keep that as the week-2 acceptance test. The three ways to break it:
+omitting the joint anchor (`a - Rj @ a`, since joints rotate about `jnt_pos`, not
+the body origin), composing in the wrong order, and scalar-last quaternions —
+MuJoCo is `(w, x, y, z)`.
+
+**Leg segment lengths must be measured between joint anchors, not from
+`|body_pos|`.** The hip is three separate link bodies whose offsets accumulate,
+so `|body_pos|` of `knee_link` gives 0.194 m when the real thigh is **0.341 m**
+(shin 0.300 m, so reach is an annulus from 0.041 m to 0.641 m). Getting this
+wrong silently produced a reachability table calling 0.50 m unreachable.
+
+`render_poses` draws a sequence of `qpos` without stepping physics — use it for
+anything demonstrating kinematics, so the robot does not fall over mid-lesson.
 
 ## Walking (week 4)
 

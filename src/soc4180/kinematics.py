@@ -17,7 +17,10 @@ from ._gl import GL_BACKEND  # noqa: F401  (ensures MUJOCO_GL is set first)
 import mujoco
 
 __all__ = [
+    "LEG_CHAIN",
     "LEG_JOINTS",
+    "fk_foot",
+    "leg_chain",
     "foot_site_id",
     "ik_legs",
     "leg_dof_indices",
@@ -34,6 +37,68 @@ LEG_JOINTS = (
     "ankle_pitch_joint",
     "ankle_roll_joint",
 )
+
+
+# Bodies from the pelvis down to the foot, in order.
+LEG_CHAIN = (
+    "hip_pitch_link",
+    "hip_roll_link",
+    "hip_yaw_link",
+    "knee_link",
+    "ankle_pitch_link",
+    "ankle_roll_link",
+)
+
+
+def leg_chain(model, side: str) -> list[int]:
+    """Body ids from the first leg link down to the foot."""
+    ids = []
+    for link in LEG_CHAIN:
+        bid = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, f"{side}_{link}")
+        if bid < 0:
+            raise ValueError(f"no body named {side}_{link}")
+        ids.append(bid)
+    return ids
+
+
+def fk_foot(model, qpos, side: str):
+    """Forward kinematics of a foot site, composed by hand from the model tree.
+
+    A reference implementation to check student code against. Each body carries a
+    fixed offset from its parent (``body_pos``/``body_quat``) followed by a
+    rotation about its joint axis, anchored at ``jnt_pos``. Composing those down
+    the chain is all forward kinematics is.
+
+    Returns ``(position, rotation)`` of the foot site in world coordinates.
+    """
+    qpos = np.asarray(qpos, float)
+
+    def quat2mat(q):
+        out = np.zeros(9)
+        mujoco.mju_quat2Mat(out, np.asarray(q, float))
+        return out.reshape(3, 3)
+
+    def axis_angle(axis, angle):
+        q = np.zeros(4)
+        mujoco.mju_axisAngle2Quat(q, np.asarray(axis, float), float(angle))
+        return quat2mat(q)
+
+    pos = qpos[:3].copy()
+    rot = quat2mat(qpos[3:7])
+
+    for bid in leg_chain(model, side):
+        pos = pos + rot @ model.body_pos[bid]
+        rot = rot @ quat2mat(model.body_quat[bid])
+        jnt = model.body_jntadr[bid]
+        if jnt >= 0:
+            anchor = model.jnt_pos[jnt]
+            rot_j = axis_angle(model.jnt_axis[jnt], qpos[model.jnt_qposadr[jnt]])
+            # rotate about an axis through `anchor`, not through the origin
+            pos = pos + rot @ (anchor - rot_j @ anchor)
+            rot = rot @ rot_j
+
+    site = foot_site_id(model, side)
+    return pos + rot @ model.site_pos[site], rot @ quat2mat(model.site_quat[site])
 
 
 def _joint_id(model, name: str) -> int:

@@ -14,6 +14,7 @@ __all__ = [
     "FFMPEG_PATH",
     "GL_BACKEND",
     "is_colab",
+    "render_poses",
     "render_rollout",
     "save_video",
     "show_video",
@@ -105,6 +106,32 @@ def render_rollout(
                     cam.lookat[:] = data.xpos[track_id]
                 renderer.update_scene(data, camera=cam)
                 frames.append(renderer.render())
+    return frames
+
+
+def render_poses(
+    model: "mujoco.MjModel",
+    poses,
+    *,
+    width: int = 640,
+    height: int = 480,
+    camera: int | str = -1,
+) -> list[np.ndarray]:
+    """Render a sequence of `qpos` poses with **no physics at all**.
+
+    Forward kinematics only: each pose is placed and drawn. Use this to show what
+    a kinematic solver produces without the robot falling over, which it would
+    do the moment gravity was involved. Kinematics is a statement about geometry,
+    not about balance.
+    """
+    data = mujoco.MjData(model)
+    frames: list[np.ndarray] = []
+    with mujoco.Renderer(model, height=height, width=width) as renderer:
+        for qpos in poses:
+            data.qpos[:] = qpos
+            mujoco.mj_forward(model, data)
+            renderer.update_scene(data, camera=camera)
+            frames.append(renderer.render())
     return frames
 
 

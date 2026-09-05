@@ -18,14 +18,13 @@ week names which of its five layers it belongs to.
 | --- | --- | --- |
 | 00 | The five-layer robot stack | built, Colab-verified |
 | 01 | MuJoCo, MJCF, driving the simulator | built, Colab-verified |
-| 02 | Transforms and forward kinematics | built; **Colab untested** |
+| 02 | Transforms and forward kinematics | built, Colab-verified |
 | 03 | Inverse kinematics | built, Colab-verified |
 | 04 | Analytic walking (LIPM/ZMP) | built, Colab-verified |
 | 05–15 | Not written | designed only |
 
 Weeks 0–4 are the complete classical half: vocabulary, simulator, transforms, IK,
-walking robot. All are confirmed on Colab except week 2, which has only been run
-locally. Week 5 (actuation, PD tuning, CPG gaits) follows from the servo
+walking robot, and **all five are confirmed working on Colab**. Week 5 (actuation, PD tuning, CPG gaits) follows from the servo
 sag visible in the week 4 data; week 6 (sensing) uses the G1's two IMUs.
 
 ## Commands

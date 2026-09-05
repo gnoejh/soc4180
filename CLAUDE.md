@@ -18,7 +18,8 @@ Week 1**; later weeks are expected to name which layer they belong to.
 ## Commands
 
 ```bash
-uv sync                                        # environment from uv.lock
+uv sync                                        # lean env: mujoco + rendering only
+uv sync --extra rl                             # + gymnasium, SB3, torch (CUDA on Windows)
 uv sync --extra gpu                            # + JAX/MJX/playground (Linux/WSL2)
 uv run python -c "import soc4180"              # smoke test
 quarto render weeks/w01-intro/slides.qmd       # -> slides.html + lab.ipynb
@@ -85,6 +86,19 @@ belongs on Colab or WSL2. PyTorch CUDA *does* work locally and is verified.
 Keep `jax`/`brax`/`playground` in the `gpu` optional extra, never in the default
 dependency set.
 
+### Dependencies must not disturb a Colab runtime
+
+`[project.dependencies]` is deliberately small and permissive: `mujoco`,
+`mujoco-menagerie`, `mediapy`, `imageio-ffmpeg`, `numpy>=1.24`. That is exactly
+what the package imports.
+
+**Do not add torch, gymnasium or SB3 back to the required set.** Pinning
+`torch>=2.14` and `numpy>=2.5.2` there broke a live Colab session: pip upgraded
+both, which broke the preinstalled `torchvision` (wants `torch==2.11`) and
+`numba` (wants `numpy<2.3`), and forced a kernel restart — for libraries the
+package never imports. They live in the `rl` extra now. Exact local versions are
+pinned in `uv.lock`, which is the right place for them.
+
 ### torch resolves from two sources
 
 PyPI ships CPU-only Windows wheels, so `torch` comes from the `cu130` index on
@@ -149,6 +163,14 @@ Backend choice (verified against simulated conditions):
 **Colab needs a GPU runtime for rendering.** The `osmesa` fallback requires
 `libosmesa6`, which Colab images do not reliably ship, so a CPU runtime cannot
 render even though the physics runs fine. Week READMEs say to pick a T4.
+
+When neither EGL nor OSMesa is usable, `_gl` sets **no** environment variable and
+records `GL_UNAVAILABLE` instead; `render_rollout` raises that message. This is
+deliberate: exporting `PYOPENGL_PLATFORM=osmesa` when OSMesa is absent makes
+`import OpenGL` itself die with a bare
+`AttributeError: 'NoneType' object has no attribute 'glGetError'`, ten frames
+deep and impossible to act on. Physics still works on a CPU runtime; only
+rendering fails, and it fails with instructions.
 
 ## `ctrl = 0` is not an uncontrolled robot
 

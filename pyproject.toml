@@ -4,16 +4,28 @@ version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
+# Kept deliberately small and permissive. Installing this package on Colab must
+# not upgrade torch or numpy: doing so breaks the preinstalled torchvision and
+# numba, and forces a kernel restart. The package itself imports only mujoco,
+# mujoco_menagerie, mediapy and numpy. Exact versions for local development are
+# pinned in uv.lock, not here.
 dependencies = [
-    "gymnasium[mujoco]>=1.3.0",
-    "imageio-ffmpeg>=0.6.0",
-    "mediapy>=1.2.7",
+    "imageio-ffmpeg>=0.4",
+    "mediapy>=1.1",
+    "mujoco>=3.2",
     "mujoco-menagerie>=2026.9.0",
-    "numpy>=2.5.2",
-    "torch>=2.14.0",
+    "numpy>=1.24",
 ]
 
 [project.optional-dependencies]
+# Learning weeks (7+). torch is optional: only seeding.py touches it, and then
+# only if it is already installed.
+rl = [
+    "gymnasium[mujoco]>=0.29",
+    "stable-baselines3>=2.0",
+    "torch>=2.4",
+]
+# GPU-parallel training. Linux/Colab only: JAX has no Windows CUDA wheels.
 gpu = [
     "playground>=0.2.0",
 ]

@@ -30,7 +30,8 @@ needs the GPU runtime.
 ## For the instructor — local setup
 
 ```bash
-uv sync                    # environment, pinned by uv.lock
+uv sync                    # lean environment, pinned by uv.lock
+uv sync --extra rl         # adds gymnasium, stable-baselines3, torch
 uv sync --extra gpu        # adds JAX/MJX/playground (Linux or WSL2 only, see below)
 quarto render weeks/w01-intro/slides.qmd
 ```

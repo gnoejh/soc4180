@@ -21,7 +21,7 @@ __all__ = [
 
 
 # Backend selection lives in _gl, imported before any mujoco import.
-from ._gl import GL_BACKEND, is_colab  # noqa: F401
+from ._gl import GL_BACKEND, GL_UNAVAILABLE, is_colab  # noqa: F401
 
 import mediapy as media  # noqa: E402
 import mujoco  # noqa: E402
@@ -78,6 +78,9 @@ def render_rollout(
     ``track`` names a body the camera should follow. A walking robot leaves a
     fixed frame within a couple of seconds, so any locomotion video needs this.
     """
+    if GL_UNAVAILABLE:
+        raise RuntimeError(GL_UNAVAILABLE)
+
     if data is None:
         data = mujoco.MjData(model)
 

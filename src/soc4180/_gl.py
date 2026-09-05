@@ -16,7 +16,7 @@ import pathlib
 import sys
 import warnings
 
-__all__ = ["GL_BACKEND", "MUJOCO_WAS_PREIMPORTED", "is_colab"]
+__all__ = ["GL_BACKEND", "GL_UNAVAILABLE", "MUJOCO_WAS_PREIMPORTED", "is_colab"]
 
 # Recorded before we touch anything: if mujoco is already in sys.modules then
 # our backend choice arrives too late to matter, and we say so loudly.
@@ -63,6 +63,13 @@ def _ensure_egl_vendor_config() -> None:
         pass
 
 
+def _osmesa_available() -> bool:
+    """Whether software rendering is actually installed."""
+    import ctypes.util
+
+    return ctypes.util.find_library("OSMesa") is not None
+
+
 def _select_backend() -> str:
     """Choose a MuJoCo GL backend for this machine and export ``MUJOCO_GL``.
 
@@ -82,9 +89,26 @@ def _select_backend() -> str:
     if _has_nvidia_gpu():
         _ensure_egl_vendor_config()
         backend = "egl"
-    else:
-        # No GPU: software rendering. Needs libosmesa6 present in the image.
+    elif _osmesa_available():
         backend = "osmesa"
+    else:
+        # No GPU and no software renderer. Setting MUJOCO_GL here would poison
+        # `import OpenGL` itself — PyOpenGL fails at import with a bare
+        # AttributeError when its platform cannot load, which is far harder to
+        # read than the message we raise from render_rollout instead. So leave
+        # the environment alone: physics still works, only rendering cannot.
+        global GL_UNAVAILABLE
+        GL_UNAVAILABLE = (
+            "No GPU and no software renderer (libOSMesa) are available, so "
+            "MuJoCo cannot render here. "
+            + (
+                "On Colab: Runtime > Change runtime type > T4 GPU, then "
+                "Runtime > Restart session."
+                if is_colab()
+                else "Install libosmesa6, or set MUJOCO_GL yourself."
+            )
+        )
+        return "unavailable"
 
     os.environ["MUJOCO_GL"] = backend
     os.environ.setdefault("PYOPENGL_PLATFORM", backend)
@@ -100,5 +124,8 @@ def _select_backend() -> str:
 
     return backend
 
+
+# Set when no usable rendering backend exists; render_rollout raises with it.
+GL_UNAVAILABLE: str | None = None
 
 GL_BACKEND = _select_backend()

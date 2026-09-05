@@ -3050,18 +3050,22 @@ name = "soc4180"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
-    { name = "gymnasium", extra = ["mujoco"] },
     { name = "imageio-ffmpeg" },
     { name = "mediapy" },
+    { name = "mujoco" },
     { name = "mujoco-menagerie" },
     { name = "numpy" },
-    { name = "torch", version = "2.14.0", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform != 'win32'" },
-    { name = "torch", version = "2.14.0+cu130", source = { registry = "https://download.pytorch.org/whl/cu130" }, marker = "sys_platform == 'win32'" },
 ]
 
 [package.optional-dependencies]
 gpu = [
     { name = "playground" },
+]
+rl = [
+    { name = "gymnasium", extra = ["mujoco"] },
+    { name = "stable-baselines3" },
+    { name = "torch", version = "2.14.0", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform != 'win32'" },
+    { name = "torch", version = "2.14.0+cu130", source = { registry = "https://download.pytorch.org/whl/cu130" }, marker = "sys_platform == 'win32'" },
 ]
 
 [package.dev-dependencies]
@@ -3074,16 +3078,18 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "gymnasium", extras = ["mujoco"], specifier = ">=1.3.0" },
-    { name = "imageio-ffmpeg", specifier = ">=0.6.0" },
-    { name = "mediapy", specifier = ">=1.2.7" },
+    { name = "gymnasium", extras = ["mujoco"], marker = "extra == 'rl'", specifier = ">=0.29" },
+    { name = "imageio-ffmpeg", specifier = ">=0.4" },
+    { name = "mediapy", specifier = ">=1.1" },
+    { name = "mujoco", specifier = ">=3.2" },
     { name = "mujoco-menagerie", specifier = ">=2026.9.0" },
-    { name = "numpy", specifier = ">=2.5.2" },
+    { name = "numpy", specifier = ">=1.24" },
     { name = "playground", marker = "extra == 'gpu'", specifier = ">=0.2.0" },
-    { name = "torch", marker = "sys_platform != 'win32'", specifier = ">=2.14.0" },
-    { name = "torch", marker = "sys_platform == 'win32'", specifier = ">=2.14.0", index = "https://download.pytorch.org/whl/cu130" },
+    { name = "stable-baselines3", marker = "extra == 'rl'", specifier = ">=2.0" },
+    { name = "torch", marker = "sys_platform == 'win32' and extra == 'rl'", specifier = ">=2.4", index = "https://download.pytorch.org/whl/cu130" },
+    { name = "torch", marker = "sys_platform != 'win32' and extra == 'rl'", specifier = ">=2.4" },
 ]
-provides-extras = ["gpu"]
+provides-extras = ["rl", "gpu"]
 
 [package.metadata.requires-dev]
 dev = [
@@ -3100,6 +3106,22 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/69/99/a6ca3beb3ccacb41fb3321d8a60e5566f9e6467601ef8eba6a17e1b89778/soupsieve-2.9.2.tar.gz", hash = "sha256:4a55d8cf158a9c2e587fa4922f1bbb91d68ac829e2d6f25403a85747c71daf74", size = 122445, upload_time = "2026-08-07T00:57:24.801Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/eb/dc/ad025c1ee131eba60c69f4dd5779b18fcf1e6b21a343e2162a84d5d133c7/soupsieve-2.9.2-py3-none-any.whl", hash = "sha256:8089a26fd974ca7a1f30276d3d8492ab266ab15af581642dfe8aa162e0c1c823", size = 37370, upload_time = "2026-08-07T00:57:23.524Z" },
+]
+
+[[package]]
+name = "stable-baselines3"
+version = "2.9.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "cloudpickle" },
+    { name = "gymnasium" },
+    { name = "numpy" },
+    { name = "torch", version = "2.14.0", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform != 'win32'" },
+    { name = "torch", version = "2.14.0+cu130", source = { registry = "https://download.pytorch.org/whl/cu130" }, marker = "sys_platform == 'win32'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/89/f8/9c1901a42e55b21b9e9559a720cb33dffdeb4c4215b1dfd10d63224b19c0/stable_baselines3-2.9.0.tar.gz", hash = "sha256:92b46c6099a0e8f99163ff09e26729e4d0a68b33dc8598626ca13ade3c0b3a61", size = 221345, upload_time = "2026-06-15T17:00:30.713Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/a6/70/d18c8278223d4928378c4af822b66d3c87e19e73bcb011e05e2f0b43f4e5/stable_baselines3-2.9.0-py3-none-any.whl", hash = "sha256:95f39a473dce081d1abe31acaf7cee446dcf223dcd74093d6ea460bc37e2e748", size = 187606, upload_time = "2026-06-15T17:00:29.331Z" },
 ]
 
 [[package]]

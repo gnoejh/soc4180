@@ -91,11 +91,40 @@ The system Python defaults to **cp949**, not UTF-8. This bites constantly:
 not. `render.py` resolves this at import by pointing mediapy at the binary
 bundled with `imageio-ffmpeg`. Do not remove that fallback.
 
-### MUJOCO_GL ordering
+### MUJOCO_GL ordering (this has already broken once)
 
-`MUJOCO_GL` must be set **before** `import mujoco`. `soc4180.render` does this at
-import time (`egl` on Colab/headless Linux, default elsewhere). Import
-`soc4180` before `mujoco`, and never reorder those statements.
+MuJoCo resolves its render backend from `MUJOCO_GL` at `import mujoco` time.
+Setting it afterwards does nothing — the process is stuck, and on a headless
+machine that means GLFW dying on a missing X11 `DISPLAY`.
+
+Selection therefore lives in **`src/soc4180/_gl.py`**, which imports nothing from
+mujoco, and `__init__.py` imports it **first**. Do not move that import, and do
+not let any module that imports mujoco be imported ahead of it.
+
+**The original bug:** `__init__.py` imported `.models` first, and `models.py`
+does `import mujoco` at module level — so the backend was chosen *after* mujoco
+had already picked GLFW. It passed on Windows (the default backend renders
+offscreen fine) and failed on Colab with
+`an OpenGL platform library has not been loaded into this process`.
+
+Regression test — this must stay true:
+
+```bash
+uv run python -c "import soc4180; from soc4180._gl import MUJOCO_WAS_PREIMPORTED; assert not MUJOCO_WAS_PREIMPORTED"
+```
+
+Backend choice (verified against simulated conditions):
+
+| Environment | Backend |
+| --- | --- |
+| Colab / headless Linux **with** NVIDIA device | `egl` (writes the NVIDIA EGL ICD file if missing) |
+| Colab / headless Linux **without** GPU | `osmesa` |
+| Windows, macOS | MuJoCo default |
+| `MUJOCO_GL` already set | respected, always |
+
+**Colab needs a GPU runtime for rendering.** The `osmesa` fallback requires
+`libosmesa6`, which Colab images do not reliably ship, so a CPU runtime cannot
+render even though the physics runs fine. Week READMEs say to pick a T4.
 
 ## `ctrl = 0` is not an uncontrolled robot
 

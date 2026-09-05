@@ -20,31 +20,8 @@ __all__ = [
 ]
 
 
-def is_colab() -> bool:
-    """True when running inside a Google Colab runtime."""
-    return "google.colab" in sys.modules or os.path.isdir("/content")
-
-
-def _select_gl_backend() -> str:
-    """Pick a MuJoCo GL backend suited to the current machine.
-
-    Colab and headless Linux have no display, so they need EGL for offscreen
-    rendering. Windows and macOS render offscreen with the default backend.
-    An existing MUJOCO_GL is always respected.
-    """
-    if os.environ.get("MUJOCO_GL"):
-        return os.environ["MUJOCO_GL"]
-
-    headless_linux = sys.platform.startswith("linux") and not os.environ.get("DISPLAY")
-    if is_colab() or headless_linux:
-        os.environ["MUJOCO_GL"] = "egl"
-        os.environ.setdefault("PYOPENGL_PLATFORM", "egl")
-        return "egl"
-
-    return "default"
-
-
-GL_BACKEND = _select_gl_backend()
+# Backend selection lives in _gl, imported before any mujoco import.
+from ._gl import GL_BACKEND, is_colab  # noqa: F401
 
 import mediapy as media  # noqa: E402
 import mujoco  # noqa: E402

@@ -22,6 +22,10 @@ Week 00 is the day-one lecture, taught before Week 01.
 
 Click the Colab badge for the week. Nothing to install.
 
+**Set the runtime to GPU first** — *Runtime > Change runtime type > T4 GPU*.
+The GPU is not for training; MuJoCo renders video through EGL on Colab, and that
+needs the GPU runtime.
+
 ## For the instructor — local setup
 
 ```bash

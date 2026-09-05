@@ -4,9 +4,11 @@
 
 | | |
 | --- | --- |
-| **Runtime** | CPU only — local or Colab. No GPU needed. |
+| **Runtime** | Local: CPU. **Colab: pick a GPU runtime** (Runtime > Change runtime type > T4). |
 | **Wall clock** | ~1 min (first run adds ~5 s to fetch the G1 model) |
 | **Convergence risk** | None. No learning this week. |
+
+> The GPU is not needed for physics — it is needed to *render* the fall video. MuJoCo uses EGL on Colab, which requires the GPU runtime.
 
 ## Objectives
 

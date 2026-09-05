@@ -7,9 +7,11 @@ the semester refers back to.
 
 | | |
 | --- | --- |
-| **Runtime** | CPU only — local or Colab. No GPU needed. |
+| **Runtime** | Local: CPU. **Colab: pick a GPU runtime** (Runtime > Change runtime type > T4). |
 | **Wall clock** | ~1 min |
 | **Convergence risk** | None. No learning. |
+
+> The GPU is not needed for physics — it is needed to *render* the limp/servo videos. MuJoCo uses EGL on Colab, which requires the GPU runtime.
 
 ## Objectives
 

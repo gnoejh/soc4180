@@ -4,6 +4,8 @@ Importing this package selects a working MuJoCo GL backend for the current
 machine, so labs behave the same locally and in Colab.
 """
 
+# MUST be first: selects MUJOCO_GL before any submodule imports mujoco.
+from ._gl import GL_BACKEND, is_colab
 from .models import (
     MENAGERIE_COMMIT,
     MENAGERIE_VERSION,
@@ -14,7 +16,7 @@ from .models import (
     load_robot,
     robot_path,
 )
-from .render import GL_BACKEND, is_colab, render_rollout, save_video, show_video
+from .render import render_rollout, save_video, show_video
 from .seeding import set_seed
 from .sim import actuation_disabled, hold, keyframe_data, keyframe_names
 

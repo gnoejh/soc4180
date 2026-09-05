@@ -16,7 +16,7 @@ import pathlib
 import sys
 import warnings
 
-__all__ = ["GL_BACKEND", "GL_UNAVAILABLE", "MUJOCO_WAS_PREIMPORTED", "is_colab"]
+__all__ = ["GL_BACKEND", "GL_UNAVAILABLE", "MUJOCO_WAS_PREIMPORTED", "gl_report", "is_colab"]
 
 # Recorded before we touch anything: if mujoco is already in sys.modules then
 # our backend choice arrives too late to matter, and we say so loudly.
@@ -129,3 +129,21 @@ def _select_backend() -> str:
 GL_UNAVAILABLE: str | None = None
 
 GL_BACKEND = _select_backend()
+
+
+def gl_report() -> str:
+    """What the backend selection saw. Paste this when rendering misbehaves."""
+    lines = [
+        f"platform            : {sys.platform}",
+        f"colab               : {is_colab()}",
+        f"NVIDIA device node  : {_has_nvidia_gpu()}",
+        f"OSMesa library      : {_osmesa_available()}",
+        f"DISPLAY             : {os.environ.get('DISPLAY') or '(unset)'}",
+        f"MUJOCO_GL           : {os.environ.get('MUJOCO_GL') or '(unset)'}",
+        f"chosen backend      : {GL_BACKEND}",
+        f"mujoco preimported  : {MUJOCO_WAS_PREIMPORTED}",
+        f"rendering available : {GL_UNAVAILABLE is None}",
+    ]
+    if GL_UNAVAILABLE:
+        lines.append(f"reason              : {GL_UNAVAILABLE}")
+    return "\n".join(lines)

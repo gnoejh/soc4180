@@ -5,7 +5,7 @@ machine, so labs behave the same locally and in Colab.
 """
 
 # MUST be first: selects MUJOCO_GL before any submodule imports mujoco.
-from ._gl import GL_BACKEND, is_colab
+from ._gl import GL_BACKEND, gl_report, is_colab
 from .kinematics import fk_foot, ik_legs, leg_chain, leg_qpos_indices
 from .models import (
     MENAGERIE_COMMIT,
@@ -26,6 +26,7 @@ __version__ = "0.1.0"
 
 __all__ = [
     "GL_BACKEND",
+    "gl_report",
     "MENAGERIE_COMMIT",
     "actuation_disabled",
     "MENAGERIE_VERSION",

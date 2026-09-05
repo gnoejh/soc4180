@@ -29,6 +29,30 @@ import mujoco  # noqa: E402
 import numpy as np  # noqa: E402
 
 
+def _new_renderer(model, width: int, height: int):
+    """Create a Renderer, or fail with something a reader can act on.
+
+    Every rendering entry point goes through here. MuJoCo's own message when no
+    GL platform loaded ("an OpenGL platform library has not been loaded into this
+    process") does not say what to do about it, and arrives from inside a
+    constructor several frames down.
+    """
+    if GL_UNAVAILABLE:
+        raise RuntimeError(GL_UNAVAILABLE)
+    try:
+        return mujoco.Renderer(model, height=height, width=width)
+    except Exception as exc:  # noqa: BLE001 - re-raised with guidance below
+        hint = (
+            "On Colab: Runtime > Change runtime type > T4 GPU, then "
+            "Runtime > Restart session."
+            if is_colab()
+            else "Check that a GL backend is available, or set MUJOCO_GL yourself."
+        )
+        raise RuntimeError(
+            f"MuJoCo could not create a renderer (MUJOCO_GL={GL_BACKEND!r}). {hint}"
+        ) from exc
+
+
 def _resolve_ffmpeg() -> str:
     """Point mediapy at a usable ffmpeg.
 
@@ -79,9 +103,6 @@ def render_rollout(
     ``track`` names a body the camera should follow. A walking robot leaves a
     fixed frame within a couple of seconds, so any locomotion video needs this.
     """
-    if GL_UNAVAILABLE:
-        raise RuntimeError(GL_UNAVAILABLE)
-
     if data is None:
         data = mujoco.MjData(model)
 
@@ -96,7 +117,7 @@ def render_rollout(
         cam.distance, cam.azimuth, cam.elevation = distance, azimuth, elevation
 
     frames: list[np.ndarray] = []
-    with mujoco.Renderer(model, height=height, width=width) as renderer:
+    with _new_renderer(model, width, height) as renderer:
         while data.time < duration:
             if ctrl_fn is not None:
                 ctrl_fn(model, data)
@@ -126,7 +147,7 @@ def render_poses(
     """
     data = mujoco.MjData(model)
     frames: list[np.ndarray] = []
-    with mujoco.Renderer(model, height=height, width=width) as renderer:
+    with _new_renderer(model, width, height) as renderer:
         for qpos in poses:
             data.qpos[:] = qpos
             mujoco.mj_forward(model, data)

@@ -164,6 +164,17 @@ Backend choice (verified against simulated conditions):
 `libosmesa6`, which Colab images do not reliably ship, so a CPU runtime cannot
 render even though the physics runs fine. Week READMEs say to pick a T4.
 
+**Every renderer is created through `render._new_renderer`.** It checks
+`GL_UNAVAILABLE` and wraps construction failures with an actionable message. Do
+not call `mujoco.Renderer` directly anywhere else — `render_poses` was added
+without the guard and reproduced the raw
+`FatalError: an OpenGL platform library has not been loaded` on Colab, which is
+exactly the message the guard exists to prevent.
+
+`soc4180.gl_report()` prints what selection saw (colab, NVIDIA device node,
+OSMesa, DISPLAY, MUJOCO_GL, chosen backend). Ask for it first when someone
+reports a rendering problem.
+
 When neither EGL nor OSMesa is usable, `_gl` sets **no** environment variable and
 records `GL_UNAVAILABLE` instead; `render_rollout` raises that message. This is
 deliberate: exporting `PYOPENGL_PLATFORM=osmesa` when OSMesa is absent makes

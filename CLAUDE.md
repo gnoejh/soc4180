@@ -11,9 +11,22 @@ labs, taught through MuJoCo simulation. The spine is a **walking humanoid**
 **Simulation only. No hardware exists.** Never propose a lab that needs a
 physical robot.
 
-Weeks 0-4 are built and verified end to end (0, 1 and 4 also confirmed on Colab). Weeks 2–15 are designed but not
-written. **Week 0 is the day-one stack/vocabulary lecture and is taught before
-Week 1**; later weeks are expected to name which layer they belong to.
+**Week 0 is the day-one stack/vocabulary lecture, taught before Week 1.** Every
+week names which of its five layers it belongs to.
+
+| Week | Topic | Status |
+| --- | --- | --- |
+| 00 | The five-layer robot stack | built, Colab-verified |
+| 01 | MuJoCo, MJCF, driving the simulator | built, Colab-verified |
+| 02 | Transforms and forward kinematics | built; **Colab untested** |
+| 03 | Inverse kinematics | built, Colab-verified |
+| 04 | Analytic walking (LIPM/ZMP) | built, Colab-verified |
+| 05–15 | Not written | designed only |
+
+Weeks 0–4 are the complete classical half: vocabulary, simulator, transforms, IK,
+walking robot. All are confirmed on Colab except week 2, which has only been run
+locally. Week 5 (actuation, PD tuning, CPG gaits) follows from the servo
+sag visible in the week 4 data; week 6 (sensing) uses the G1's two IMUs.
 
 ## Commands
 
@@ -27,6 +40,24 @@ quarto render weeks/w01-intro/slides.qmd       # -> slides.html + lab.ipynb
 
 There is no test suite or linter configured. Add the tooling before inventing
 commands for it.
+
+## Adding a week
+
+The pipeline is proven; follow it rather than improvising.
+
+1. `weeks/wNN-slug/slides.qmd`, with the notebook-only Colab header (below) and
+   the `<slug>` updated.
+2. Put reusable code in `src/soc4180/`, not in the slides. Slides show the idea;
+   the package carries anything a later week needs.
+3. **Verify a claim before writing it into a slide.** Several assertions in this
+   repo were wrong until measured: that the robot falls with `ctrl=0`, that a
+   residual was iteration-limited, that a leg segment was 0.194 m long. Run it.
+4. `quarto render weeks/wNN-slug/slides.qmd` — a broken cell fails the render.
+5. Execute the generated notebook standalone with `nbclient` before committing.
+6. Add `weeks/wNN-slug/README.md` and a row in the top-level README table.
+7. **Test it on Colab.** Every environment bug this project hit was invisible on
+   Windows: the GL ordering bug, the dependency upgrades that broke the runtime,
+   the unguarded renderer. Ask for `soc4180.gl_report()` when rendering fails.
 
 ## Authoring model: one source, two outputs
 

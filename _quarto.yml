@@ -1,0 +1,23 @@
+project:
+  type: default
+  render:
+    - weeks/**/slides.qmd
+
+execute:
+  # Cache expensive simulation cells; delete _freeze/ to force a rerun.
+  freeze: auto
+  # Errors must abort the render, so a broken example can never reach a lecture.
+  error: false
+  warning: true
+
+format:
+  revealjs:
+    theme: default
+    # One portable file per deck: no sibling _files/ directory to carry around.
+    embed-resources: true
+    slide-number: true
+    incremental: false
+    code-line-numbers: true
+    highlight-style: github
+    width: 1280
+    height: 800

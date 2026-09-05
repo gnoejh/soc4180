@@ -1,0 +1,547 @@
+---
+title: "Week 0 — What a Robot Is"
+subtitle: "The Five-Layer Robot Stack · SOC4180 Robot and AI"
+author: "Hong Jeong"
+format:
+  revealjs:
+    output-file: slides.html
+  ipynb:
+    output-file: lab.ipynb
+jupyter: python3
+---
+
+## Before we build anything
+
+The word **robot** is used for at least five different things, and people
+arguing about robotics are usually arguing about different layers.
+
+Today we build the vocabulary for the whole semester:
+
+1. What the five layers are
+2. What each one is responsible for
+3. How a **real** robot and a **simulated** robot map onto each other
+4. Which layers this course actually lives in
+
+By the end you should be able to hear any robotics claim and ask:
+*which layer is this about?*
+
+---
+
+## Why a robot has layers at all
+
+Every robot, real or simulated, runs the same loop:
+
+> **sense → decide → act → the world changes → sense again**
+
+The loop is layered for one hard engineering reason: **the parts run at wildly
+different speeds.**
+
+A motor must be corrected thousands of times a second. A decision about *where
+to walk* need not be revised more than once a second. Bolting those together in
+one program produces something that is both too slow and too twitchy.
+
+**Layers are a consequence of timescales, not of tidiness.**
+
+---
+
+## The five layers
+
+| # | Layer | Nickname | Answers |
+| --- | --- | --- | --- |
+| 1 | Physics / World | the body's reality | What happens when forces act? |
+| 2 | Robot Model | the blueprint | What *is* this robot? |
+| 3 | Middleware / Robot OS | the nervous system | How do the parts talk? |
+| 4 | Control & Planning | the brainstem | What should the motors do *now*? |
+| 5 | AI / Behavior | the cortex | What should the robot *achieve*? |
+
+Bottom is fast and dumb. Top is slow and smart.
+
+---
+
+# Layer 1 — Physics / World
+
+---
+
+## Layer 1: what it is
+
+The layer that answers *"given these forces, what happens next?"*
+
+**On a real robot there is no physics layer — there is only reality.** Gravity is
+not computed. Friction is not a parameter. The world simply behaves.
+
+**In simulation, a physics engine substitutes for reality.** This is the one
+layer that exists only in simulation, and it is the layer responsible for every
+way that simulation lies to you.
+
+---
+
+## Layer 1: physics engines
+
+| Engine | Typical use |
+| --- | --- |
+| **MuJoCo** | Contact-rich control and RL research — **our engine** |
+| PyBullet | Long-standing teaching engine, now largely superseded |
+| Isaac Sim / Isaac Lab | GPU-parallel training at industrial scale (NVIDIA) |
+| Gazebo | The ROS ecosystem's default simulator |
+| ODE / Bullet / PhysX | Underlying engines used by the above, and by games |
+
+We use MuJoCo because its contact model is good and it is fast enough to train
+walking policies. Contact is the whole game in legged robotics: everything
+interesting happens where the foot meets the floor.
+
+---
+
+## Layer 1: what it computes {.smaller}
+
+- **Integration** — advance the state by one timestep
+- **Contact detection and response** — who is touching what, with what force
+- **Friction** — whether the foot slips
+- **Inertia and mass distribution** — how the body resists being moved
+- **Joint limits** — mechanical stops
+- **Actuator dynamics** — how a commanded torque becomes an actual torque
+- **Sensor simulation** — synthesising IMU, camera, and force readings
+
+Every one of these is an *approximation*, and every one is a place where a policy
+that works in simulation can fail on hardware.
+
+---
+
+## Layer 1: our engine's actual settings
+
+```{python}
+try:
+    import soc4180
+except ImportError:
+    %pip install -q "soc4180 @ git+https://github.com/gnoejh/soc4180.git"
+    import soc4180
+
+import mujoco
+
+model = soc4180.load_g1()
+
+print(f"timestep   : {model.opt.timestep} s  ->  {1/model.opt.timestep:.0f} Hz")
+print(f"integrator : {mujoco.mjtIntegrator(model.opt.integrator).name}")
+print(f"gravity    : {model.opt.gravity}")
+```
+
+The physics runs far faster than any decision-making layer above it. Remember
+that number.
+
+---
+
+# Layer 2 — Robot Model
+
+---
+
+## Layer 2: the blueprint
+
+A file describing **what the robot is**: geometry, mass, joints, actuators, and
+sensors.
+
+| Format | Ecosystem |
+| --- | --- |
+| **MJCF** (`.xml`) | MuJoCo — **our format** |
+| **URDF** | ROS, and the de-facto interchange format |
+| **SDF** | Gazebo |
+| USD | NVIDIA Omniverse / Isaac |
+
+A model is a *tree of bodies*. Nesting one body inside another **is** the
+kinematic chain — that nesting is what makes the foot move when the hip turns.
+
+---
+
+## Layer 2: a correction worth making early
+
+It is tempting to say "the model is the simulation part."
+
+**That is wrong.** Real robots need models too:
+
+- Inverse kinematics needs link lengths
+- Whole-body control needs the mass matrix
+- MPC needs a dynamics model to predict with
+- State estimation needs to know where the sensors are
+
+The **model** describes the robot; the **physics engine** simulates the world.
+A real G1 carries a model of itself and has no world simulator. Keep those two
+apart and Layer 1 versus Layer 2 stops being confusing.
+
+---
+
+## Layer 2: what is in our G1 {.smaller}
+
+```{python}
+print(f"bodies      nbody = {model.nbody}")
+print(f"joints      njnt  = {model.njnt}")
+print(f"coordinates nq    = {model.nq}    (position variables)")
+print(f"velocities  nv    = {model.nv}    (degrees of freedom)")
+print(f"actuators   nu    = {model.nu}    (motors you can command)")
+print(f"sensors     nsen  = {model.nsensor}")
+print(f"keyframes         = {soc4180.keyframe_names(model)}")
+```
+
+**`nq` exceeds `nv`.** The floating base stores orientation as a 4-number
+quaternion but has only 3 rotational freedoms. A robot that can fall over is not
+a robot arm bolted to a table, and that one extra number is where the whole
+difficulty of legged robotics begins.
+
+---
+
+## Layer 2: sensors are declared, not assumed {.smaller}
+
+```{python}
+for i in range(model.nsensor):
+    name = mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_SENSOR, i)
+    kind = mujoco.mjtSensor(model.sensor_type[i]).name.replace("mjSENS_", "")
+    print(f"  {kind:16s} {name}")
+```
+
+The G1 model declares an IMU — a gyroscope and an accelerometer on the torso.
+
+Note what is **absent**: no camera, no joint-torque sensors, no foot contact
+switches. If a controller needs them, you add them to the model.
+
+**A robot cannot sense what its blueprint does not declare.**
+
+---
+
+## Layer 2: actuators are not joints
+
+```{python}
+import numpy as np
+
+lo, hi = model.actuator_ctrlrange[0]
+print(f"first actuator : {mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_ACTUATOR, 0)}")
+print(f"control range  : [{lo:.3f}, {hi:.3f}] rad")
+print(f"position gain  : {model.actuator_gainprm[0][0]:.0f}")
+print(f"gains used across all {model.nu} actuators: "
+      f"{np.unique(model.actuator_gainprm[:, 0])}")
+```
+
+These are **position servos**: you command an *angle*, and an internal
+proportional loop with gain 500 produces the torque.
+
+Hold on to this — it is about to matter more than anything else today.
+
+---
+
+# Layer 3 — Middleware / Robot OS
+
+---
+
+## Layer 3: the nervous system
+
+The plumbing that lets separately-written programs act as one robot.
+
+| System | Notes |
+| --- | --- |
+| **ROS 2** | The dominant standard; DDS-based publish/subscribe |
+| ROS 1 | Legacy, end-of-life, still widely deployed |
+| Vendor SDKs | Unitree, Boston Dynamics, Franka — each proprietary |
+| LCM | Lightweight messaging from MIT, common in legged robotics |
+| YARP | The iCub humanoid ecosystem |
+| Drake | Toolbox with its own systems framework (Toyota Research) |
+
+A commercial humanoid is typically driven through its **vendor SDK**, with a
+**ROS 2 bridge** so the wider ecosystem's tooling can be used.
+
+---
+
+## Layer 3: what it actually provides {.smaller}
+
+- **Transport** — moving messages between processes and across machines
+- **Interface contracts** — agreed message types, so parts can be swapped
+- **Time** — one clock, and the ability to replay logs against it
+- **Lifecycle** — starting, stopping, and supervising components
+- **Logging** — recording everything, which is how robot bugs actually get found
+- **Introspection** — observing a running system without stopping it
+
+Middleware buys you **modularity**: perception, control, and planning become
+separable programs that different people can write independently.
+
+---
+
+## Layer 3: why this course skips it
+
+**We do not use ROS 2, and you should know that is a deliberate omission.**
+
+- ROS 2 is effectively Linux-only, and cannot run in Colab
+- Installing it reliably consumes the opening weeks of a course
+- It solves a problem we do not have: we run **one** process, not twelve
+
+What we lose is real: the industry-standard interface, and career-relevant
+literacy. If you go into robotics professionally, **learn ROS 2** — but learn it
+when the distributed-systems problem it solves is a problem you actually have.
+
+In our stack, Layer 3 is a single Python process. For one simulated robot, that
+is a legitimate architecture rather than a shortcut.
+
+---
+
+# Layer 4 — Control & Planning
+
+---
+
+## Layer 4: the brainstem
+
+The layer that answers **"what should the motors do, right now?"** — running
+hundreds to thousands of times per second, forever.
+
+| Technique | Job |
+| --- | --- |
+| **PID / PD control** | Drive one joint to one setpoint |
+| **Inverse kinematics** | Find joint angles that place the foot *there* |
+| **Trajectory generation** | A smooth path between poses |
+| **ZMP / LIPM walking** | Where to step so that balance is preserved |
+| **Whole-body control** | Many objectives at once, subject to physics |
+| **MPC** | Optimise over a predicted future, then re-solve every cycle |
+
+Weeks 2–6 of this course are Layer 4, built from scratch.
+
+---
+
+## Layer 4: the demonstration that matters {.smaller}
+
+Physics and a blueprint alone do **not** give you a standing robot. Here is what
+"no controller" actually means:
+
+```{python}
+with soc4180.actuation_disabled(model):
+    data = soc4180.keyframe_data(model, "stand")
+    limp_frames = soc4180.render_rollout(
+        model, data, duration=3.0, fps=30, width=560, height=420
+    )
+
+soc4180.show_video(limp_frames, fps=30)
+```
+
+Actuation disabled: every servo is dead. The robot is a rag doll, and Layer 1
+does what Layer 1 does.
+
+---
+
+## Layer 4: now switch the servos on {.smaller}
+
+Same physics, same model, same starting pose. The only change is that a
+controller is running.
+
+```{python}
+data = soc4180.keyframe_data(model, "stand")
+held_frames = soc4180.render_rollout(
+    model, data, duration=3.0, fps=30, width=560, height=420,
+    ctrl_fn=soc4180.hold(model, "stand"),
+)
+soc4180.show_video(held_frames, fps=30)
+```
+
+That is the entire difference between a pile of parts and a robot.
+
+---
+
+## Layer 4: measured, not eyeballed {.smaller}
+
+```{python}
+def height_after(seconds, limp):
+    d = soc4180.keyframe_data(model, "stand")
+    controller = soc4180.hold(model, "stand")
+
+    def run():
+        while d.time < seconds:
+            if not limp:
+                controller(model, d)
+            mujoco.mj_step(model, d)
+
+    if limp:
+        with soc4180.actuation_disabled(model):
+            run()
+    else:
+        run()
+    return d.qpos[2]
+
+print(f"torso height after 3 s, servos OFF : {height_after(3.0, True):.3f} m")
+print(f"torso height after 3 s, servos ON  : {height_after(3.0, False):.3f} m")
+```
+
+Standing is not a property of the robot. It is a property of the **loop**.
+
+---
+
+## Layer 4: the trap you must not fall into
+
+A robot with `ctrl = 0` is **not** an uncontrolled robot.
+
+Because the G1's actuators are position servos, `ctrl = 0` commands *every joint
+to angle zero* — a straight-legged stance the servos will happily hold. It looks
+like "doing nothing", and is in fact a control policy.
+
+> **Zero command is a command.**
+
+To see a robot with no controller you must disable actuation, as we just did.
+This distinction has ruined many debugging sessions, and it is the honest answer
+to *"why does my robot not fall when I do nothing?"*
+
+---
+
+# Layer 5 — AI / Behavior
+
+---
+
+## Layer 5: the cortex
+
+The layer that answers **"what should the robot achieve?"** — and increasingly,
+the layer that *replaces* hand-written parts of Layer 4.
+
+| Technique | Job |
+| --- | --- |
+| **Reinforcement learning** | Learn a locomotion policy from experience |
+| **Imitation learning** | Copy demonstrated motion |
+| Vision models | Turn pixels into state |
+| Navigation policies | Choose where to go |
+| Task planning | Decompose a goal into steps |
+| Vision-language-action models | Map instructions to robot actions |
+
+Weeks 8–14 are Layer 5. This is where the "AI" in the course title lives.
+
+---
+
+## Layer 5: the honest scope of learning
+
+Learned policies have largely won at **locomotion** — walking over terrain no
+hand-written controller handled well.
+
+They have **not** replaced the whole stack:
+
+- The physics engine is still hand-written
+- The model is still hand-written
+- The low-level joint servos are still classical control
+- Safety limits are still hard-coded
+
+A modern RL walking policy typically outputs **joint position targets** at around
+50 Hz — which are then tracked by the *same PD servos* from Layer 4, running ten
+to twenty times faster.
+
+**The learned policy sits on top of classical control. It does not delete it.**
+
+---
+
+## Timescales: the real reason for layers {.smaller}
+
+| Layer | Typical rate | Why |
+| --- | --- | --- |
+| 1 Physics | 500 Hz *(ours)* – 1 kHz+ | Contact needs small steps to stay stable |
+| 4 Joint servo | 500 Hz – 1 kHz | A motor drifts out of position quickly |
+| 4 Balance / WBC | 100 – 500 Hz | Falling happens in a few hundred ms |
+| 5 Learned policy | ~50 Hz | Enough for gait; more is wasted compute |
+| 5 Navigation | 1 – 10 Hz | The world's layout changes slowly |
+| 5 Task planning | < 1 Hz | Goals change on human timescales |
+
+Roughly three orders of magnitude from bottom to top. **You cannot put a neural
+network in a 1 kHz loop, and you do not need to.**
+
+---
+
+## Real versus simulated, aligned {.smaller}
+
+| Layer | Real Unitree G1 | Our MuJoCo G1 |
+| --- | --- | --- |
+| **1 Physics** | Reality itself — nothing computes it | **MuJoCo**, 500 Hz, approximate |
+| **2 Model** | Onboard kinematic and dynamic model | **MJCF** from Menagerie, pinned |
+| **3 Middleware** | Vendor SDK + ROS 2 bridge | One Python process |
+| **4 Control** | Onboard joint servos, WBC, MPC | Controllers we write (weeks 2–6) |
+| **5 AI** | Policies deployed to the onboard computer | Policies we train (weeks 8–14) |
+| **Body** | Motors, encoders, IMU, battery, frame | Numbers in the MJCF |
+
+**Layers 2–5 transfer between the columns. Layer 1 never does.**
+
+That single asymmetry is the entire sim-to-real problem.
+
+---
+
+## Where the gap lives {.smaller}
+
+If layers 2–5 are the same code, why does a policy that walks in simulation fall
+over on hardware?
+
+Because **Layer 1 was replaced by reality**, and reality disagrees:
+
+- Friction is not a constant, and changes with dust, wear, and temperature
+- Real motors saturate, heat up, and lag behind their commands
+- Real sensors are noisy, biased, and *late*
+- Real gearboxes have backlash — a few degrees of nothing before motion starts
+- Real mass is never exactly the mass written in the file
+
+None of these appear in the MJCF unless somebody puts them there.
+
+**Week 13** attacks this directly: we build a deliberately worse simulator and
+measure how far our policies degrade.
+
+---
+
+## Where this course lives {.smaller}
+
+| Weeks | Layer | What you do |
+| --- | --- | --- |
+| **0** | all | This lecture — the map |
+| **1** | 1 + 2 | Drive the engine; read the blueprint |
+| **2–3** | 2 + 4 | Transforms, forward and inverse kinematics |
+| **4–5** | 4 | Contact, balance, and **an analytic walking robot** |
+| **6** | 4 | Joint control, PD tuning, CPG gaits |
+| **7** | 4 → 5 | Reframe walking as a learning problem |
+| **8–10** | 5 | Policy gradients, PPO, reward design |
+| **11–12** | 5 | Parallel training on GPU; robustness |
+| **13** | 1 | The sim-to-real gap, measured |
+| **14–15** | 5 | Perception, and the capstone |
+
+We spend the first half **building Layer 4 by hand**, so that when Layer 5
+replaces it you know exactly what it replaced.
+
+---
+
+## What this course does not cover
+
+Stated plainly, so you can fill the gaps deliberately:
+
+- **ROS 2** (Layer 3) — the industry standard; learn it separately
+- **Hardware** — no physical robot exists for this course
+- **Mechanical design** — motors, gearboxes, and structures are given
+- **Electronics and embedded firmware** — below Layer 1 entirely
+- **Manipulation** — we walk; we do not grasp
+
+A full humanoid robotics *program* covers all of these. One semester covers the
+column from physics to policy, and covers it properly.
+
+---
+
+## The question to carry all semester
+
+For any robotics claim, paper, demo, or product announcement:
+
+> **Which layer is this, and what is it assuming about the layers beneath it?**
+
+A great deal of robotics hype is a Layer 5 result quietly relying on a Layer 1
+that does not exist outside the laboratory.
+
+---
+
+## Exercises {.smaller}
+
+1. **Classify.** Name the layer for each: *a URDF file · PPO · a PID gain · a DDS
+   topic · a friction coefficient · a foot trajectory · "fetch me a cup".*
+2. **Zero is a command.** Run the fall demo with actuation *enabled* and
+   `ctrl = 0`. Explain in two sentences why the robot does not collapse.
+3. **Break Layer 1.** Set `model.opt.gravity` to the Moon's
+   $-1.62\ \mathrm{m/s^2}$ and re-run the limp fall. Which other layers had to
+   change? (None — that is the point.)
+4. **Sensor absence.** The G1 model declares no foot contact sensors. Name one
+   Layer 4 technique from these slides that becomes harder without them.
+5. **Timescale.** A policy runs at 50 Hz while physics runs at 500 Hz. How many
+   physics steps pass between two policy decisions, and what must the servos do
+   in between?
+
+---
+
+## Next: Week 1
+
+We stop talking about the stack and start driving it — loading the model,
+stepping the engine, and rendering what comes out.
+
+Bring today's vocabulary. Every week from here names its layer.

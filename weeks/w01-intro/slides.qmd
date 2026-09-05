@@ -1,0 +1,217 @@
+---
+title: "Week 1 — Robots, Simulation, and MuJoCo"
+subtitle: "SOC4180 · Robot and AI"
+author: "Hong Jeong"
+format:
+  revealjs:
+    output-file: slides.html
+  ipynb:
+    output-file: lab.ipynb
+jupyter: python3
+---
+
+## Where we are going
+
+By week 5 you will make a humanoid walk using nothing but geometry and physics
+you derived yourself.
+
+By week 11 you will replace that hand-written controller with a policy the robot
+learned on its own.
+
+Today: why simulation, and how to drive one.
+
+---
+
+## Why simulate a robot at all?
+
+A real humanoid is expensive, fragile, and slow to reset.
+
+- A fall costs money and repair time
+- Experiments must be repeatable to be science
+- Learning needs **millions** of trials — impossible on hardware
+- Simulation runs faster than real time, and in parallel
+
+This course is **simulation only**. Everything you build runs on your laptop or
+in Colab.
+
+---
+
+## The cost of simulating
+
+Simulation is an approximation, and the places it is wrong are the places robots
+fall over:
+
+- Contact and friction are *hard* — the foot/ground interface is the whole game
+- Actuators have limits, delays, and heat that models ignore
+- Sensors are noiseless in sim and never noiseless in reality
+
+The distance between simulation and reality is the **sim-to-real gap**. We return
+to it in week 12.
+
+---
+
+## MuJoCo
+
+**Mu**lti-**Jo**int dynamics with **Co**ntact — a physics engine built for exactly
+our problem: many joints, and contact with the ground.
+
+- Free and open source
+- Fast enough for reinforcement learning
+- Strong contact model, which is why locomotion research uses it
+
+```bash
+pip install mujoco
+```
+
+---
+
+## MJCF: describing a robot
+
+MuJoCo reads **MJCF**, an XML format. A robot is a tree of bodies, each with
+geometry, joints, and inertia.
+
+```xml
+<mujoco>
+  <worldbody>
+    <body name="upper_leg" pos="0 0 1">
+      <joint name="hip" type="hinge" axis="0 1 0"/>
+      <geom type="capsule" size="0.05" fromto="0 0 0 0 0 -0.4"/>
+      <body name="lower_leg" pos="0 0 -0.4">
+        <joint name="knee" type="hinge" axis="0 1 0"/>
+        <geom type="capsule" size="0.04" fromto="0 0 0 0 0 -0.4"/>
+      </body>
+    </body>
+  </worldbody>
+</mujoco>
+```
+
+Nesting `<body>` *is* the kinematic chain. Week 2 makes this precise.
+
+---
+
+## Our robot: Unitree G1
+
+A full-size humanoid, and the robot we use all semester.
+
+- Supplied by **MuJoCo Menagerie**, a curated model collection
+- Released under BSD-3-Clause
+- We pin one version, so the model never changes under you mid-semester
+
+---
+
+## Setup {.smaller}
+
+Run this cell first. On Colab it installs the course package; locally it finds
+the environment `uv` already built and does nothing.
+
+```{python}
+try:
+    import soc4180
+except ImportError:
+    %pip install -q "soc4180 @ git+https://github.com/gnoejh/soc4180.git"
+    import soc4180
+```
+
+Versions are pinned, so the robot you see today is the robot you see in week 15.
+
+---
+
+## Loading the robot
+
+`soc4180` picks a working renderer for whichever machine you are on, so the same
+code runs locally and on Colab.
+
+```{python}
+import mujoco
+import soc4180
+
+soc4180.set_seed(4180)
+print("GL backend:", soc4180.GL_BACKEND, "| Colab:", soc4180.is_colab())
+
+model = soc4180.load_g1()   # fetches the pinned G1 on first use, then caches it
+data = mujoco.MjData(model)
+```
+
+---
+
+## What is in the model? {.smaller}
+
+Three numbers describe the robot's size as a dynamical system.
+
+```{python}
+print(f"nq    = {model.nq:3d}   generalised coordinates (position)")
+print(f"nv    = {model.nv:3d}   degrees of freedom (velocity)")
+print(f"nu    = {model.nu:3d}   actuators (motors you can command)")
+print(f"nbody = {model.nbody:3d}   rigid bodies")
+```
+
+**`nq` is larger than `nv`.** The floating base uses a 4-number quaternion for
+orientation but has only 3 rotational DOF. A free-floating robot is not a fixed
+robot arm, and that difference drives everything about balance.
+
+---
+
+## Naming the joints {.smaller}
+
+```{python}
+names = [
+    mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_JOINT, i)
+    for i in range(model.njnt)
+]
+leg = [n for n in names if n and ("hip" in n or "knee" in n or "ankle" in n)]
+print(f"{model.njnt} joints; {len(leg)} in the legs:")
+for n in leg:
+    print("   ", n)
+```
+
+These leg joints are the ones we will command to produce a step.
+
+---
+
+## Watching it fall {.smaller}
+
+We start from the robot's `stand` pose and **switch its motors off**, then let
+physics run. (Week 0: `ctrl = 0` would *not* do this — the position servos would
+hold a pose. To get no controller at all, actuation must be disabled.)
+
+```{python}
+with soc4180.actuation_disabled(model):          # every servo dead
+    data = soc4180.keyframe_data(model, "stand")
+    frames = soc4180.render_rollout(
+        model, data, duration=3.0, fps=30, width=640, height=480
+    )
+soc4180.show_video(frames, fps=30)
+```
+
+---
+
+## What you just saw
+
+The robot collapsed. That is the correct result.
+
+A humanoid is an **unstable** system: left alone it falls, exactly like a
+broomstick balanced on your palm. Every remaining week of this course exists to
+answer one question —
+
+> what should the motors do, at each instant, so that it does not fall?
+
+Weeks 2–6 answer it with mathematics. Weeks 8–14 answer it with learning.
+
+---
+
+## Exercises
+
+1. Re-run the fall with `duration=6.0`. Where does the robot come to rest?
+2. Print the joint **limits** (`model.jnt_range`). Which joints are unlimited, and why?
+3. Set one hip joint to a non-zero angle in `data.qpos` before rendering. Does the
+   robot fall differently?
+4. `model.opt.gravity` holds the gravity vector. Set it to the Moon's
+   $-1.62\ \text{m/s}^2$ and re-render. Does the robot fall more slowly than you
+   expected?
+
+---
+
+## Next week
+
+**Rigid-body transforms.** How to say precisely where the foot is, given the
+joint angles — the forward kinematics you need before you can place a step.

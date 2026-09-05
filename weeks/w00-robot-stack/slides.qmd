@@ -10,6 +10,17 @@ format:
 jupyter: python3
 ---
 
+::: {.content-visible when-format="ipynb"}
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gnoejh/soc4180/blob/main/weeks/w00-robot-stack/lab.ipynb)
+
+**Before you start, two things:**
+
+1. **Runtime → Change runtime type → T4 GPU.** Not for training — MuJoCo renders
+   video through EGL on Colab, and that needs the GPU runtime.
+2. **File → Save a copy in Drive.** This notebook is opened from GitHub and is
+   *not* saved. Without a copy, your work disappears when you close the tab.
+:::
+
 ## Before we build anything
 
 The word **robot** is used for at least five different things, and people
@@ -195,7 +206,9 @@ for i in range(model.nsensor):
     print(f"  {kind:16s} {name}")
 ```
 
-The G1 model declares an IMU — a gyroscope and an accelerometer on the torso.
+The G1 declares **two IMUs** — a gyroscope and an accelerometer at both the
+torso and the pelvis. That is why `nsensor` is 4 rather than 2: twelve numbers
+per step, three axes each.
 
 Note what is **absent**: no camera, no joint-torque sensors, no foot contact
 switches. If a controller needs them, you add them to the model.

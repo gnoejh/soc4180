@@ -40,6 +40,30 @@ verified. Do not set `error: true`; that protection is the point.
 Rendered decks are gitignored because reveal.js assets are ~5 MB/week. Only
 `lab.ipynb` is committed.
 
+### Standing pattern: every week starts with a notebook-only header
+
+Immediately after the YAML frontmatter, before the first slide:
+
+````
+::: {.content-visible when-format="ipynb"}
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gnoejh/soc4180/blob/main/weeks/<slug>/lab.ipynb)
+
+**Before you start, two things:**
+
+1. **Runtime -> Change runtime type -> T4 GPU.** ...
+2. **File -> Save a copy in Drive.** ...
+:::
+````
+
+`content-visible when-format="ipynb"` keeps it out of the deck — verified: the
+badge appears in `lab.ipynb` and not in `slides.html`. Both notices matter:
+without the GPU runtime nothing renders, and a GitHub-opened Colab notebook is
+unsaved, so student work vanishes on tab close. Remember to update `<slug>`.
+
+**Never edit `lab.ipynb` directly** — it is generated. Edit `slides.qmd` and
+re-render. In particular do not use Colab's *Save a copy in GitHub* on these
+notebooks; it would commit executed outputs over the generated file.
+
 ### Verified Quarto behaviours (do not re-litigate)
 
 - `#| eval: false` **does** survive into `lab.ipynb` as a genuine unexecuted code
@@ -162,6 +186,25 @@ pins its own upstream commit) — not a git clone. Use `soc4180.load_g1()` /
 - 11 humanoids available; Cassie is categorised `biped`, not `humanoid`.
 - Known upstream gotcha: `assets()` raises for `robotis_op3` (duplicate mesh
   basenames). Use `load()`/`path()` instead.
+
+## Cross-platform reproducibility
+
+Verified on Colab T4 against local Windows:
+
+| Demo | Windows | Colab T4 |
+| --- | --- | --- |
+| Servos holding `stand`, 3 s | 0.792 m | 0.792 m |
+| Actuation disabled, 3 s | 0.134 m | 0.142 m |
+
+Stable equilibria reproduce exactly across platforms; **chaotic trajectories do
+not**. A collapsing robot amplifies floating-point and contact-solver
+differences over 1500 steps, so the same seed gives different final numbers on
+different hardware.
+
+Consequence: **never assert exact float values from a fall, and never autograde
+one.** Assert direction and magnitude instead (`fell more than 0.5 m`,
+`stayed above 0.7 m`). `set_seed` makes a run repeatable on one machine; it does
+not make it identical across machines.
 
 ## Pedagogical constraints that drive the code
 

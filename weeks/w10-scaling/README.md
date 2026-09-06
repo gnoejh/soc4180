@@ -74,6 +74,20 @@ Hit for real while preparing this lab, all now taught in the slides.
    only `jax>=0.4.6` with no upper bound, so pip installs a broken pair, and
    **Colab's preinstalled JAX is 0.11, so it is broken out of the box.**
 
+### Two ways this still bites after the fix
+
+**The pin must be unconditional.** An early version of the setup cell installed
+the pin only inside `except ImportError` for `playground`. If a previous attempt
+already installed playground, that branch is skipped, the pin never applies, and
+you get the cryptic JAX AttributeError much later. Check the *installed version*,
+not whether an import succeeds.
+
+**You must restart the runtime.** `pip` rewrites files on disk; it cannot replace
+a module the interpreter already imported. If the traceback still names JAX 0.11
+after a successful install, the runtime was not restarted — the `ipykernel_NNNN`
+process id in the traceback path is the tell, since it stays the same across
+re-runs.
+
 ### The verified recipe
 
 ```bash

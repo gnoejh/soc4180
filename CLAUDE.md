@@ -108,6 +108,13 @@ not a brax env, so training needs `wrap_env_fn=wrapper.wrap_for_brax_training`;
 `jax.device_put_replicated`, both removed in JAX 0.11** — and Colab ships 0.11,
 so it is broken out of the box.
 
+**The pin must be UNCONDITIONAL and followed by a runtime restart.** Gating it
+on `except ImportError: import mujoco_playground` silently skips it whenever
+playground is already installed; check `importlib.metadata.version("jax")`
+instead. And pip cannot swap a module Python already imported — if a traceback
+still names JAX 0.11 after installing, the runtime was not restarted (the
+`ipykernel_NNNN` id in the traceback path is unchanged).
+
 **Verified recipe: `pip install "jax[cuda12]==0.9.2" playground`.** 0.9.2 is the
 newest JAX retaining both APIs; the full path was run end to end on CPU (130 s,
 6054 sps). Install **with** `[cuda12]` — bare `jax==0.9.2` is CPU-only, raises

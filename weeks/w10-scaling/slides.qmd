@@ -48,14 +48,27 @@ except ImportError:
     %pip install -q "soc4180[rl] @ git+https://github.com/gnoejh/soc4180.git"
     import soc4180, torch
 
-try:
-    import mujoco_playground
-except ImportError:
-    # JAX 0.11 removed two APIs that brax and flax still call, so the training
-    # section needs an older JAX. Pin it *with* the CUDA plugin or you land on
-    # CPU. See the troubleshooting slide for the two exact errors.
+# The training section needs jax 0.9.2: 0.11 removed two APIs that brax and
+# flax still call. Check the *installed* version, not whether playground imports
+# -- if playground is already present, a conditional install silently skips the
+# pin and you get a cryptic AttributeError much later.
+import importlib.metadata as _md
+
+def _installed(pkg):
+    try:
+        return _md.version(pkg)
+    except Exception:
+        return None
+
+if _installed("jax") != "0.9.2" or _installed("mujoco_playground") is None:
     %pip install -q "jax[cuda12]==0.9.2" playground
-    import mujoco_playground
+    print("=" * 68)
+    print("  Installed jax 0.9.2.  NOW RESTART THE RUNTIME:")
+    print("  Runtime > Restart session, then run this notebook from the top.")
+    print("  pip cannot replace a module Python has already imported.")
+    print("=" * 68)
+else:
+    print(f"jax {_installed('jax')} already installed - good")
 
 import time, warnings
 import numpy as np
@@ -216,6 +229,13 @@ from mujoco_playground.config import locomotion_params
 from brax.training.agents.ppo import train as ppo
 from brax.training.agents.ppo import networks as ppo_networks
 
+import jax
+assert jax.__version__ == "0.9.2", (
+    f"jax {jax.__version__} is loaded, but brax and flax need 0.9.2. "
+    "Install it and RESTART THE RUNTIME - pip cannot swap a loaded module."
+)
+print("jax", jax.__version__, "| devices:", jax.devices())   # want a CudaDevice
+
 env_name = "BerkeleyHumanoidJoystickFlatTerrain"
 
 # impl="jax" picks the MJX backend. The config default is "warp" (MJWarp), which
@@ -284,6 +304,11 @@ CPU-only JAX, everything will still run, and your "GPU" training will quietly be
 about a hundred times slower than it should be.
 
 > The most expensive bug in this ecosystem is the one that does not raise.
+
+**And restart the runtime after installing.** `pip` rewrites files on disk; it
+cannot replace a module the interpreter has already imported. If the traceback
+still names JAX 0.11 after a successful install, you did not restart — the
+ipykernel process id in the traceback path is the giveaway.
 
 Check, every time:
 

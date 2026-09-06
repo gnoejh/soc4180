@@ -48,6 +48,15 @@ except ImportError:
     %pip install -q "soc4180[rl] @ git+https://github.com/gnoejh/soc4180.git"
     import soc4180, torch
 
+try:
+    import mujoco_playground
+except ImportError:
+    # `playground`, NOT `playground[all]`. The [all] extra depends on
+    # jax[cuda12] and would reinstall JAX over Colab's preinstalled GPU build,
+    # silently leaving you on CPU. Plain `playground` leaves JAX alone.
+    %pip install -q playground
+    import mujoco_playground
+
 import time, warnings
 import numpy as np
 warnings.filterwarnings("ignore")
@@ -202,8 +211,7 @@ JAX publishes CUDA wheels for Linux only.
 ```{python}
 #| eval: false
 # Colab, GPU runtime. Expect several minutes even for a truncated run.
-!pip install -q playground
-
+# playground was installed in the setup cell at the top.
 from mujoco_playground import registry
 from mujoco_playground.config import locomotion_params
 from brax.training.agents.ppo import train as ppo

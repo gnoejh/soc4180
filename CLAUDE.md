@@ -92,6 +92,13 @@ library: Berkeley Humanoid is 150M timesteps at 8192 parallel envs, Op3 100M;
 network policy (512,256,128) on `state`, value (512,256,128) on
 **`privileged_state`** — the week-6 asymmetric actor-critic in production.
 
+Week 10's setup cell must install **`playground` as well as `soc4180[rl]`** —
+the config-reading cells need `mujoco_playground` and it is not in the `rl`
+extra. Use plain `playground`, **never `playground[all]`**: the `[all]` extra
+pulls `jax[cuda12]` and would reinstall over Colab's preinstalled GPU JAX,
+silently dropping to CPU. Plain `playground` declares `jax` unpinned so pip
+leaves it alone.
+
 **The GPU training cell is `eval: false` and has NEVER been run.** JAX CUDA is
 Linux-only so it cannot be tested here; `playground` imports fine on CPU JAX,
 which is how the registry and configs are read. Run Track A once on a Colab T4

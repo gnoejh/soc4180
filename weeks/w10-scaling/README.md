@@ -6,7 +6,7 @@
 | --- | --- |
 | **Runtime** | **GPU required** — the final section needs CUDA, not just rendering. |
 | **Wall clock** | ~2 min for the measured sections; Track A adds ~15 min on GPU. |
-| **Needs** | `soc4180[rl]` for the CPU work; `playground` for the GPU section. |
+| **Needs** | `soc4180[rl]` **and** `playground` — both installed by the setup cell. |
 | **Platform** | The GPU section **cannot run on Windows** — JAX ships CUDA wheels for Linux only. |
 
 ## Objectives
@@ -46,6 +46,18 @@ That last line is the **asymmetric actor-critic** from Week 6, in production: th
 critic sees what no real robot can measure, and is discarded after training.
 
 Our entire Week 9 experiment was **0.027%** of one tuned run.
+
+## Installing playground on Colab
+
+The setup cell installs **`playground`, not `playground[all]`**. The `[all]`
+extra depends on `jax[cuda12]`, which would reinstall JAX over Colab's
+preinstalled GPU build and silently drop you onto CPU. Plain `playground`
+declares `jax` with no version constraint, so pip leaves the existing install
+alone.
+
+This bit once: the first version of this lab installed only `soc4180[rl]`, and
+the config-reading cells failed on Colab with `ModuleNotFoundError: No module
+named 'mujoco_playground'`.
 
 ## Not verified
 

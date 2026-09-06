@@ -51,10 +51,10 @@ except ImportError:
 try:
     import mujoco_playground
 except ImportError:
-    # `playground`, NOT `playground[all]`. The [all] extra depends on
-    # jax[cuda12] and would reinstall JAX over Colab's preinstalled GPU build,
-    # silently leaving you on CPU. Plain `playground` leaves JAX alone.
-    %pip install -q playground
+    # JAX 0.11 removed two APIs that brax and flax still call, so the training
+    # section needs an older JAX. Pin it *with* the CUDA plugin or you land on
+    # CPU. See the troubleshooting slide for the two exact errors.
+    %pip install -q "jax[cuda12]==0.9.2" playground
     import mujoco_playground
 
 import time, warnings
@@ -245,26 +245,56 @@ seconds, separate from the copy `soc4180` uses.
 
 ## Three things that will bite you {.smaller}
 
-Every one of these was hit while preparing this lab.
+Every one of these was hit while preparing this lab, and none is your code being
+wrong.
 
-**1. `ModuleNotFoundError: mujoco_playground`.** It is not in `soc4180[rl]`.
-Install plain `playground` — **never `playground[all]`**, whose `jax[cuda12]`
-dependency reinstalls JAX over Colab's GPU build and silently drops you to CPU.
+**1. `ModuleNotFoundError: mujoco_playground`.** It is not part of
+`soc4180[rl]`; install `playground` separately.
 
 **2. `AttributeError: type object 'int' has no attribute 'WARP'`.** The env
 config defaults to `impl="warp"`, the newer MJWarp backend, which needs the
-separate `mujoco-warp` package. Override to `impl="jax"` (verified working) or
-install `mujoco-warp`.
+separate `mujoco-warp` package. Override to **`impl="jax"`**.
 
-**3. `AttributeError: jax.device_put_replicated is deprecated`.** brax 0.14.2
-calls an API that JAX 0.11 removed, and brax requires only `jax>=0.4.6` with no
-upper bound — so pip will happily install an incompatible pair. Colab's
-preinstalled JAX is older and works. **Do not upgrade JAX on Colab.**
+**3. Two removed JAX APIs.** Depending on which library trips first you get
 
-Two of these produce a traceback pointing deep inside someone else's library, and
-none of them is your code being wrong. **Version drift is the normal state of
-this ecosystem**, and reading a stack trace back to a version mismatch is a
-skill worth practising here rather than the week before a deadline.
+```
+AttributeError: jax.core.get_opaque_trace_state was ... removed in JAX v0.11.0
+AttributeError: jax.device_put_replicated is deprecated
+```
+
+The first is **flax**, the second is **brax**. Both still call APIs that JAX
+removed in 0.11, and brax requires only `jax>=0.4.6` — no upper bound — so pip
+installs a broken combination by default. **Colab's preinstalled JAX is 0.11,
+so it is broken out of the box.**
+
+---
+
+## The pin that works {.smaller}
+
+`jax==0.9.2` is the newest release that still has **both** removed APIs.
+Verified end to end: `registry.load`, `ppo.train`, and a complete (tiny) training
+run.
+
+```bash
+pip install -q "jax[cuda12]==0.9.2" playground
+```
+
+Install it **with** the CUDA extra. A bare `pip install jax==0.9.2` gives you a
+CPU-only JAX, everything will still run, and your "GPU" training will quietly be
+about a hundred times slower than it should be.
+
+> The most expensive bug in this ecosystem is the one that does not raise.
+
+Check, every time:
+
+```{python}
+#| eval: false
+import jax
+print(jax.__version__, jax.devices())     # want 0.9.2 and a CudaDevice
+```
+
+**Pin versions in a course repo and bump them once a semester.** Half of these
+failures are simply the calendar moving.
 
 ---
 

@@ -59,38 +59,43 @@ This bit once: the first version of this lab installed only `soc4180[rl]`, and
 the config-reading cells failed on Colab with `ModuleNotFoundError: No module
 named 'mujoco_playground'`.
 
-## Three failures found while preparing this lab
+## The GPU path: four failures and the fix
 
-All three were hit for real, and all three are in the slides.
+Hit for real while preparing this lab, all now taught in the slides.
 
-1. **`ModuleNotFoundError: mujoco_playground`** — not in `soc4180[rl]`. Install
-   plain `playground`, never `playground[all]` (its `jax[cuda12]` dependency
-   reinstalls JAX over Colab's GPU build and silently drops you to CPU).
-2. **`AttributeError: type object 'int' has no attribute 'WARP'`** — the env
-   config defaults to `impl="warp"` (MJWarp), which needs the separate
-   `mujoco-warp` package. **Fix: `registry.load(name, config_overrides={"impl":
-   "jax"})`** — verified working here.
-3. **`AttributeError: jax.device_put_replicated is deprecated`** — brax 0.14.2
-   (latest) calls an API JAX 0.11 removed, and brax requires only `jax>=0.4.6`
-   with no upper bound. Colab's older preinstalled JAX works. **Do not upgrade
-   JAX on Colab.**
+1. **`ModuleNotFoundError: mujoco_playground`** — not in `soc4180[rl]`.
+2. **`type object 'int' has no attribute 'WARP'`** — env configs default to
+   `impl="warp"` (MJWarp), needing the separate `mujoco-warp` package.
+   **Fix: `registry.load(name, config_overrides={"impl": "jax"})`.**
+3. **`'State' object has no attribute 'pipeline_state'`** — a playground env is
+   not a brax env. **Fix: `wrap_env_fn=wrapper.wrap_for_brax_training`.**
+4. **Two removed JAX APIs** — flax calls `jax.core.get_opaque_trace_state` and
+   brax calls `jax.device_put_replicated`; JAX 0.11 removed both. brax requires
+   only `jax>=0.4.6` with no upper bound, so pip installs a broken pair, and
+   **Colab's preinstalled JAX is 0.11, so it is broken out of the box.**
 
-Also verified: playground's `registry.load` clones its **own** Menagerie copy
-(~40 s), separate from the `mujoco-menagerie` package `soc4180` uses. And a
-playground env is not a brax env — training needs
-`wrap_env_fn=wrapper.wrap_for_brax_training`, confirmed accepted by
-`brax...ppo.train`.
+### The verified recipe
 
-## Not verified
+```bash
+pip install -q "jax[cuda12]==0.9.2" playground
+```
 
-**The GPU training cell is `eval: false` and has never completed a run.** JAX's
-CUDA wheels are Linux-only, so it cannot be tested on the authoring machine. The
-env *loads* here on CPU JAX with `impl="jax"` (action size 12, observation
-`{state: (52,), privileged_state: (114,)}`), and the `ppo.train` call signature
-is verified — but the CPU smoke test then stops at failure 3 above.
+`jax==0.9.2` is the newest release retaining **both** removed APIs. Verified end
+to end in a clean environment: env load, `ppo.train`, and a complete tiny
+training run (130 s on CPU, 6054 steps/s).
 
-Before teaching this week, run Track A once on a Colab T4, confirm it gets past
-all three failures, and set `num_timesteps` so it lands at 12–15 minutes.
+Install with the **`[cuda12]` extra**. A bare `jax==0.9.2` is CPU-only, runs
+without error, and is roughly a hundred times slower — a bug that never raises.
+
+This **reverses** earlier advice in this repo to leave Colab's JAX alone. That
+was right about `playground[all]` clobbering a working GPU build, and wrong
+about the build being usable: JAX 0.11 breaks brax and flax regardless.
+
+## Still not verified
+
+The GPU cell remains `eval: false`. Everything above is verified **on CPU**; no
+CUDA run has happened, because JAX has no Windows CUDA wheels. Track A needs one
+timed run on a Colab T4 to set `num_timesteps` for a 12–15 minute lab.
 
 ## Rebuild
 

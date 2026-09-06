@@ -114,19 +114,33 @@ production.
 
 #### The fix: patch, do not pin
 
-`soc4180.jax_compat.patch_jax()` restores both removed functions
-(`jax.core.get_opaque_trace_state` moved to `jax.extend.core`;
-`jax.device_put_replicated` is a few lines of `jnp.stack`). **Verified: training
-runs end to end on jax 0.11.1 with the shims.** Call it before brax/flax are used.
+Restore the two functions rather than pinning JAX. `soc4180.jax_compat.patch_jax()`
+does it, and week 10's notebook writes the same six lines out inline —
+deliberately, because a cell whose job is repairing a broken environment must not
+depend on a package install having succeeded.
 
-This replaced an earlier `jax[cuda12]==0.9.2` pin. The pin also works, but on
-Colab it meant a large download *and* a forced runtime restart on **every fresh
-session** — Colab always starts on JAX 0.11 — so every lab began with a
-"session crashed for an unknown reason". Do not reintroduce it.
+Rules, each learned by breaking it:
+
+- **Search for the function, do not assume its home.** JAX's deprecation message
+  names `jax.extend.core.get_opaque_trace_state`, and that path **does not exist
+  on Colab's build**. Try `jax.extend.core`, then `jax._src.core`, then
+  `jax.core`.
+- **Never raise from the repair.** If nothing is found, print and continue.
+  Assigning unconditionally turned a silent no-op into a hard failure that took
+  the notebook down.
+- **Report which branch was taken.** `hasattr(jax, "device_put_replicated")` is
+  False in a plain interpreter here and True inside the notebook kernel, for
+  reasons I never identified. The cell prints what it did so the difference is
+  visible instead of mysterious.
+
+An earlier attempt pinned `jax[cuda12]==0.9.2` instead. That works, but Colab
+starts every session on JAX 0.11, so it meant a large download **and a forced
+restart at the start of every lab**. Do not reintroduce it.
 
 Still required regardless: `impl="jax"` in `registry.load`,
 `wrap_env_fn=wrapper.wrap_for_brax_training`, `playground` installed separately
-(never `playground[all]`), and dependency setup in a cell containing no imports.
+(never `playground[all]`), dependency setup in a cell with no imports, and
+**`progress_fn` on `ppo.train`** — brax prints nothing without one.
 
 Rendering this week needs `uv sync --extra rl --extra gpu --extra env` first; a
 plain `uv run` re-syncs and drops `mujoco_playground`.
@@ -171,6 +185,12 @@ The pipeline is proven; follow it rather than improvising.
    residual was iteration-limited, that a leg segment was 0.194 m long. Run it.
 4. `quarto render weeks/wNN-slug/slides.qmd` — a broken cell fails the render.
 5. Execute the generated notebook standalone with `nbclient` before committing.
+   **For any `eval: false` cell, compile-check it** — nothing else will. A
+   broken f-string reached a student's runtime this way:
+
+   ```python
+   compile("".join(cell["source"]), "cell", "exec")   # over every code cell
+   ```
 6. Add `weeks/wNN-slug/README.md` and a row in the top-level README table.
 7. **Test it on Colab.** Every environment bug this project hit was invisible on
    Windows: the GL ordering bug, the dependency upgrades that broke the runtime,

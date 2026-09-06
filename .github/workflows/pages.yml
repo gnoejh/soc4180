@@ -56,11 +56,21 @@ jobs:
         # `freeze: auto` means an unchanged week is not re-executed. Keeping
         # _freeze in the Actions cache rather than in git gives the speed
         # without the repository bloat.
+        #
+        # The key is in two parts, and the split matters. Quarto's freeze keys
+        # on the .qmd alone -- it does not know that soc4180 changed underneath
+        # it -- so a cache restored across a package change would serve stale
+        # results from a stale render. The environment hash is therefore the
+        # *prefix*: change the package or the lockfile and nothing is restored,
+        # forcing every week to re-execute. Adding or editing a week keeps that
+        # prefix, so the restore-key hits, unchanged weeks are reused, and the
+        # new key saves the new week's output for next time.
         uses: actions/cache@v4
         with:
           path: _freeze
-          key: freeze-${{ hashFiles('weeks/**/slides.qmd', 'src/soc4180/**/*.py', 'uv.lock') }}
-          restore-keys: freeze-
+          key: freeze-${{ hashFiles('src/soc4180/**/*.py', 'uv.lock') }}-${{ hashFiles('weeks/**/slides.qmd') }}
+          restore-keys: |
+            freeze-${{ hashFiles('src/soc4180/**/*.py', 'uv.lock') }}-
 
       - name: Install the course environment
         run: uv sync --extra rl --extra env --extra gpu

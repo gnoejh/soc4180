@@ -252,7 +252,14 @@ Decisions in that workflow, each with a reason:
   *after* `deploy`) turns the run red and names the failure. `execute.error:
   false` is untouched — a broken cell still aborts that week.
 - **`_freeze` lives in the Actions cache, not in git.** Same speed, no bloat.
-  First build is long (weeks 8 and 9 genuinely train); later ones reuse it.
+  The cache key is deliberately in two parts: the environment hash
+  (`src/soc4180/**`, `uv.lock`) is the *prefix*, the week hash is the suffix.
+  **Quarto's freeze keys on the `.qmd` alone and does not notice that the
+  package changed underneath it**, so restoring a cache across a package change
+  would publish stale results. Splitting the key means a package change restores
+  nothing and re-executes everything, while adding a week reuses the other weeks
+  and still saves the new one. Do not collapse it back to a single `freeze-`
+  restore-key.
 - **`libosmesa6` is installed explicitly.** The runner has no GPU, so `_gl`
   wants osmesa, and without the library it correctly sets *no* backend and
   rendering raises. The workflow prints `gl_report()` before rendering so the

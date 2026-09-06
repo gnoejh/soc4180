@@ -210,27 +210,61 @@ JAX publishes CUDA wheels for Linux only.
 
 ```{python}
 #| eval: false
-# Colab, GPU runtime. Expect several minutes even for a truncated run.
-# playground was installed in the setup cell at the top.
-from mujoco_playground import registry
+import functools
+from mujoco_playground import registry, wrapper
 from mujoco_playground.config import locomotion_params
 from brax.training.agents.ppo import train as ppo
+from brax.training.agents.ppo import networks as ppo_networks
 
 env_name = "BerkeleyHumanoidJoystickFlatTerrain"
-env = registry.load(env_name)
-cfg = locomotion_params.brax_ppo_config(env_name)
 
-cfg.num_timesteps = 15_000_000      # 10% of the tuned budget
-cfg.num_envs = 2048                 # a T4 has less memory than the target device
-cfg.num_evals = 5
+# impl="jax" picks the MJX backend. The config default is "warp" (MJWarp), which
+# needs the separate `mujoco-warp` package; without it registry.load dies with
+#   AttributeError: type object 'int' has no attribute 'WARP'
+env = registry.load(env_name, config_overrides={"impl": "jax"})
 
-make_inference, params, metrics = ppo.train(
-    environment=env, **{k: v for k, v in cfg.items() if k != "network_factory"}
+params = dict(locomotion_params.brax_ppo_config(env_name))
+net = params.pop("network_factory")
+params["network_factory"] = functools.partial(ppo_networks.make_ppo_networks, **net)
+params.update(num_timesteps=15_000_000,   # 10% of the tuned budget
+              num_envs=2048,              # a T4 has less memory than the target device
+              num_evals=5)
+
+make_inference, weights, metrics = ppo.train(
+    environment=env,
+    # a playground env is not a brax env; this adapts it
+    wrap_env_fn=wrapper.wrap_for_brax_training,
+    **params,
 )
 ```
 
-`registry.load` downloads Menagerie on first call, so the first cell is slower
-than it looks.
+`registry.load` clones its **own** copy of Menagerie on first call — about 40
+seconds, separate from the copy `soc4180` uses.
+
+---
+
+## Three things that will bite you {.smaller}
+
+Every one of these was hit while preparing this lab.
+
+**1. `ModuleNotFoundError: mujoco_playground`.** It is not in `soc4180[rl]`.
+Install plain `playground` — **never `playground[all]`**, whose `jax[cuda12]`
+dependency reinstalls JAX over Colab's GPU build and silently drops you to CPU.
+
+**2. `AttributeError: type object 'int' has no attribute 'WARP'`.** The env
+config defaults to `impl="warp"`, the newer MJWarp backend, which needs the
+separate `mujoco-warp` package. Override to `impl="jax"` (verified working) or
+install `mujoco-warp`.
+
+**3. `AttributeError: jax.device_put_replicated is deprecated`.** brax 0.14.2
+calls an API that JAX 0.11 removed, and brax requires only `jax>=0.4.6` with no
+upper bound — so pip will happily install an incompatible pair. Colab's
+preinstalled JAX is older and works. **Do not upgrade JAX on Colab.**
+
+Two of these produce a traceback pointing deep inside someone else's library, and
+none of them is your code being wrong. **Version drift is the normal state of
+this ecosystem**, and reading a stack trace back to a version mismatch is a
+skill worth practising here rather than the week before a deadline.
 
 ---
 

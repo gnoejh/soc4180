@@ -59,15 +59,38 @@ This bit once: the first version of this lab installed only `soc4180[rl]`, and
 the config-reading cells failed on Colab with `ModuleNotFoundError: No module
 named 'mujoco_playground'`.
 
+## Three failures found while preparing this lab
+
+All three were hit for real, and all three are in the slides.
+
+1. **`ModuleNotFoundError: mujoco_playground`** — not in `soc4180[rl]`. Install
+   plain `playground`, never `playground[all]` (its `jax[cuda12]` dependency
+   reinstalls JAX over Colab's GPU build and silently drops you to CPU).
+2. **`AttributeError: type object 'int' has no attribute 'WARP'`** — the env
+   config defaults to `impl="warp"` (MJWarp), which needs the separate
+   `mujoco-warp` package. **Fix: `registry.load(name, config_overrides={"impl":
+   "jax"})`** — verified working here.
+3. **`AttributeError: jax.device_put_replicated is deprecated`** — brax 0.14.2
+   (latest) calls an API JAX 0.11 removed, and brax requires only `jax>=0.4.6`
+   with no upper bound. Colab's older preinstalled JAX works. **Do not upgrade
+   JAX on Colab.**
+
+Also verified: playground's `registry.load` clones its **own** Menagerie copy
+(~40 s), separate from the `mujoco-menagerie` package `soc4180` uses. And a
+playground env is not a brax env — training needs
+`wrap_env_fn=wrapper.wrap_for_brax_training`, confirmed accepted by
+`brax...ppo.train`.
+
 ## Not verified
 
-**The GPU training cell is `eval: false` and has not been run by the instructor.**
-JAX's CUDA wheels are Linux-only, so it cannot be tested on the authoring
-machine. `playground` *imports* fine here on CPU-only JAX — the registry and
-configs above are genuinely read — but the training path is untested.
+**The GPU training cell is `eval: false` and has never completed a run.** JAX's
+CUDA wheels are Linux-only, so it cannot be tested on the authoring machine. The
+env *loads* here on CPU JAX with `impl="jax"` (action size 12, observation
+`{state: (52,), privileged_state: (114,)}`), and the `ppo.train` call signature
+is verified — but the CPU smoke test then stops at failure 3 above.
 
-Before teaching this week, run Track A once on a Colab T4 and record the actual
-wall-clock, then set `num_timesteps` so it lands at 12–15 minutes.
+Before teaching this week, run Track A once on a Colab T4, confirm it gets past
+all three failures, and set `num_timesteps` so it lands at 12–15 minutes.
 
 ## Rebuild
 

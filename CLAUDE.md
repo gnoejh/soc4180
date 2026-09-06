@@ -99,7 +99,17 @@ pulls `jax[cuda12]` and would reinstall over Colab's preinstalled GPU JAX,
 silently dropping to CPU. Plain `playground` declares `jax` unpinned so pip
 leaves it alone.
 
-**The GPU training cell is `eval: false` and has NEVER been run.** JAX CUDA is
+**Three verified failures in the playground path** (all now in the slides):
+`mujoco_playground` is not in `soc4180[rl]`; the env config defaults to
+`impl="warp"` which needs the separate `mujoco-warp` package, so use
+`registry.load(name, config_overrides={"impl": "jax"})`; and brax 0.14.2 calls
+`jax.device_put_replicated`, removed in JAX 0.11 — brax pins only `jax>=0.4.6`,
+so **never upgrade JAX on Colab**. Training also needs
+`wrap_env_fn=wrapper.wrap_for_brax_training` since a playground env is not a
+brax env. With `impl="jax"` the env loads here on CPU: action size 12,
+observation `{state: (52,), privileged_state: (114,)}`.
+
+**The GPU training cell is `eval: false` and has NEVER completed a run.** JAX CUDA is
 Linux-only so it cannot be tested here; `playground` imports fine on CPU JAX,
 which is how the registry and configs are read. Run Track A once on a Colab T4
 and set `num_timesteps` so it lands at 12–15 min before teaching this week.

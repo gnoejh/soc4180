@@ -74,6 +74,14 @@ Hit for real while preparing this lab, all now taught in the slides.
    only `jax>=0.4.6` with no upper bound, so pip installs a broken pair, and
    **Colab's preinstalled JAX is 0.11, so it is broken out of the box.**
 
+### Never put imports in a cell that may restart the kernel
+
+The dependency setup is its **own cell**, separate from every import. An earlier
+version combined them, so the auto-restart killed the kernel partway through and
+`from soc4180.envs import G1WalkEnv` never ran — leaving the *next* cell to fail
+with `NameError: name 'G1WalkEnv' is not defined`, which looks nothing like the
+install problem that caused it.
+
 ### Two ways this still bites after the fix
 
 **The pin must be unconditional.** An early version of the setup cell installed

@@ -88,7 +88,14 @@ if _installed("jax") != "0.9.2" or _installed("mujoco_playground") is None:
         print("=" * 70)
 else:
     print(f"jax {_installed('jax')} installed - restart already done, good")
+```
 
+The cell above may restart the runtime. **Everything else lives in separate
+cells**, so that a restart mid-setup cannot leave later cells with undefined
+names — which is exactly what happens if you put your imports in the same cell
+as an install.
+
+```{python}
 import time, warnings
 import numpy as np
 warnings.filterwarnings("ignore")

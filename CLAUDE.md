@@ -108,6 +108,11 @@ not a brax env, so training needs `wrap_env_fn=wrapper.wrap_for_brax_training`;
 `jax.device_put_replicated`, both removed in JAX 0.11** — and Colab ships 0.11,
 so it is broken out of the box.
 
+**Keep dependency setup in its own cell, with no imports in it.** Week 10's
+setup cell can restart the kernel; when imports shared that cell, the restart
+killed it before `from soc4180.envs import G1WalkEnv` ran and the *next* cell
+failed with a `NameError` that looks unrelated to the install.
+
 Week 10's setup cell **force-restarts the Colab runtime** with
 `os.kill(os.getpid(), 9)` after a successful install, gated on
 `soc4180.is_colab()` so a local render can never kill its own kernel. Colab

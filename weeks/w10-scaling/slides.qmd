@@ -42,23 +42,27 @@ it. Today we find out what that costs and how it is bought.
 Not in the neural network. In the physics.
 
 ```{python}
-try:
-    import soc4180
-    import torch
-except ImportError:
-    %pip install -q "soc4180[rl] @ git+https://github.com/gnoejh/soc4180.git"
-    import soc4180, torch
+# Always upgrade, never "install only if the import fails". This course repo
+# changes between labs, and a conditional install silently keeps a stale copy:
+# `import soc4180` succeeds, the install is skipped, and a function added last
+# week is missing. Upgrade BEFORE the first import -- pip cannot replace a
+# module that is already loaded.
+%pip install -q --upgrade "soc4180[rl] @ git+https://github.com/gnoejh/soc4180.git"
+%pip install -q playground          # NOT playground[all]: that pulls jax[cuda12]
 
-try:
-    import mujoco_playground
-except ImportError:
-    %pip install -q playground          # NOT playground[all]: that pulls jax[cuda12]
-    import mujoco_playground
+import soc4180, torch, mujoco_playground
+print("soc4180", soc4180.__version__, "| playground OK")
 ```
 
-Dependency setup gets its own cell, with no imports in it. That is a habit worth
-keeping: a cell that installs things is a cell that may need to restart the
-kernel, and anything defined alongside the install is lost when it does.
+Two habits in that cell, both learned the hard way:
+
+**Upgrade unconditionally.** `try: import X / except ImportError: install X` can
+never deliver an update — the import succeeds against a stale copy and the
+install never runs. You then get an `AttributeError` for something that exists
+perfectly well in the repository.
+
+**Install before importing.** pip rewrites files on disk; it cannot replace a
+module the interpreter has already loaded.
 
 ```{python}
 import time, warnings

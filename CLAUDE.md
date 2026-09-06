@@ -187,6 +187,26 @@ verified. Do not set `error: true`; that protection is the point.
 Rendered decks are gitignored because reveal.js assets are ~5 MB/week. Only
 `lab.ipynb` is committed.
 
+### Install unconditionally, before the first import
+
+**`try: import soc4180 / except ImportError: %pip install ...` is wrong for this
+repo.** The package changes between labs, so on any runtime with an older copy
+the import succeeds, the install is skipped, and a function added later is
+missing — surfacing as an `AttributeError` for something that plainly exists in
+the repository. This bit for real with `soc4180.jax_compat` in week 10.
+
+Use instead, as the first thing in the notebook:
+
+```python
+%pip install -q --upgrade "soc4180[rl] @ git+https://github.com/gnoejh/soc4180.git"
+import soc4180
+```
+
+Upgrade **before** importing: pip rewrites files on disk and cannot replace a
+module the interpreter has already loaded. Weeks 0–9 still use the conditional
+form; they are stable, but any week that gains new package features should be
+switched.
+
 ### Standing pattern: every week starts with a notebook-only header
 
 Immediately after the YAML frontmatter, before the first slide:

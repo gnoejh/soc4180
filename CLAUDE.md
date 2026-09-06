@@ -29,7 +29,7 @@ agentic content returns only where it attaches to the robot, in weeks 14–15.
 | 2 | Transforms and forward kinematics | `w02` | built, Colab-verified |
 | 3 | Inverse kinematics | `w03` | built, Colab-verified |
 | 4 | Contact, balance, analytic walking (LIPM/ZMP) | `w04` | built, Colab-verified |
-| 5 | Actuation, PD control, and CPG gaits | `w05` | built; **Colab untested** |
+| 5 | Actuation, PD control, and CPG gaits | `w05` | built, Colab-verified |
 | 6 | Sensing, state estimation, observation design | — | not written |
 | 7 | From control to learning: MDPs and environment design | — | not written |
 | 8 | Policy gradients and PPO | — | not written |
@@ -44,8 +44,7 @@ agentic content returns only where it attaches to the robot, in weeks 14–15.
 Capstone presentations occupy the final-exam slot. Weeks 0 and 1 share the first
 session — the stack lecture is short, the MuJoCo lab is hands-on.
 
-Weeks 1–4 are the complete classical half and all are confirmed on Colab.
-Week 5 is built but has only been run locally.
+Weeks 1–5 are built and **all are confirmed working on Colab**.
 
 **Week 5 facts, measured — do not restate them from memory.** The actuator law
 is `tau = kp*(ctrl - q) - kv*qdot`, verified exactly. `kp = 500` uniformly;

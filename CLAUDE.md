@@ -33,8 +33,8 @@ agentic content returns only where it attaches to the robot, in weeks 14–15.
 | 6 | Sensing, state estimation, observation design | `w06` | built, Colab-verified |
 | 7 | From control to learning: MDPs and environment design | `w07` | built, Colab-verified |
 | 8 | Policy gradients and PPO | `w08` | built, Colab-verified |
-| 9 | Reward shaping and diagnosing failed runs | `w09` | built; **Colab untested** |
-| 10 | Scaling: GPU-parallel locomotion training | — | not written |
+| 9 | Reward shaping and diagnosing failed runs | `w09` | built, Colab-verified |
+| 10 | Scaling: GPU-parallel locomotion training | `w10` | built; GPU cell **unrun** |
 | 11 | Domain randomization and robustness | — | not written |
 | 12 | Sim-to-real, measured | — | not written |
 | 13 | Perception and imitation | — | not written |
@@ -82,6 +82,20 @@ Adding `stand_still` or `air_time` alone changes nothing; **both together** brea
 the standing optimum — 224 steps, −0.524 m, feet lifted 0.08 — i.e. it falls over
 backwards. Shaping picks which optimum you land in; it does not buy the search.
 `G1WalkEnv` now takes `reward_weights`; see `DEFAULT_REWARD` in `envs.py`.
+
+**Week 10 facts, measured locally (36-core Windows).** Single env 1308 control
+steps/s (13,083 physics steps/s), so 150M steps is ~32 hours. `DummyVecEnv` gives
+**no speedup** (1173/1240/1250 for 1/4/16 envs) because it steps sequentially —
+vectorised is not parallel. `SubprocVecEnv` does scale (1649/3205/5570 for 2/4/8)
+but is capped by core count, and a Colab CPU runtime has 2. Verified from the
+library: Berkeley Humanoid is 150M timesteps at 8192 parallel envs, Op3 100M;
+network policy (512,256,128) on `state`, value (512,256,128) on
+**`privileged_state`** — the week-6 asymmetric actor-critic in production.
+
+**The GPU training cell is `eval: false` and has NEVER been run.** JAX CUDA is
+Linux-only so it cannot be tested here; `playground` imports fine on CPU JAX,
+which is how the registry and configs are read. Run Track A once on a Colab T4
+and set `num_timesteps` so it lands at 12–15 min before teaching this week.
 
 **Week 7 facts, measured.** `G1WalkEnv` (in `envs.py`) passes gymnasium's
 `check_env`: 42 observations, 12 actions (legs only), residual actions about the

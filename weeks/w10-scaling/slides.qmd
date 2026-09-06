@@ -1,0 +1,305 @@
+---
+title: "Week 10 — Scaling"
+subtitle: "Buying the search · SOC4180 Robot and AI"
+author: "Hong Jeong"
+format:
+  revealjs:
+    output-file: slides.html
+  ipynb:
+    output-file: lab.ipynb
+jupyter: python3
+---
+
+::: {.content-visible when-format="ipynb"}
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gnoejh/soc4180/blob/main/weeks/w10-scaling/lab.ipynb)
+
+**Before you start, two things:**
+
+1. **Runtime → Change runtime type → T4 GPU.** Required this week for more than
+   rendering — the final section needs a GPU.
+2. **File → Save a copy in Drive.** This notebook is opened from GitHub and is
+   *not* saved. Without a copy, your work disappears when you close the tab.
+:::
+
+## The number we have been avoiding
+
+Three weeks of training runs, and every one ended the same way: *not enough
+steps*.
+
+- Week 8: 30k steps. Learned not to fall.
+- Week 9: 40k steps. Left one local optimum for a worse one.
+
+A tuned locomotion run in the literature uses **150 million** steps.
+
+We have been running **0.03%** of a real experiment and drawing conclusions from
+it. Today we find out what that costs and how it is bought.
+
+---
+
+## Where the time goes {.smaller}
+
+Not in the neural network. In the physics.
+
+```{python}
+try:
+    import soc4180
+    import torch
+except ImportError:
+    %pip install -q "soc4180[rl] @ git+https://github.com/gnoejh/soc4180.git"
+    import soc4180, torch
+
+import time, warnings
+import numpy as np
+warnings.filterwarnings("ignore")
+from soc4180.envs import G1WalkEnv
+
+env = G1WalkEnv(); env.reset(seed=0)
+action = np.zeros(12, dtype=np.float32)
+
+t0 = time.time(); n = 3000
+for _ in range(n):
+    _, _, terminated, truncated, _ = env.step(action)
+    if terminated or truncated:
+        env.reset()
+single = n / (time.time() - t0)
+
+print(f"one environment : {single:8.0f} control steps/s")
+print(f"                  {single*env.decimation:10,.0f} physics steps/s "
+      f"({env.decimation} per control step)")
+print(f"150M steps at this rate: {150e6/single/3600:6.1f} hours "
+      f"({150e6/single/86400:.1f} days)")
+```
+
+**More than a day of compute for one run.** And a real study needs several seeds.
+
+---
+
+## The obvious idea, and why it fails {.smaller}
+
+Run many environments at once. Stable-Baselines3 offers `DummyVecEnv`:
+
+```{python}
+from stable_baselines3.common.vec_env import DummyVecEnv
+
+for k in (1, 4, 16):
+    vec = DummyVecEnv([lambda: G1WalkEnv() for _ in range(k)])
+    vec.reset(); acts = np.zeros((k, 12), dtype=np.float32)
+    t0 = time.time(); m = 400
+    for _ in range(m):
+        vec.step(acts)
+    print(f"  DummyVecEnv, {k:2d} envs : {m*k/(time.time()-t0):7.0f} steps/s")
+    vec.close()
+```
+
+Sixteen environments, **the same throughput as one**.
+
+`DummyVecEnv` steps them *in a loop*. It batches the policy's forward pass, which
+was never the bottleneck. The physics still runs one environment at a time on one
+core.
+
+> "Vectorised" does not mean "parallel".
+
+---
+
+## Real parallelism, and its ceiling {.smaller}
+
+`SubprocVecEnv` puts each environment in its own process, so the physics really
+does run at the same time:
+
+```{python}
+from stable_baselines3.common.vec_env import SubprocVecEnv
+import os
+
+print(f"CPU cores available here: {os.cpu_count()}\n")
+for k in (2, 4, 8):
+    vec = SubprocVecEnv([G1WalkEnv for _ in range(k)])
+    vec.reset(); acts = np.zeros((k, 12), dtype=np.float32)
+    for _ in range(10):
+        vec.step(acts)                      # warm up the workers
+    t0 = time.time(); m = 300
+    for _ in range(m):
+        vec.step(acts)
+    print(f"  SubprocVecEnv, {k} envs : {m*k/(time.time()-t0):7.0f} steps/s")
+    vec.close()
+```
+
+This scales — until you run out of cores. **A Colab CPU runtime has two.**
+
+Even at a perfect 8× we would still need four hours per run, and the tuned config
+asks for **8192** environments. There are not enough cores in the building.
+
+---
+
+## Physics on the GPU {.smaller}
+
+The way out is not more cores. It is a different kind of processor.
+
+**MJX** is MuJoCo rewritten in JAX. The same model, the same contact solver — but
+expressed so that XLA can compile it and run **thousands of copies at once** on a
+GPU.
+
+Two ideas make it work:
+
+- **`jit`** — compile the whole step function once, ahead of time, instead of
+  interpreting Python 500 times a second
+- **`vmap`** — take a function written for *one* robot and vectorise it over a
+  batch dimension, so 8192 robots step in one GPU kernel launch
+
+The price is real: everything must be expressible as fixed-shape array
+operations. **No Python branching, no variable-length loops, no early exit** —
+which is why an MJX environment reads so differently from the one we wrote.
+
+---
+
+## What the professionals actually run {.smaller}
+
+`mujoco_playground` ships tuned configurations. These are read from the library,
+not quoted from memory:
+
+```{python}
+from mujoco_playground.config import locomotion_params
+
+for name in ("BerkeleyHumanoidJoystickFlatTerrain", "Op3Joystick"):
+    cfg = locomotion_params.brax_ppo_config(name)
+    print(f"{name}")
+    print(f"    timesteps   {cfg['num_timesteps']:>12,}")
+    print(f"    parallel envs {cfg['num_envs']:>10,}")
+    print(f"    batch size  {cfg['batch_size']:>12}")
+    print(f"    discounting {cfg['discounting']:>12}")
+```
+
+8192 environments in parallel, 150 million steps. Our entire Week 9 experiment
+was **0.027%** of one of these.
+
+---
+
+## A detail worth noticing {.smaller}
+
+```{python}
+cfg = locomotion_params.brax_ppo_config("BerkeleyHumanoidJoystickFlatTerrain")
+net = dict(cfg["network_factory"])
+for k, v in net.items():
+    print(f"  {k:28s} {v}")
+```
+
+Look at the last two lines. The **policy** reads `state`; the **value function**
+reads `privileged_state`.
+
+That is the asymmetric actor–critic from Week 6, in production. The critic is
+allowed to see things no real robot can measure — body height, contact forces,
+terrain — because the critic is thrown away after training. The policy sees only
+what an IMU and joint encoders provide, so it remains deployable.
+
+**The discipline we imposed in Week 6 is exactly what the state of the art does.**
+
+---
+
+## Running it {.smaller}
+
+This needs a **GPU runtime**, and it will not run on a Windows machine at all —
+JAX publishes CUDA wheels for Linux only.
+
+```{python}
+#| eval: false
+# Colab, GPU runtime. Expect several minutes even for a truncated run.
+!pip install -q playground
+
+from mujoco_playground import registry
+from mujoco_playground.config import locomotion_params
+from brax.training.agents.ppo import train as ppo
+
+env_name = "BerkeleyHumanoidJoystickFlatTerrain"
+env = registry.load(env_name)
+cfg = locomotion_params.brax_ppo_config(env_name)
+
+cfg.num_timesteps = 15_000_000      # 10% of the tuned budget
+cfg.num_envs = 2048                 # a T4 has less memory than the target device
+cfg.num_evals = 5
+
+make_inference, params, metrics = ppo.train(
+    environment=env, **{k: v for k, v in cfg.items() if k != "network_factory"}
+)
+```
+
+`registry.load` downloads Menagerie on first call, so the first cell is slower
+than it looks.
+
+---
+
+## Track A and Track B {.smaller}
+
+**Track A — required, ≤15 minutes.** Run the truncated configuration above.
+Success is **not** a walking robot. Success is:
+
+> episode reward and episode length both trending upward, and a rollout that
+> shows a recognisable attempt at a gait.
+
+**Track B — optional.** The full 150M-step budget, launched at the start of the
+lab and collected at the end, or run overnight with checkpoints saved to Drive.
+
+Colab disconnects. **Checkpoint every evaluation**, or a run that dies at minute
+80 of 90 leaves you with nothing.
+
+---
+
+## Reading a learning curve {.smaller}
+
+You will be judged on the diagnosis, not the policy. Four shapes to recognise:
+
+| Curve | Likely cause |
+| --- | --- |
+| Flat from the start | broken observation, wrong action scale, or no gradient reaching the policy |
+| Rises then collapses | learning rate too high, or the exploration bug from Week 8 |
+| Rises then plateaus below target | local optimum — Week 9's standing robot |
+| Rises smoothly, slowly | it is working; you need more steps |
+
+Always plot **episode length** alongside reward. A rising reward with flat
+episode length usually means the policy found a way to score without surviving —
+and that is a reward bug, not a training one.
+
+---
+
+## What the budget actually buys {.smaller}
+
+| Budget | What we saw |
+| --- | --- |
+| 30k steps (Week 8) | learns not to fall; scores the standing baseline |
+| 40k steps (Week 9) | leaves the standing optimum, falls over backwards |
+| 15M steps (today, Track A) | a recognisable gait attempt |
+| 150M steps (tuned) | robust joystick-controlled walking |
+
+Three orders of magnitude separate the top row from the bottom, and nothing else
+about the algorithm changes. **PPO was never the limitation.**
+
+Our conclusions from Weeks 8 and 9 were not wrong — but they were conclusions
+about *underfunded* runs, and it is worth being honest about which findings
+survive a real budget.
+
+---
+
+## Exercises {.smaller}
+
+1. **Measure your own ceiling.** Run the `SubprocVecEnv` sweep on Colab. How many
+   cores do you get, and where does throughput stop improving?
+2. **Do the arithmetic.** At your measured CPU rate, how long is 150M steps? How
+   many GPU-equivalents of CPU would you need?
+3. **Track A.** Run the truncated MJX configuration. Plot reward *and* episode
+   length. Classify the curve using the table above.
+4. **Halve the environments.** Set `num_envs` to 1024 and then 4096 at a fixed
+   step budget. Does wall-clock scale as you expect? What does that say about
+   where the GPU time goes?
+5. **Break it deliberately.** Set the learning rate to 3e-2 and describe the
+   curve's shape before looking.
+6. **Checkpoint discipline.** Write a callback that saves to Drive every
+   evaluation and reloads on restart. Test it by interrupting the run.
+
+---
+
+## Next week
+
+**Week 11 — domain randomization.** With a real budget available, the question
+changes from *can it learn* to *will it survive anything other than the exact
+simulator it learned in*.
+
+We randomise mass, friction, and actuation during training, and measure what
+robustness costs.

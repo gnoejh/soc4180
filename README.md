@@ -21,6 +21,7 @@ Every lab runs in **Google Colab with zero installation**.
 | [07](weeks/w07-mdp/) | From control to learning: MDPs and env design | [![Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gnoejh/soc4180/blob/main/weeks/w07-mdp/lab.ipynb) | GPU (render) |
 | [08](weeks/w08-ppo/) | Policy gradients and PPO | [![Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gnoejh/soc4180/blob/main/weeks/w08-ppo/lab.ipynb) | GPU (render) |
 | [09](weeks/w09-reward/) | Reward shaping | [![Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gnoejh/soc4180/blob/main/weeks/w09-reward/lab.ipynb) | GPU (render) |
+| [10](weeks/w10-scaling/) | Scaling: GPU-parallel training | [![Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gnoejh/soc4180/blob/main/weeks/w10-scaling/lab.ipynb) | **GPU (training)** |
 
 Week 00 is the day-one lecture, taught before Week 01.
 

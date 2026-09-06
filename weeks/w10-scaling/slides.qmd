@@ -61,14 +61,24 @@ def _installed(pkg):
         return None
 
 if _installed("jax") != "0.9.2" or _installed("mujoco_playground") is None:
-    %pip install -q "jax[cuda12]==0.9.2" playground
-    print("=" * 68)
-    print("  Installed jax 0.9.2.  NOW RESTART THE RUNTIME:")
-    print("  Runtime > Restart session, then run this notebook from the top.")
-    print("  pip cannot replace a module Python has already imported.")
-    print("=" * 68)
+    # deliberately NOT -q: a silent resolver failure here is the difference
+    # between "it works" and an AttributeError eight frames deep, later.
+    %pip install "jax[cuda12]==0.9.2" playground
+
+    now = _installed("jax")
+    print("=" * 70)
+    if now == "0.9.2":
+        print("  jax 0.9.2 is now installed ON DISK.")
+        print("  RESTART THE RUNTIME:  Runtime > Restart session")
+        print("  then run this notebook again from the top.")
+        print("  pip cannot replace a module Python has already imported,")
+        print("  so nothing changes for THIS session until you restart.")
+    else:
+        print(f"  INSTALL FAILED - jax on disk is {now}, expected 0.9.2.")
+        print("  Read the pip output above for the conflict; do not restart yet.")
+    print("=" * 70)
 else:
-    print(f"jax {_installed('jax')} already installed - good")
+    print(f"jax {_installed('jax')} installed - restart already done, good")
 
 import time, warnings
 import numpy as np

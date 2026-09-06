@@ -34,7 +34,7 @@ agentic content returns only where it attaches to the robot, in weeks 14–15.
 | 7 | From control to learning: MDPs and environment design | `w07` | built, Colab-verified |
 | 8 | Policy gradients and PPO | `w08` | built, Colab-verified |
 | 9 | Reward shaping and diagnosing failed runs | `w09` | built, Colab-verified |
-| 10 | Scaling: GPU-parallel locomotion training | `w10` | built; CPU parts verified, **GPU run untimed** |
+| 10 | Scaling: GPU-parallel locomotion training | `w10` | built; GPU training **runs on A100, untimed** |
 | 11 | Domain randomization and robustness | — | not written |
 | 12 | Sim-to-real, measured | — | not written |
 | 13 | Perception and imitation | — | not written |
@@ -44,7 +44,12 @@ agentic content returns only where it attaches to the robot, in weeks 14–15.
 Capstone presentations occupy the final-exam slot. Weeks 0 and 1 share the first
 session — the stack lecture is short, the MuJoCo lab is hands-on.
 
-Weeks 1–7 are built and confirmed on Colab; week 8 is built but only run locally.
+**Current state.** Weeks 1–9 are built and confirmed working on Colab. Week 10
+is built and its GPU training path now runs on a Colab A100, after a long series
+of dependency failures documented below — but **no run has been timed**, so
+`num_timesteps = 5M` is a reduction from a known-too-slow figure rather than a
+measured one. Weeks 11–15 are designed and unwritten; 14–15 additionally depend
+on a trained locomotion policy that does not yet exist.
 
 **Week 8 facts, measured.** REINFORCE from scratch on CartPole: 60 -> 489 in
 173 s, using a **batch of 8 episodes per update** — with one episode per update
@@ -172,6 +177,18 @@ quarto render weeks/w01-intro/slides.qmd       # -> slides.html + lab.ipynb
 
 There is no test suite or linter configured. Add the tooling before inventing
 commands for it.
+
+### Instructor tooling
+
+`scripts/view.py` opens MuJoCo's interactive viewer — orbit, pan, zoom, and
+ctrl-drag to push the robot. `--walk` runs the week 4 controller live, `--limp`
+disables actuation, `--robot`/`--keyframe` reach the other Menagerie humanoids,
+`--list` prints what is available.
+
+**It is desktop-only and must never appear in a lab**: Colab has no window to
+draw into, which is the whole reason the weeks render video. Use it for building
+and debugging weeks — pushing the robot to see whether a controller survives a
+disturbance takes seconds here and is invisible in a rendered video.
 
 ## Adding a week
 

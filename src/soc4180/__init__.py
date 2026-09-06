@@ -23,7 +23,8 @@ from .models import (
 from .render import render_poses, render_rollout, save_video, show_video
 from .seeding import set_seed
 from .walking import CPG, GaitParams, LIPM, WalkingController, footstep_plan
-from .sim import actuation_disabled, hold, keyframe_data, keyframe_names
+from .sim import (actuation_disabled, hold, keyframe_data, keyframe_names,
+                  launch_viewer)
 
 __version__ = "0.1.0"
 
@@ -60,6 +61,7 @@ __all__ = [
     "hold",
     "keyframe_data",
     "keyframe_names",
+    "launch_viewer",
     "set_seed",
     "CPG",
     "GaitParams",

@@ -57,6 +57,35 @@ lecture.
 [Quarto](https://quarto.org) ≥ 1.10 must be installed separately — it is a
 standalone CLI, not a Python package.
 
+## Interactive 3D viewing
+
+**Locally** MuJoCo has a real interactive viewer — orbit, pan, zoom, and
+ctrl-drag to shove the robot around. Far more informative than a rendered video
+when a controller is misbehaving:
+
+```bash
+uv run python -c "import soc4180; soc4180.launch_viewer()"          # the G1
+uv run python -m mujoco.viewer --mjcf="$(uv run python -c 'import soc4180; print(soc4180.robot_path())')"
+```
+
+To watch your own controller live, use the non-blocking form:
+
+```python
+import mujoco, soc4180
+ctrl = soc4180.WalkingController(soc4180.load_g1())
+data = ctrl.initial_data()
+with soc4180.launch_viewer(ctrl.model, data, passive=True) as viewer:
+    while viewer.is_running():
+        data.ctrl[:] = ctrl.control(data.time)
+        mujoco.mj_step(ctrl.model, data)
+        viewer.sync()
+```
+
+**On Colab there is no interactive viewer** — a notebook has no window to draw
+into, which is why every lab renders video with `mediapy` instead. For an
+MJX/brax rollout, `brax.io.html.render` produces an interactive 3-D scene that
+does work inline.
+
 ## Architecture
 
 Two execution targets, because one machine cannot do both jobs:

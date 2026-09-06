@@ -45,8 +45,12 @@ def load_robot(name: str = "unitree_g1", entry: str = "scene") -> mujoco.MjModel
 
 
 def robot_path(name: str = "unitree_g1", entry: str = "scene"):
-    """Filesystem path to a robot's XML, for when you need the file itself."""
-    return mm.get(name).path(entry)
+    """Filesystem path to a robot's XML, for when you need the file itself.
+
+    Use ``.xml(entry)``; ``Robot.path()`` takes a cache and returns the robot's
+    *directory*, not a named entry.
+    """
+    return mm.get(name).xml(entry)
 
 
 def load_g1(*, mjx: bool = False, with_hands: bool = False) -> mujoco.MjModel:

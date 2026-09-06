@@ -446,6 +446,16 @@ set and pins at 2.68e-03 m regardless of iteration count — that invariance is
 deliberate teaching material, not a solver defect. Do not "fix" it by raising
 `iterations`; it does nothing.
 
+`soc4180.launch_viewer()` opens MuJoCo's interactive desktop viewer (blocking,
+or `passive=True` for a handle you can step yourself). It raises on Colab, which
+has no window to draw into — that is why labs render video. `brax.io.html.render`
+is the inline-interactive option for MJX rollouts.
+
+`soc4180.robot_path()` uses `Robot.xml(entry)`. **Not `Robot.path(entry)`** —
+that signature takes a cache and returns the robot's directory, so passing an
+entry name raises `AttributeError: 'str' object has no attribute 'resolve'`. The
+function was written wrong and unused until someone asked for a viewer path.
+
 `render_poses` draws a sequence of `qpos` without stepping physics — use it for
 anything demonstrating kinematics, so the robot does not fall over mid-lesson.
 

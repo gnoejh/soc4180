@@ -13,7 +13,8 @@ import contextlib
 import mujoco
 import numpy as np
 
-__all__ = ["actuation_disabled", "hold", "keyframe_data", "keyframe_names"]
+__all__ = ["actuation_disabled", "hold", "keyframe_data", "keyframe_names",
+           "launch_viewer"]
 
 _ACTUATION = int(mujoco.mjtDisableBit.mjDSBL_ACTUATION)
 
@@ -67,3 +68,41 @@ def hold(model: mujoco.MjModel, key: int | str = 0):
         data.ctrl[:] = target
 
     return ctrl_fn
+
+
+def launch_viewer(model=None, data=None, *, passive: bool = False):
+    """Open MuJoCo's interactive 3-D viewer. **Desktop only.**
+
+    Orbit with the left mouse, pan with the right, zoom with the wheel; double
+    click a body to select it, then ctrl-drag to push the robot around. Far more
+    useful than a rendered video when you are trying to understand why a
+    controller misbehaves.
+
+    ``passive=True`` returns a handle instead of blocking, so you can step the
+    simulation yourself and watch it live.
+
+    There is no equivalent in Colab: a notebook has no window to draw into, which
+    is why every lab renders video instead.
+    """
+    from ._gl import is_colab
+
+    if is_colab():
+        raise RuntimeError(
+            "The interactive viewer needs a desktop window and cannot run in "
+            "Colab. Render video with soc4180.render_rollout instead, or run "
+            "this locally."
+        )
+
+    import mujoco.viewer
+
+    if model is None:
+        from .models import load_g1
+
+        model = load_g1()
+    if data is None:
+        data = mujoco.MjData(model)
+        mujoco.mj_forward(model, data)
+
+    if passive:
+        return mujoco.viewer.launch_passive(model, data)
+    return mujoco.viewer.launch(model, data)

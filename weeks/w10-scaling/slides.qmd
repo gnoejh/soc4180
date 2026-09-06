@@ -256,18 +256,22 @@ import jax.core, jax.extend.core
 # repairs a broken environment, so it must not itself depend on a package
 # install having gone through. (The same code is in soc4180/jax_compat.py.)
 
-if not hasattr(jax.core, "get_opaque_trace_state"):        # flax wants this
-    jax.core.get_opaque_trace_state = jax.extend.core.get_opaque_trace_state
-    print("patched jax.core.get_opaque_trace_state")
+# Applied unconditionally. Whether these attributes "exist" depends on the JAX
+# version and on how its deprecation machinery is configured, so testing first
+# makes the behaviour environment-dependent for no benefit. Assigning is cheap
+# and idempotent.
 
-if not hasattr(jax, "device_put_replicated"):              # brax wants this
+jax.core.get_opaque_trace_state = jax.extend.core.get_opaque_trace_state  # flax
+
+if not hasattr(jax, "device_put_replicated"):                             # brax
     def device_put_replicated(x, devices):
         stacked = jax.tree.map(lambda v: jnp.stack([jnp.asarray(v)] * len(devices)), x)
         return jax.device_put(stacked, devices[0]) if len(devices) == 1 else stacked
     jax.device_put_replicated = device_put_replicated
-    print("patched jax.device_put_replicated")
 
 print("jax", jax.__version__, "| devices:", jax.devices())   # want a CudaDevice
+print("get_opaque_trace_state:", callable(jax.core.get_opaque_trace_state))
+print("device_put_replicated :", callable(jax.device_put_replicated))
 ```
 
 `get_opaque_trace_state` simply moved to `jax.extend.core`.

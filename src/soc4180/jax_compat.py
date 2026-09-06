@@ -37,11 +37,13 @@ def patch_jax(verbose: bool = True) -> list[str]:
     # flax.core.tracers calls this; JAX moved it to jax.extend.core
     import jax.core as jax_core
 
-    if not hasattr(jax_core, "get_opaque_trace_state"):
-        import jax.extend.core as jax_extend_core
+    # Assigned unconditionally: whether the attribute "exists" depends on the
+    # JAX version and its deprecation configuration, so probing first only makes
+    # the result environment-dependent. Assignment is cheap and idempotent.
+    import jax.extend.core as jax_extend_core
 
-        jax_core.get_opaque_trace_state = jax_extend_core.get_opaque_trace_state
-        patched.append("jax.core.get_opaque_trace_state")
+    jax_core.get_opaque_trace_state = jax_extend_core.get_opaque_trace_state
+    patched.append("jax.core.get_opaque_trace_state")
 
     # brax's training loop calls this; it was part of the old pmap API
     if not hasattr(jax, "device_put_replicated"):

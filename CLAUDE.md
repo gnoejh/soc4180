@@ -31,8 +31,8 @@ agentic content returns only where it attaches to the robot, in weeks 14–15.
 | 4 | Contact, balance, analytic walking (LIPM/ZMP) | `w04` | built, Colab-verified |
 | 5 | Actuation, PD control, and CPG gaits | `w05` | built, Colab-verified |
 | 6 | Sensing, state estimation, observation design | `w06` | built, Colab-verified |
-| 7 | From control to learning: MDPs and environment design | `w07` | built; **Colab untested** |
-| 8 | Policy gradients and PPO | — | not written |
+| 7 | From control to learning: MDPs and environment design | `w07` | built, Colab-verified |
+| 8 | Policy gradients and PPO | `w08` | built; **Colab untested** |
 | 9 | Reward shaping and diagnosing failed runs | — | not written |
 | 10 | Scaling: GPU-parallel locomotion training | — | not written |
 | 11 | Domain randomization and robustness | — | not written |
@@ -44,7 +44,18 @@ agentic content returns only where it attaches to the robot, in weeks 14–15.
 Capstone presentations occupy the final-exam slot. Weeks 0 and 1 share the first
 session — the stack lecture is short, the MuJoCo lab is hands-on.
 
-Weeks 1–6 are built and confirmed on Colab; week 7 is built but only run locally.
+Weeks 1–7 are built and confirmed on Colab; week 8 is built but only run locally.
+
+**Week 8 facts, measured.** REINFORCE from scratch on CartPole: 60 -> 489 in
+173 s, using a **batch of 8 episodes per update** — with one episode per update
+identical code reached 260 and 88 on two runs, so batching is required for the
+lab to be reliable. PPO solves InvertedPendulum (26 -> 1000, 99 s). On
+`G1WalkEnv`, PPO **gets worse**: untrained scores 774.3 (exactly the
+hold-the-crouch baseline, because residual actions start near zero), and after
+30k steps scores 94.7 — it lunges at 1.28 m/s against a 0.5 target and falls
+after 46 of 500 steps. That is a reward-specification failure, not an algorithm
+failure, and it is the intended setup for week 9. Week 8 is the longest lab
+(~6 min); it trains three times.
 
 **Week 7 facts, measured.** `G1WalkEnv` (in `envs.py`) passes gymnasium's
 `check_env`: 42 observations, 12 actions (legs only), residual actions about the

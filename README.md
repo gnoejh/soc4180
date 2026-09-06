@@ -5,7 +5,8 @@ simulation. The through-line is a **walking humanoid**: students make the
 [Unitree G1](https://github.com/google-deepmind/mujoco_menagerie) walk with
 classical control first, then learn a policy that does it instead.
 
-Every lab runs in **Google Colab with zero installation**.
+Every lab runs in **Google Colab with zero installation**, and every deck is
+readable in a browser at **<https://gnoejh.github.io/soc4180/>**.
 
 ## Weeks
 
@@ -56,6 +57,35 @@ lecture.
 
 [Quarto](https://quarto.org) ≥ 1.10 must be installed separately — it is a
 standalone CLI, not a Python package.
+
+## Slides on the web (GitHub Pages)
+
+<https://gnoejh.github.io/soc4180/> carries every rendered deck, so a lecture can
+be given from a browser alone — no checkout, no Quarto, no Python.
+
+`.github/workflows/pages.yml` rebuilds it on every push that touches `weeks/`,
+`src/` or the build itself, and can also be run by hand from the Actions tab
+(*Publish course site → Run workflow*) — which is the whole point: the site can
+be rebuilt from a phone.
+
+**The decks are still not committed, and should not be.** `embed-resources: true`
+inlines reveal.js, images and base64 video into one file, measured at 3.4–5.1 MB
+per deck and ~43 MB for the set. Inlined base64 does not delta-compress, so every
+re-render would add a fresh full copy to history — tens of megabytes per render,
+permanently. The workflow instead uploads the built site as a Pages *artifact*:
+nothing enters git, there is no `gh-pages` branch, and the URL is stable.
+
+Two details worth knowing:
+
+- Weeks render **one at a time**. A week whose cell breaks costs that one deck;
+  the other ten still publish and the run turns red naming the broken week.
+  `execute.error: false` still aborts that week's render, so nothing broken ships.
+- Executed cells are cached in the Actions cache (`_freeze`), not in git, so an
+  unchanged week is not re-run. The first build is slow — weeks 8 and 9 actually
+  train — and later ones are minutes.
+
+**One-time setup:** repository *Settings → Pages → Build and deployment → Source*
+must be set to **GitHub Actions**.
 
 ## Interactive 3D viewing
 

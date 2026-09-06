@@ -228,3 +228,7 @@ _freeze/
 # `quarto render`. Only lab.ipynb is committed, because Colab loads it from git.
 weeks/**/slides.html
 weeks/**/slides_files/
+
+# GitHub Pages build output (scripts/build_site.py); published as an
+# Actions artifact, never committed.
+_site/

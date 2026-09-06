@@ -173,6 +173,7 @@ uv sync --extra gpu                            # + JAX/MJX/playground (Linux/WSL
 uv run python -c "import soc4180"              # smoke test
 uv run scripts/view.py --walk                  # interactive viewer (desktop only)
 quarto render weeks/w01-intro/slides.qmd       # -> slides.html + lab.ipynb
+uv run python scripts/build_site.py            # rendered decks -> _site/ for Pages
 ```
 
 There is no test suite or linter configured. Add the tooling before inventing
@@ -226,6 +227,42 @@ verified. Do not set `error: true`; that protection is the point.
 
 Rendered decks are gitignored because reveal.js assets are ~5 MB/week. Only
 `lab.ipynb` is committed.
+
+### The decks reach the web through Pages, not through git
+
+Measured, so the gitignore is not re-litigated: the eleven decks are 3.4–5.1 MB
+each, **43 MB for the set**. `embed-resources: true` inlines reveal.js, images
+and base64 video into a single file, and inlined base64 does not delta-compress
+— so committing them would add a fresh full copy of every re-rendered deck to
+history, tens of megabytes at a time, permanently. **Do not start committing
+`slides.html`, and do not publish through a `gh-pages` branch either** (same
+growth, different branch).
+
+`.github/workflows/pages.yml` builds the site on a runner and hands it to
+`actions/deploy-pages` as an **artifact**: nothing enters git at all, and
+<https://gnoejh.github.io/soc4180/> is stable. `workflow_dispatch` is enabled
+deliberately — teaching sometimes happens with no machine but a browser, and the
+site must be rebuildable from the Actions tab.
+
+Decisions in that workflow, each with a reason:
+
+- **One `quarto render` per week, in a loop**, not one project-level render. A
+  project render is all-or-nothing: week 10 alone failing would publish nothing.
+  The loop ships the ten decks that worked; a separate `report` job (which runs
+  *after* `deploy`) turns the run red and names the failure. `execute.error:
+  false` is untouched — a broken cell still aborts that week.
+- **`_freeze` lives in the Actions cache, not in git.** Same speed, no bloat.
+  First build is long (weeks 8 and 9 genuinely train); later ones reuse it.
+- **`libosmesa6` is installed explicitly.** The runner has no GPU, so `_gl`
+  wants osmesa, and without the library it correctly sets *no* backend and
+  rendering raises. The workflow prints `gl_report()` before rendering so the
+  branch taken is visible.
+- **`--extra gpu` is synced**, because week 10's *executed* cells import
+  `mujoco_playground`.
+- `scripts/build_site.py` never fails; the render step owns failure. It marks a
+  missing deck "Slides unavailable" on the index rather than hiding the week.
+
+Repository setting required once: *Settings → Pages → Source = GitHub Actions*.
 
 ### Install unconditionally, before the first import
 

@@ -1,0 +1,120 @@
+name: Publish course site
+
+# Renders every week's deck and publishes them to GitHub Pages.
+#
+# slides.html is a gitignored build artifact (3-5 MB each, resources inlined),
+# so Pages is where the decks actually become shareable. The artifact deploy
+# below puts nothing into git -- no gh-pages branch, no history growth.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "weeks/**"
+      - "src/**"
+      - "scripts/build_site.py"
+      - "_quarto.yml"
+      - "pyproject.toml"
+      - "uv.lock"
+      - ".github/workflows/pages.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    outputs:
+      failed: ${{ steps.render.outputs.failed }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install a software renderer
+        # The runner has no GPU, so soc4180._gl selects osmesa -- but only if
+        # libOSMesa is actually findable. Without it _gl deliberately sets no
+        # backend at all, and rendering raises with instructions instead.
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libosmesa6 libosmesa6-dev libgl1 libglfw3 ffmpeg
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - uses: quarto-dev/quarto-actions/setup@v2
+
+      - name: Restore executed cells
+        # `freeze: auto` means an unchanged week is not re-executed. Keeping
+        # _freeze in the Actions cache rather than in git gives the speed
+        # without the repository bloat.
+        uses: actions/cache@v4
+        with:
+          path: _freeze
+          key: freeze-${{ hashFiles('weeks/**/slides.qmd', 'src/soc4180/**/*.py', 'uv.lock') }}
+          restore-keys: freeze-
+
+      - name: Install the course environment
+        run: uv sync --extra rl --extra env --extra gpu
+
+      - name: Report the render backend
+        # CLAUDE.md rule: report which branch the GL selection took, so a
+        # rendering failure is visible here rather than mysterious later.
+        run: uv run python -c "import soc4180; print(soc4180.gl_report())"
+
+      - name: Render every week
+        id: render
+        # One `quarto render` per week, so a single broken week costs one deck
+        # instead of the whole site. `execute.error: false` still aborts that
+        # week's render on a bad cell -- the protection is unchanged. Failures
+        # are reported by a later job, so the decks that did render still ship.
+        run: |
+          failed=""
+          for qmd in weeks/*/slides.qmd; do
+            echo "::group::render $qmd"
+            if uv run quarto render "$qmd"; then
+              echo "ok: $qmd"
+            else
+              echo "::error file=$qmd::render failed"
+              failed="${failed} ${qmd}"
+            fi
+            echo "::endgroup::"
+          done
+          echo "failed=${failed# }" >> "$GITHUB_OUTPUT"
+
+      - name: Assemble the site
+        run: uv run python scripts/build_site.py
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
+
+  report:
+    # Deliberately after deploy: a week that fails to render must not stop the
+    # other ten from reaching the site, but it must still turn the run red.
+    needs: [build, deploy]
+    if: always() && needs.build.outputs.failed != ''
+    runs-on: ubuntu-latest
+    steps:
+      - name: Name the weeks that did not render
+        run: |
+          echo "these weeks failed to render: ${{ needs.build.outputs.failed }}"
+          exit 1

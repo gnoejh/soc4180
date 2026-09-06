@@ -18,6 +18,10 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# Environment design (week 7). Deliberately lighter than `rl`: no torch, no SB3.
+env = [
+    "gymnasium[mujoco]>=0.29",
+]
 # Learning weeks (7+). torch is optional: only seeding.py touches it, and then
 # only if it is already installed.
 rl = [

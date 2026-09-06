@@ -30,8 +30,8 @@ agentic content returns only where it attaches to the robot, in weeks 14–15.
 | 3 | Inverse kinematics | `w03` | built, Colab-verified |
 | 4 | Contact, balance, analytic walking (LIPM/ZMP) | `w04` | built, Colab-verified |
 | 5 | Actuation, PD control, and CPG gaits | `w05` | built, Colab-verified |
-| 6 | Sensing, state estimation, observation design | `w06` | built; **Colab untested** |
-| 7 | From control to learning: MDPs and environment design | — | not written |
+| 6 | Sensing, state estimation, observation design | `w06` | built, Colab-verified |
+| 7 | From control to learning: MDPs and environment design | `w07` | built; **Colab untested** |
 | 8 | Policy gradients and PPO | — | not written |
 | 9 | Reward shaping and diagnosing failed runs | — | not written |
 | 10 | Scaling: GPU-parallel locomotion training | — | not written |
@@ -44,7 +44,20 @@ agentic content returns only where it attaches to the robot, in weeks 14–15.
 Capstone presentations occupy the final-exam slot. Weeks 0 and 1 share the first
 session — the stack lecture is short, the MuJoCo lab is hands-on.
 
-Weeks 1–5 are built and confirmed on Colab; week 6 is built but only run locally.
+Weeks 1–6 are built and confirmed on Colab; week 7 is built but only run locally.
+
+**Week 7 facts, measured.** `G1WalkEnv` (in `envs.py`) passes gymnasium's
+`check_env`: 42 observations, 12 actions (legs only), residual actions about the
+week-4 crouch, 50 Hz control over 500 Hz physics. Baselines: hold-the-crouch
+returns 774 and survives; random falls in 0.5 s. **The week-4 analytic walker
+FAILS inside the env** — falls at 4.2 s having gone 0.24 m, with actions clipped
+on 35.7% of steps. It needs `action_scale = 1.0` *and* >= 100 Hz to survive
+(1.05 m, against 0.99 m at 500 Hz). Defaults stay at 0.3/50 Hz because that is
+what the locomotion literature trains with. Also: **return is not comparable
+across control rates** — 200 Hz scores ~5x purely from having more steps.
+
+Week 7 needs the `env` extra (gymnasium only), which is deliberately lighter
+than `rl` (torch + SB3) so a Colab install stays small.
 
 **Week 6 facts, measured.** The G1's whole sensory world is 12 numbers (two IMUs).
 Accelerometer reads 9.81 at rest and **zero in free fall** — it senses specific

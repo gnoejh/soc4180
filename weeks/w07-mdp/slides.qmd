@@ -1,0 +1,332 @@
+---
+title: "Week 7 — From Control to Learning"
+subtitle: "MDPs and environment design · SOC4180 Robot and AI"
+author: "Hong Jeong"
+format:
+  revealjs:
+    output-file: slides.html
+  ipynb:
+    output-file: lab.ipynb
+jupyter: python3
+---
+
+::: {.content-visible when-format="ipynb"}
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gnoejh/soc4180/blob/main/weeks/w07-mdp/lab.ipynb)
+
+**Before you start, two things:**
+
+1. **Runtime → Change runtime type → T4 GPU.** Not for training — MuJoCo renders
+   video through EGL on Colab, and that needs the GPU runtime.
+2. **File → Save a copy in Drive.** This notebook is opened from GitHub and is
+   *not* saved. Without a copy, your work disappears when you close the tab.
+:::
+
+## The hinge of the course
+
+For six weeks you have **derived** controllers. Transforms, kinematics, a balance
+model, gains, a filter — every line justified by physics you worked out.
+
+From today you **specify problems** instead, and let an algorithm find the
+controller.
+
+That is not a smaller job. It is a different one, and the failure modes move: the
+mathematics stops being where things go wrong, and the *specification* starts.
+
+Today we write no learning code at all. We write the problem.
+
+---
+
+## The Markov decision process
+
+Five pieces:
+
+| Symbol | Name | For our robot |
+| --- | --- | --- |
+| $\mathcal{S}$ | states | joint angles, velocities, body attitude |
+| $\mathcal{A}$ | actions | what we send to the servos |
+| $P(s'\mid s,a)$ | transition | **MuJoCo** — we never write this down |
+| $R(s,a)$ | reward | what we want, expressed as a number |
+| $\gamma$ | discount | how much the future counts |
+
+The goal: a policy $\pi(a\mid s)$ maximising expected discounted return
+$\mathbb{E}\left[\sum_t \gamma^t r_t\right]$.
+
+**MuJoCo being the transition function is the whole reason this works.** We do
+not need to model the dynamics — we can simply run them.
+
+---
+
+## Markov, honestly
+
+The Markov property says the current state contains everything needed to predict
+the future.
+
+Our robot **violates this**, and knowingly:
+
+- we observe gravity and gyroscope, not true attitude (Week 6)
+- we cannot see the ground ahead
+- actuator state, contact history, and momentum are only partly visible
+
+Formally we have a *partially observable* MDP. The standard practical answer is
+to stack recent observations and include the previous action, giving the policy
+a short memory.
+
+**Pretending it is Markov, then compensating, is normal practice.** Knowing that
+you are doing it is the difference between engineering and cargo culting.
+
+---
+
+## Design decision 1: what is an action? {.smaller}
+
+Three plausible choices, and they are not equally good:
+
+| Action | Consequence |
+| --- | --- |
+| **Joint torques** | Most general, and the policy must learn gravity compensation from scratch |
+| **Absolute joint angles** | Servos do the hard work; but every output must specify a whole posture |
+| **Residuals about a nominal pose** | The policy nudges a stance that already works |
+
+We use the third: $\text{target} = q_{\text{nominal}} + \kappa\,a$, with the
+nominal being the Week 4 crouch and $\kappa = 0.3$ rad.
+
+An untrained policy outputs roughly zero, which means it **starts by standing in
+a sensible crouch** rather than flailing. That single choice removes an enormous
+amount of wasted exploration.
+
+---
+
+## Design decision 2: how fast does it think? {.smaller}
+
+Physics runs at 500 Hz. Does the policy?
+
+**No.** It runs at **50 Hz**, holding each action for 10 physics steps.
+
+Reasons, all from Week 0's timescale table:
+
+- a leg cannot move meaningfully in 2 ms, so deciding that often is wasted
+- a network evaluated at 500 Hz costs 10× the compute for no benefit
+- longer intervals mean fewer decisions per episode, so credit assignment is easier
+- real robots deploy policies at 50 Hz for exactly these reasons
+
+The servos still run at 500 Hz underneath. **The policy sets targets; the PD loop
+chases them.** The layered structure from Week 0 survives intact.
+
+---
+
+## Design decision 3: when does an episode end? {.smaller}
+
+- **Terminate** when the robot has fallen — body below 0.5 m, or tilted more than
+  0.7 rad from upright. Continuing to simulate a heap on the floor teaches
+  nothing and wastes compute.
+- **Truncate** at 10 seconds, so a policy that stands still forever still yields
+  a finite episode.
+
+The distinction matters to the algorithm: **termination means the future is
+genuinely worth nothing; truncation means we merely stopped watching.**
+Bootstrapping past a truncation is correct; bootstrapping past a termination is
+a bug that quietly teaches the robot that falling is survivable.
+
+---
+
+## The environment {.smaller}
+
+```{python}
+try:
+    import soc4180
+    import gymnasium
+except ImportError:
+    %pip install -q "soc4180[env] @ git+https://github.com/gnoejh/soc4180.git"
+    import soc4180
+
+import numpy as np
+from soc4180.envs import G1WalkEnv, walker_actions
+
+env = G1WalkEnv()
+print(f"observation : {env.observation_space.shape[0]} numbers")
+print(f"action      : {env.action_space.shape[0]} (the twelve leg joints only)")
+print(f"control     : {1/env.control_dt:.0f} Hz over {1/env.model.opt.timestep:.0f} Hz physics"
+      f"  (hold each action {env.decimation} steps)")
+print(f"episode     : {env.max_steps} decisions = {env.max_steps*env.control_dt:.0f} s")
+```
+
+Forty-two observations: gravity (3), gyroscope (3), and for each of twelve joints
+its angle, velocity, and last commanded residual. **Arms and waist are frozen** —
+seventeen dimensions the walking problem does not need.
+
+---
+
+## Validate the contract {.smaller}
+
+Gymnasium ships a checker. Use it, every time.
+
+```{python}
+from gymnasium.utils.env_checker import check_env
+check_env(env.unwrapped, skip_render_check=True)
+print("env_checker: PASSED")
+```
+
+It verifies the boring things that silently break training: shapes and dtypes
+matching the declared spaces, `reset` accepting a seed and returning
+`(obs, info)`, `step` returning five values, and determinism given a seed.
+
+A subtly non-conforming environment does not crash. **It trains badly, and you
+spend a week blaming the algorithm.**
+
+---
+
+## Two baselines before any learning {.smaller}
+
+```{python}
+def rollout(policy, seed=0):
+    obs, _ = env.reset(seed=seed)
+    total, steps = 0.0, 0
+    while True:
+        obs, r, terminated, truncated, _ = env.step(policy(steps))
+        total += r; steps += 1
+        if terminated or truncated:
+            return total, steps, terminated
+
+zero = lambda k: np.zeros(env.action_space.shape[0], dtype=np.float32)
+rand = lambda k: env.action_space.sample()
+
+for name, pol in (("do nothing (hold the crouch)", zero), ("uniform random", rand)):
+    R, n, fell = rollout(pol)
+    print(f"  {name:30s} return {R:8.2f}  {n:3d} steps  "
+          f"{'FELL' if fell else 'survived'}")
+```
+
+**Always measure these first.** "Do nothing" is the number a policy must beat to
+have learned anything at all; random is the number it must beat to be a policy.
+
+---
+
+## Can the env even express what we know? {.smaller}
+
+We already have a working controller. If the environment cannot represent it, no
+algorithm will find anything better.
+
+```{python}
+from soc4180.walking import WalkingController, GaitParams
+
+def walker_in_env(action_scale=0.3, control_hz=50.0):
+    e = G1WalkEnv(episode_seconds=12.0, action_scale=action_scale, control_hz=control_hz)
+    c = WalkingController(e.model, GaitParams(n_steps=12))
+    e.reset(); clipped, steps = 0, 0
+    while True:
+        a = walker_actions(e, c, e.data.time)
+        clipped += int(np.any(np.abs(a) >= 0.999)); steps += 1
+        _, _, term, trunc, _ = e.step(a)
+        if term or trunc:
+            return e.data.qpos[0], e.data.qpos[2], 100*clipped/steps, term
+
+x, z, clip, fell = walker_in_env()
+print(f"analytic walker inside the env: travelled {x:+.3f} m, pelvis {z:.3f} m")
+print(f"  {'FELL' if fell else 'survived'};  actions hit the limit on {clip:.1f}% of steps")
+print(f"  (at 500 Hz with no action limit it walks +0.99 m)")
+```
+
+**It falls.** The controller that worked three weeks ago cannot survive its own
+environment.
+
+---
+
+## Diagnose it {.smaller}
+
+Two suspects: the action range is too narrow, and the control rate is too slow.
+Separate them.
+
+```{python}
+print(f"{'scale':>6} {'Hz':>5} {'travel':>8} {'z':>7} {'clipped':>8}  outcome")
+for scale in (0.3, 0.6, 1.0):
+    for hz in (50, 100, 200):
+        x, z, clip, fell = walker_in_env(scale, hz)
+        print(f"{scale:6.1f} {hz:5d} {x:+8.3f} {z:7.3f} {clip:7.1f}%  "
+              f"{'FELL' if fell else 'survived'}")
+```
+
+**Both matter, independently.** At $\kappa=0.3$ a third of the actions are
+clipped and it fails at every rate. At $\kappa=1.0$ clipping stops, but 50 Hz
+still fails. Only $\kappa=1.0$ **and** ≥100 Hz reproduces the walk — 1.05 m,
+against 0.99 m at 500 Hz.
+
+---
+
+## What that experiment actually taught {.smaller}
+
+**Your action space defines the set of reachable behaviours.** A solution outside
+it is not merely hard to find; it does not exist in your problem. Nothing in a
+learning curve will ever tell you this — the run just plateaus.
+
+So why keep $\kappa = 0.3$ and 50 Hz as our defaults?
+
+Because those are the values the locomotion literature trains with, and learned
+policies *do* find good gaits inside that envelope. They simply find **different
+gaits from ours** — smaller, faster corrections rather than large scripted
+swings.
+
+The lesson is not "our defaults are wrong". It is that an environment is a
+**commitment about what kind of solution you expect**, and you should know what
+you have committed to.
+
+---
+
+## One trap in that table
+
+Compare returns across the three control rates. They differ by roughly 5×.
+
+Nothing got better. **A 200 Hz episode contains four times as many steps as a
+50 Hz one**, and each step adds reward.
+
+> Return is only comparable between runs that share an episode structure.
+
+Report metrics that mean something physically — distance travelled, time upright,
+average velocity — alongside return. Week 9 leans on this hard.
+
+---
+
+## The reward, for now {.smaller}
+
+```{python}
+env.reset()
+_, _, _, _, info = env.step(np.zeros(12, dtype=np.float32))
+for key, value in info.items():
+    print(f"  {key:18s} {value:+.4f}")
+```
+
+Four terms and an alive bonus:
+
+- **track** a target forward velocity — the actual objective
+- stay **upright** — shaping, to make early learning less hopeless
+- pay for **effort** and for **jerky** actions — so it does not thrash
+- **alive bonus** — so early death is worse than mediocre survival
+
+Every one of those is a decision, and every one is exploitable. **Week 9 breaks
+them on purpose.**
+
+---
+
+## Exercises {.smaller}
+
+1. **Termination as a reward.** Remove the alive bonus. Does the policy space
+   change, or only the incentives? Predict before running.
+2. **Observation ablation.** Remove the previous action from the observation.
+   Argue whether the problem is still (approximately) Markov.
+3. **Torque actions.** Add a mode that outputs torques instead of residuals.
+   Roll out the zero action in each. Why does one stand and the other collapse?
+4. **Find the rate limit.** Bisect the control rate between 50 and 100 Hz at
+   $\kappa = 1.0$. Where exactly does the walker start surviving?
+5. **Fair comparison.** Design a metric that compares 50 Hz and 200 Hz runs
+   honestly. Show it ranks the runs differently from raw return.
+6. **Truncation bug.** Explain what a policy would learn if truncation were
+   treated as termination. Which of our four reward terms would it exploit?
+
+---
+
+## Next week
+
+**Week 8 — policy gradients and PPO.** The environment is written and checked,
+the baselines are measured, and we know what it can and cannot express.
+
+Now we let an algorithm search it — starting on something far easier than a
+humanoid, so that when PPO meets the hard problem you already know what a
+healthy learning curve looks like.

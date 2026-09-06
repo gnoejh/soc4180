@@ -3058,6 +3058,9 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
+env = [
+    { name = "gymnasium", extra = ["mujoco"] },
+]
 gpu = [
     { name = "playground" },
 ]
@@ -3078,6 +3081,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "gymnasium", extras = ["mujoco"], marker = "extra == 'env'", specifier = ">=0.29" },
     { name = "gymnasium", extras = ["mujoco"], marker = "extra == 'rl'", specifier = ">=0.29" },
     { name = "imageio-ffmpeg", specifier = ">=0.4" },
     { name = "mediapy", specifier = ">=1.1" },
@@ -3089,7 +3093,7 @@ requires-dist = [
     { name = "torch", marker = "sys_platform == 'win32' and extra == 'rl'", specifier = ">=2.4", index = "https://download.pytorch.org/whl/cu130" },
     { name = "torch", marker = "sys_platform != 'win32' and extra == 'rl'", specifier = ">=2.4" },
 ]
-provides-extras = ["rl", "gpu"]
+provides-extras = ["env", "rl", "gpu"]
 
 [package.metadata.requires-dev]
 dev = [

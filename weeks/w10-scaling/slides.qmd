@@ -350,8 +350,7 @@ make_inference, weights, metrics = ppo.train(
     progress_fn=progress,
     **params,
 )
-print(f"
-total {time.time()-start:.0f}s for {params['num_timesteps']:,} steps")
+print(f"\ntotal {time.time()-start:.0f}s for {params['num_timesteps']:,} steps")
 ```
 
 `registry.load` clones its **own** copy of Menagerie on first call — about 40

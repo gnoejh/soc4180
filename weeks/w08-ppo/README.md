@@ -37,14 +37,36 @@ starts from competence. It also sets a cruel bar, since the easiest way to score
 774 is to do nothing.
 
 **Training made it worse: 774 → 95.** The trained policy lunges at 1.28 m/s
-against a 0.5 target, covers 0.48 m, and falls after 46 of 500 steps. This is not
-PPO failing. The reward pays for tracking forward velocity immediately, while
-falling costs the alive bonus only later, discounted. PPO found a genuinely
-higher-scoring behaviour under our reward — and our reward was wrong.
+against a 0.5 target and falls after 46 of 500 steps.
 
-> A learning algorithm is a search for loopholes in your specification.
+The obvious explanation — that the reward rewards diving — is **wrong**, and the
+lab checks it rather than asserting it. Evaluating the reward by hand:
 
-That failure is the first entry in Week 9's catalogue of reward pathologies.
+| behaviour | per step | over the episode |
+| --- | --- | --- |
+| walk at the target | 2.500 | **1250** (the best available) |
+| stand still | 1.552 | 776 |
+| lunge, fall at 46 steps | 1.129 | 52 |
+
+There is no loophole. The reward wants exactly what we want.
+
+**The real cause is exploration noise.** PPO starts with an action standard
+deviation of 1.0 on a `[-1, 1]` action space, so:
+
+- untrained **deterministic** policy (what we evaluate): survives **500 of 500** steps
+- untrained **stochastic** policy (what we train on): survives **38**
+
+Over 90% of collected experience is a robot falling over. PPO never sees the
+competent behaviour its own mean produces. Setting `log_std_init=-2.0`
+(std 0.135) raises stochastic survival to ~180 steps, and the same 30k-step run
+then scores **776 instead of 95**.
+
+> A policy is a distribution. If the distribution is too wide, your data
+> describes a policy you would never deploy.
+
+**But it still is not walking** — 776 is the standing baseline, and walking is
+worth 1250. Fixing this bug removed a bug; 30k steps is 0.02% of a real
+locomotion run. That is Week 10's problem.
 
 ## A note on REINFORCE's batch size
 

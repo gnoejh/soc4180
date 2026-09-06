@@ -52,10 +52,24 @@ identical code reached 260 and 88 on two runs, so batching is required for the
 lab to be reliable. PPO solves InvertedPendulum (26 -> 1000, 99 s). On
 `G1WalkEnv`, PPO **gets worse**: untrained scores 774.3 (exactly the
 hold-the-crouch baseline, because residual actions start near zero), and after
-30k steps scores 94.7 — it lunges at 1.28 m/s against a 0.5 target and falls
-after 46 of 500 steps. That is a reward-specification failure, not an algorithm
-failure, and it is the intended setup for week 9. Week 8 is the longest lab
-(~6 min); it trains three times.
+30k steps scores 94.7.
+
+**The cause is exploration noise, NOT reward hacking.** An earlier version of
+these slides claimed PPO had found a reward loophole; that was wrong and the
+numbers disproved it (94.7 < 774.3, so nothing was exploited). Evaluating the
+reward by hand: walking at the target is worth 1250 over an episode, standing
+776, lunging-and-falling 52. The reward is fine.
+
+What actually happens: PPO's initial action std is 1.0 on a `[-1, 1]` action
+space. The untrained **deterministic** policy survives all 500 steps; the
+**stochastic** policy PPO collects data from survives 38. Over 90% of training
+experience is a fall. `log_std_init=-2.0` (std 0.135) raises stochastic survival
+to ~180 and the same 30k run then scores 776 instead of 95.
+
+Even fixed, it only matches the standing baseline — it has learned not to fall,
+not to walk (which is worth 1250). 30k steps is 0.02% of a real run.
+
+Week 8 is the longest lab (~6 min); it trains four times.
 
 **Week 7 facts, measured.** `G1WalkEnv` (in `envs.py`) passes gymnasium's
 `check_env`: 42 observations, 12 actions (legs only), residual actions about the

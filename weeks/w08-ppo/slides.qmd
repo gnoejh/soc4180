@@ -264,39 +264,110 @@ it goes down.
 
 ---
 
-## Read the failure carefully {.smaller}
+## Is the reward to blame? {.smaller}
 
-This is not PPO failing. PPO did exactly what we asked.
+The obvious story is that our reward rewards diving. **Check it before believing
+it** — the reward is only four terms, so evaluate them by hand:
 
-Our reward pays for tracking forward velocity. Diving forward earns that
-immediately. Falling costs the alive bonus — but only *later*, and $\gamma < 1$
-means later is worth less.
+```{python}
+def per_step_reward(v, target=0.5):
+    return 1.5*np.exp(-((v-target)**2)/0.25) + 0.5*1.0 + 0.5   # upright + alive
 
-> The policy found a genuinely higher-scoring behaviour under our reward
-> function, and our reward function was wrong.
+for v, steps, label in ((0.5, 500, "walk at the target"),
+                        (0.0, 500, "stand still"),
+                        (1.283, 46, "lunge, then fall")):
+    print(f"  {label:22s} {per_step_reward(v):.3f}/step x {steps:3d} = {per_step_reward(v)*steps:7.1f}")
+```
 
-**A learning algorithm is a search for loopholes in your specification.** It is
-extremely good at that, and it has no idea you wanted walking.
+**Walking at the target is worth 1250 — by far the best outcome available.**
+Lunging and falling is worth 52. There is no loophole: the reward wants exactly
+what we want. The trained policy did not outsmart it; it scored *worse*.
+
+So the failure is somewhere else.
 
 ---
 
-## What would fix it {.smaller}
+## The policy you train is not the policy you evaluate {.smaller}
 
-Nothing today. But the shape of the answer:
+Evaluation uses the mean action. **Training samples around it** — and PPO starts
+with a standard deviation of 1.0 on an action space of $[-1, 1]$.
+
+```{python}
+agent2 = PPO("MlpPolicy", G1WalkEnv(), verbose=0, seed=0, device="cpu")
+print(f"initial action std = {np.exp(agent2.policy.log_std.detach().numpy()).mean():.3f}"
+      f"   on an action range of +-1")
+
+def survival(agent, env, deterministic, n=5):
+    lengths = []
+    for s in range(n):
+        obs, _ = env.reset(seed=s); k = 0
+        while True:
+            a, _ = agent.predict(obs, deterministic=deterministic)
+            obs, _, terminated, truncated, _ = env.step(a); k += 1
+            if terminated or truncated:
+                break
+        lengths.append(k)
+    return float(np.mean(lengths))
+
+probe = G1WalkEnv()
+print(f"untrained, deterministic (what we evaluate) : {survival(agent2, probe, True):5.1f} of 500 steps")
+print(f"untrained, stochastic    (what we train on) : {survival(agent2, probe, False):5.1f} of 500 steps")
+```
+
+---
+
+## That is the whole failure {.smaller}
+
+The mean policy stands for the full episode. The **sampled** policy falls in
+about forty steps.
+
+So more than 90% of the experience PPO collects is a robot falling over. It never
+sees the competent behaviour its own mean produces, and it dutifully learns from
+the wreckage.
+
+> A policy is a *distribution*. If the distribution is too wide, the data you
+> gather describes a policy you would never deploy.
+
+Turn the noise down and the failure disappears:
+
+```{python}
+t0 = time.time()
+quiet_env = G1WalkEnv()
+quiet = PPO("MlpPolicy", quiet_env, verbose=0, seed=0, device="cpu",
+            policy_kwargs=dict(log_std_init=-2.0))          # std 0.135 instead of 1.0
+print(f"stochastic survival now : {survival(quiet, quiet_env, False):5.1f} of 500 steps")
+quiet.learn(total_timesteps=30_000)
+after_quiet, _ = evaluate_policy(quiet, quiet_env, n_eval_episodes=5, warn=False)
+print(f"after 30k steps         : {after_quiet:7.1f}   (was {after:.1f} with the default noise)")
+```
+
+---
+
+## But it still is not walking {.smaller}
+
+The policy survives training now. It scores around the standing baseline — which
+means it has learned **not to fall over**, and nothing more.
+
+Walking is worth 1250. We are at roughly 780.
+
+| | return |
+| --- | --- |
+| lunging policy (default noise) | ~95 |
+| standing still | 774 |
+| **not falling, after the fix** | ~780 |
+| **walking at the target velocity** | **1250** |
+
+Thirty thousand steps is **0.02%** of a real locomotion run; the literature uses
+150–200 million. We have removed a bug, not solved the problem.
+
+**Two different problems, and we have only fixed the first.**
 
 | Problem | Fix | Week |
 | --- | --- | --- |
-| Diving beats walking | reward terms that penalise the exploit | 9 |
+| Exploration destroys a good policy | narrow the initial action distribution | today |
+| The reward is only *approximately* what we want | take it apart term by term | 9 |
 | 30k steps is nothing | 10⁸ steps, in parallel, on a GPU | 10 |
 | One brittle solution | randomise the world it trains in | 11 |
-| Only works in this sim | measure the gap deliberately | 12 |
-
-Locomotion policies in the literature train for **150–200 million** steps. We ran
-thirty thousand — about 0.02% of a real run. Even a correct reward would show
-little here.
-
-**Both problems are real, and they are different problems.** Next week fixes the
-reward; the week after buys the compute.
 
 ---
 
@@ -306,11 +377,12 @@ reward; the week after buys the compute.
    worse is it? Explain via variance rather than bias.
 2. **Discount.** Set $\gamma = 0.9$ and $\gamma = 0.999$ on CartPole. Which
    trains faster and which reaches a better final policy?
-3. **Clipping.** Train the humanoid with `clip_range=0.05` and `clip_range=0.5`.
-   Does either stop the lunging? Why is that the wrong tool for this problem?
-4. **Kill the exploit.** Cap the tracking reward so exceeding the target velocity
-   earns nothing extra. Retrain for 30k steps. Does the lunge disappear, and what
-   replaces it?
+3. **Clipping is not the fix.** Train the humanoid with `clip_range=0.05`. It
+   limits how far the policy moves per update — explain why that does *not*
+   address data collected from a too-wide distribution.
+4. **Sweep the noise.** Train with `log_std_init` of 0, -1, -2 and -3. Plot
+   initial stochastic episode length against the return after training. Where is
+   the cliff?
 5. **Alive bonus.** Sweep the bonus from 0 to 2. Find the value at which standing
    still beats every attempt to walk. What does that say about shaping?
 6. **Honest baselines.** Report untrained return, hold-the-crouch return, and

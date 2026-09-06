@@ -118,6 +118,21 @@ With the pin and auto-restart in place, the check cell prints
 `0.9.2 [CudaDevice(id=0)]` on a Colab A100. The dependency path is settled: the
 recipe installs, the restart takes effect, and JAX sees the GPU.
 
+## Training runs; budget still needs calibrating
+
+Confirmed on a Colab A100: the training cell **runs**. At `num_timesteps=15M`
+with `num_envs=2048` it was still going after **10 minutes**, so that figure is
+too large for a 12–15 minute lab. The default is now **5M with `num_evals=10`**,
+which reports progress roughly every 500k steps.
+
+**brax prints nothing without a `progress_fn`.** The original cell had none, so a
+ten-minute run showed no output at all and was indistinguishable from a hang.
+The lab now passes one that prints step count, elapsed seconds, episode reward
+and episode length at each evaluation.
+
+Note the first line is slow regardless: brax compiles the whole training loop
+through XLA before any steps run.
+
 ## Still not verified
 
 **No Track A training run has completed.** The throughput numbers above are

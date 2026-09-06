@@ -131,13 +131,15 @@ Still required regardless: `impl="jax"` in `registry.load`,
 Rendering this week needs `uv sync --extra rl --extra gpu --extra env` first; a
 plain `uv run` re-syncs and drops `mujoco_playground`.
 
-**Confirmed on Colab (A100):** JAX sees a `CudaDevice`.
+**Confirmed on Colab (A100):** the training cell **runs**. At 15M timesteps /
+2048 envs it exceeded 10 minutes, so the default is now 5M with `num_evals=10`.
+**Always pass `progress_fn`** — brax prints nothing without one, and a silent
+ten-minute cell is indistinguishable from a hang. The first progress line is
+slow regardless, because brax XLA-compiles the whole loop before stepping.
 
-**That is all it confirms.** It says nothing about `registry.load` or
-`ppo.train`; the training cell has produced no output on any machine. Do not
-report the dependency path as "working" on the strength of a version print —
-that mistake was made once already. **No Track A run has completed anywhere**,
-so `num_timesteps` remains an unmeasured guess.
+**Still uncalibrated:** no Track A run has been timed to completion, so
+`num_timesteps=5M` is a reduction from a known-too-slow figure rather than a
+measured one. Read seconds-per-step from the progress output and scale.
 
 Ordering matters here: the verification cell must come **before** the training
 cell. It originally landed after it, because the troubleshooting slides sat

@@ -23,7 +23,7 @@ import math
 
 import numpy as np
 
-__all__ = ["GaitParams", "LIPM", "WalkingController", "footstep_plan"]
+__all__ = ["CPG", "GaitParams", "LIPM", "WalkingController", "footstep_plan"]
 
 
 class LIPM:
@@ -296,3 +296,59 @@ class WalkingController:
             data.ctrl[:] = self.control(data.time)
 
         return fn
+
+
+class CPG:
+    """A central pattern generator: rhythm with no model of balance.
+
+    Two anti-phase oscillators drive the hips and knees around a nominal crouch.
+    There is no centre-of-mass plan, no footstep plan, and no notion of the
+    support polygon — which is exactly the point of comparing it against the
+    LIPM walker.
+    """
+
+    def __init__(self, model, nominal=None, *, frequency=1.2,
+                 hip_amplitude=0.25, knee_amplitude=0.40, settle_time=1.0):
+        import mujoco
+
+        from . import kinematics as kin
+
+        self.model = model
+        self.frequency = frequency
+        self.hip_amplitude = hip_amplitude
+        self.knee_amplitude = knee_amplitude
+        self.settle_time = settle_time
+
+        if nominal is None:
+            nominal = WalkingController(model).nominal
+        self.nominal = np.array(nominal, copy=True)
+        self._idx = {s: kin.leg_qpos_indices(model, s) for s in ("left", "right")}
+        self._act_qpos = np.array(
+            [model.jnt_qposadr[model.actuator_trnid[a, 0]] for a in range(model.nu)],
+            dtype=int,
+        )
+        self._mujoco = mujoco
+
+    def control(self, t: float) -> np.ndarray:
+        phase = 2 * math.pi * self.frequency * max(t - self.settle_time, 0.0)
+        target = self.nominal.copy()
+        for side, offset in (("left", 0.0), ("right", math.pi)):
+            p = phase + offset
+            i = self._idx[side]
+            target[i[0]] += self.hip_amplitude * math.sin(p)
+            target[i[3]] += self.knee_amplitude * max(0.0, math.sin(p))
+            target[i[4]] -= 0.5 * self.hip_amplitude * math.sin(p)
+        return target[self._act_qpos]
+
+    def ctrl_fn(self):
+        def fn(model, data):
+            data.ctrl[:] = self.control(data.time)
+
+        return fn
+
+    def initial_data(self):
+        data = self._mujoco.MjData(self.model)
+        data.qpos[:] = self.nominal
+        data.qpos[2] = GaitParams().pelvis_height + 0.02
+        self._mujoco.mj_forward(self.model, data)
+        return data

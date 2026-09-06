@@ -1,0 +1,299 @@
+---
+title: "Week 5 — Actuation, PD Control, and Rhythm"
+subtitle: "The motors were never ideal · SOC4180 Robot and AI"
+author: "Hong Jeong"
+format:
+  revealjs:
+    output-file: slides.html
+  ipynb:
+    output-file: lab.ipynb
+jupyter: python3
+---
+
+::: {.content-visible when-format="ipynb"}
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gnoejh/soc4180/blob/main/weeks/w05-actuation/lab.ipynb)
+
+**Before you start, two things:**
+
+1. **Runtime → Change runtime type → T4 GPU.** Not for training — MuJoCo renders
+   video through EGL on Colab, and that needs the GPU runtime.
+2. **File → Save a copy in Drive.** This notebook is opened from GitHub and is
+   *not* saved. Without a copy, your work disappears when you close the tab.
+:::
+
+## A lie we have been telling
+
+Last week we commanded joint angles and the robot went there. Mostly.
+
+Look again at the Week 4 data: the pelvis was commanded to 0.72 m and never quite
+arrived. Something between "the command" and "the motion" is not ideal, and this
+week we open it up.
+
+Three questions:
+
+1. What *is* a position actuator, mechanically?
+2. Why does the robot sag below its commanded height?
+3. What happens when the motors are not strong enough?
+
+---
+
+## The actuator is a controller in disguise {.smaller}
+
+MuJoCo's "position actuator" is not a servo that magically achieves an angle. It
+is a **PD controller** written into the model file:
+
+$$\tau = k_p\,(\text{ctrl} - q) \;-\; k_v\,\dot{q}$$
+
+```{python}
+try:
+    import soc4180
+except ImportError:
+    %pip install -q "soc4180 @ git+https://github.com/gnoejh/soc4180.git"
+    import soc4180
+
+import numpy as np
+import mujoco
+
+model = soc4180.load_g1()
+kp, kv = soc4180.gains(model)
+
+print(f"kp : {np.unique(kp)}            (identical on every joint)")
+print(f"kv : {kv.min():.2f} .. {kv.max():.2f}   ({len(np.unique(kv))} distinct values)")
+```
+
+**Stiffness is uniform; damping is not.** Heavier joints nearer the trunk carry
+more damping, because the same stiffness driving a larger inertia would ring.
+
+---
+
+## Verify it, do not believe it {.smaller}
+
+If that equation really is the actuator, we can predict the torque exactly:
+
+```{python}
+data = soc4180.keyframe_data(model, "stand")
+knee = soc4180.leg_qpos_indices(model, "left")[3]
+data.qpos[knee] = 0.30          # bend the knee 0.3 rad away from the command
+data.qvel[:] = 0                # no velocity, so the kv term vanishes
+data.ctrl[:] = 0
+mujoco.mj_forward(model, data)
+
+a = 3                            # the left knee actuator
+q = data.qpos[model.jnt_qposadr[model.actuator_trnid[a, 0]]]
+predicted = kp[a] * (data.ctrl[a] - q)
+
+print(f"predicted torque = {predicted:+.3f} N m")
+print(f"actual   torque  = {data.actuator_force[a]:+.3f} N m")
+```
+
+A spring, pulling the joint back toward its setpoint with a force proportional to
+the error. **That is why the robot sags: a spring at rest is a spring under
+load, and load means deflection.**
+
+---
+
+## Measure the sag {.smaller}
+
+```{python}
+from soc4180.walking import WalkingController, GaitParams
+
+controller = WalkingController(model, GaitParams(n_steps=8))
+data = controller.initial_data()
+
+sag, peak = [], 0.0
+while data.time < controller.total_time:
+    data.ctrl[:] = controller.control(data.time)
+    mujoco.mj_step(model, data)
+    peak = max(peak, float(np.abs(data.actuator_force).max()))
+    if data.time > controller.params.settle_time:
+        sag.append(controller.targets_at(data.time)[0][2] - data.qpos[2])
+
+print(f"commanded pelvis height : {controller.params.pelvis_height:.3f} m")
+print(f"mean sag                : {np.mean(sag)*1000:+.1f} mm")
+print(f"worst sag               : {np.max(sag)*1000:+.1f} mm")
+print(f"peak joint torque       : {peak:.1f} N m")
+```
+
+Eleven millimetres of steady droop. Not a bug — the necessary deflection of a
+finite spring holding up a 33 kg robot.
+
+---
+
+## The motors in this model are infinitely strong {.smaller}
+
+Before tuning anything, check what the simulator is actually giving us:
+
+```{python}
+print(f"torque limit in the model : {soc4180.torque_limit(model)}")
+print(f"control limits set?       : {bool(np.any(model.actuator_ctrllimited))}")
+```
+
+**`None`.** The MJCF constrains the *commanded angle* to the joint range, but
+places no bound whatsoever on the torque used to get there. Our walker happily
+drew 124 N·m peaks and nothing objected.
+
+No real motor behaves like this. Every hardware actuator has a stall torque, a
+thermal limit, and a gearbox that fails. **This is a sim-to-real gap sitting in
+plain sight in the model file**, and unlike most of them it costs one line to
+close.
+
+---
+
+## Close it and find the breaking point {.smaller}
+
+```{python}
+def walks(torque_limit=None, kp_scale=1.0, kv_scale=1.0, n_steps=8):
+    m = soc4180.load_g1()
+    soc4180.scale_gains(m, kp_scale, kv_scale)
+    soc4180.set_torque_limit(m, torque_limit)
+    c = WalkingController(m, GaitParams(n_steps=n_steps))
+    d = c.initial_data()
+    while d.time < c.total_time:
+        d.ctrl[:] = c.control(d.time)
+        mujoco.mj_step(m, d)
+    return float(d.qpos[0]), float(d.qpos[2])
+
+for limit in (30, 45, 50, 55, 80, None):
+    x, z = walks(torque_limit=limit)
+    tag = "no limit" if limit is None else f"{limit:3d} N m"
+    print(f"  {tag:9s} -> travelled {x:+.3f} m, pelvis {z:.3f} m   "
+          f"{'FELL' if z < 0.5 else 'walked'}")
+```
+
+A crisp threshold: the gait **needs more than 50 N·m** and survives at 55. Below
+that the stance leg cannot hold the robot up during weight transfer, and it goes
+down.
+
+---
+
+## Tuning the gains {.smaller}
+
+$k_p$ too low and the robot sinks. Too high and it fights itself. Find the window:
+
+```{python}
+for scale in (0.25, 0.5, 1.0, 2.0, 4.0):
+    x, z = walks(kp_scale=scale)
+    print(f"  kp = {500*scale:6.0f} -> travelled {x:+.3f} m, pelvis {z:.3f} m   "
+          f"{'FELL' if z < 0.5 else 'walked'}")
+```
+
+**Only the nominal gain walks.** Halve it and the legs collapse under the robot's
+weight; double it and the servos overpower the gait's timing and throw it over.
+
+---
+
+## The textbook fix that does not work {.smaller}
+
+Control theory says stiffness and damping should scale together — hold the
+damping ratio $\zeta = k_v / (2\sqrt{k_p\,m})$ constant by scaling $k_v$ with
+$\sqrt{k_p}$. Try it:
+
+```{python}
+for scale in (0.25, 0.5, 1.0, 2.0, 4.0):
+    x, z = walks(kp_scale=scale, kv_scale=np.sqrt(scale))
+    print(f"  kp = {500*scale:6.0f}, kv x{np.sqrt(scale):.2f} -> "
+          f"pelvis {z:.3f} m   {'FELL' if z < 0.5 else 'walked'}")
+```
+
+**Still only the nominal gain survives.** The theory is not wrong — it is about a
+single joint tracking a setpoint. Our failure is not one joint ringing; it is a
+*whole-body gait whose timing was tuned against this particular plant*. Change
+the plant and the trajectory no longer fits it.
+
+Remember that when a learned policy shrugs this off in Week 11.
+
+---
+
+## Rhythm without a model {.smaller}
+
+The Week 4 walker needed a balance model. Biology often seems not to: a **central
+pattern generator** in the spinal cord produces rhythmic stepping with no plan at
+all. Two anti-phase oscillators, driving hips and knees:
+
+```{python}
+cpg = soc4180.CPG(model, frequency=1.2, hip_amplitude=0.25, knee_amplitude=0.40)
+data = cpg.initial_data()
+frames = soc4180.render_rollout(
+    model, data, duration=8.0, fps=30, width=560, height=440,
+    ctrl_fn=cpg.ctrl_fn(), track="pelvis", distance=2.6, azimuth=135,
+)
+print(f"after 8 s: x={data.qpos[0]:+.3f} m, pelvis {data.qpos[2]:.3f} m")
+soc4180.show_video(frames, fps=30)
+```
+
+---
+
+## Rhythm is not balance {.smaller}
+
+It falls. So does every parameter setting we tried:
+
+| frequency | hip | knee | outcome |
+| --- | --- | --- | --- |
+| 0.8 Hz | 0.15 – 0.35 | 0.25 – 0.55 | fell (3 of 3) |
+| 1.2 Hz | 0.15 – 0.35 | 0.25 – 0.55 | fell (3 of 3) |
+| 1.6 Hz | 0.15 – 0.35 | 0.25 – 0.55 | fell (3 of 3) |
+
+The legs move in a perfectly good walking pattern. Nothing keeps the centre of
+mass over the support polygon, so the robot walks its legs and falls anyway.
+
+**This is the value of Week 4 stated negatively.** The LIPM was not decoration;
+it was the entire reason the robot stayed up.
+
+---
+
+## What biology actually does
+
+Real CPGs are not open loop. In an animal the rhythm is continuously **entrained
+by sensory feedback** — load on the leg, joint angle, skin contact — through
+reflex pathways that adjust the pattern step by step.
+
+An open-loop oscillator is a CPG with its spinal cord cut off from its body.
+
+That is precisely what we are missing, and it names the next two weeks:
+
+- **Week 6** — read the sensors: what can the robot actually know about itself?
+- **Weeks 8+** — let a policy learn the feedback rule instead of deriving it
+
+---
+
+## Where this leaves us {.smaller}
+
+| | LIPM walker (W4) | CPG (today) |
+| --- | --- | --- |
+| Model of balance | yes | none |
+| Walks | yes, ~1 m | no |
+| Sensors used | none | none |
+| Survives gain changes | no | no |
+| Lines of code | ~200 | ~20 |
+
+Both are **open loop**. Neither reads a single sensor. One works because a human
+did the balance reasoning in advance; the other does not work at all.
+
+Every remaining week of the course is about closing that loop.
+
+---
+
+## Exercises {.smaller}
+
+1. **Bisect the torque limit.** Narrow the walking threshold between 50 and
+   55 N·m to 1 N·m. Which joint saturates first, and during which gait phase?
+2. **Sag versus stiffness.** Plot mean sag against $k_p$ over the range that does
+   not fall. Is the relationship $1/k_p$ as a linear spring predicts?
+3. **Compensate it.** The sag is ~11 mm and roughly constant. Raise the commanded
+   pelvis height by that amount and re-measure. Does the tracking error vanish,
+   and does anything else get worse?
+4. **Damping alone.** Hold $k_p$ fixed and sweep $k_v$ over 0.25×–4×. Which
+   failure looks like ringing and which like sluggishness?
+5. **Give the CPG a reflex.** Increase knee amplitude on whichever leg carries
+   more load (read `data.actuator_force`). Does one feedback term save it?
+6. **Cost of transport.** Compute $\int |\tau \dot q|\,dt$ per metre for the
+   Week 4 walker. Keep the number — you will compare a learned policy against it.
+
+---
+
+## Next week
+
+**Week 6 — sensing and state estimation.** The robot has two IMUs and has not
+used them once. We read gyroscopes and accelerometers, estimate torso
+orientation from noisy signals, and build the observation vector a learned policy
+will eventually consume.

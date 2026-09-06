@@ -14,18 +14,56 @@ physical robot.
 **Week 0 is the day-one stack/vocabulary lecture, taught before Week 1.** Every
 week names which of its five layers it belongs to.
 
-| Week | Topic | Status |
-| --- | --- | --- |
-| 00 | The five-layer robot stack | built, Colab-verified |
-| 01 | MuJoCo, MJCF, driving the simulator | built, Colab-verified |
-| 02 | Transforms and forward kinematics | built, Colab-verified |
-| 03 | Inverse kinematics | built, Colab-verified |
-| 04 | Analytic walking (LIPM/ZMP) | built, Colab-verified |
-| 05–15 | Not written | designed only |
+## Syllabus (revised)
 
-Weeks 0–4 are the complete classical half: vocabulary, simulator, transforms, IK,
-walking robot, and **all five are confirmed working on Colab**. Week 5 (actuation, PD tuning, CPG gaits) follows from the servo
-sag visible in the week 4 data; week 6 (sensing) uses the G1's two IMUs.
+This replaces the older course description, which covered deep learning broadly
+(CNNs, RNNs, Transformers, diffusion, CLIP, agentic systems), computational
+neuroscience, MicroDuck and NVIDIA IsaacSim. **Those are deliberately out of
+scope.** MicroDuck went because there is no hardware; IsaacSim because it cannot
+run on Colab, which the zero-install requirement depends on. Generative and
+agentic content returns only where it attaches to the robot, in weeks 14–15.
+
+| Wk | Topic | Deck | Status |
+| --- | --- | --- | --- |
+| 1 | The five-layer robot stack; MuJoCo and MJCF | `w00`, `w01` | built, Colab-verified |
+| 2 | Transforms and forward kinematics | `w02` | built, Colab-verified |
+| 3 | Inverse kinematics | `w03` | built, Colab-verified |
+| 4 | Contact, balance, analytic walking (LIPM/ZMP) | `w04` | built, Colab-verified |
+| 5 | Actuation, PD control, and CPG gaits | `w05` | built; **Colab untested** |
+| 6 | Sensing, state estimation, observation design | — | not written |
+| 7 | From control to learning: MDPs and environment design | — | not written |
+| 8 | Policy gradients and PPO | — | not written |
+| 9 | Reward shaping and diagnosing failed runs | — | not written |
+| 10 | Scaling: GPU-parallel locomotion training | — | not written |
+| 11 | Domain randomization and robustness | — | not written |
+| 12 | Sim-to-real, measured | — | not written |
+| 13 | Perception and imitation | — | not written |
+| 14 | Vision-language-action: grounding instructions | — | **blocked** |
+| 15 | Agentic robotics: perception, reasoning, action | — | **blocked** |
+
+Capstone presentations occupy the final-exam slot. Weeks 0 and 1 share the first
+session — the stack lecture is short, the MuJoCo lab is hands-on.
+
+Weeks 1–4 are the complete classical half and all are confirmed on Colab.
+Week 5 is built but has only been run locally.
+
+**Week 5 facts, measured — do not restate them from memory.** The actuator law
+is `tau = kp*(ctrl - q) - kv*qdot`, verified exactly. `kp = 500` uniformly;
+`kv` spans 4.55–43.01. The walker sags 11 mm on average. The model has **no
+torque limit**; the gait needs > 50 N·m (falls at 50, walks at 55). Only the
+nominal gain walks, and scaling `kv` as sqrt(kp) does not help — the gait timing
+is tuned to this plant. All nine CPG settings fall: rhythm is not balance.
+
+**Weeks 14–15 are blocked on a trained locomotion policy.** Both labs issue
+velocity commands to a walking policy: week 14 grounds a natural-language
+instruction into that command via CLIP, week 15 wraps a planner around it. Build
+them only after reference checkpoints exist. Neither trains a VLA — students use
+a pretrained multimodal model as a grounding layer, since training one is far
+outside Colab-scale compute.
+
+Two merges made room for that module: state estimation folded into week 6's
+observation design (estimation is what supplies a policy's observations), and
+perception and imitation merged into week 13.
 
 ## Commands
 

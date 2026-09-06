@@ -249,14 +249,35 @@ replacements.
 
 ```{python}
 import jax
-soc4180.jax_compat.patch_jax()      # restores the two removed functions
+import jax.numpy as jnp
+import jax.core, jax.extend.core
+
+# Written out in full rather than called from soc4180, deliberately: this cell
+# repairs a broken environment, so it must not itself depend on a package
+# install having gone through. (The same code is in soc4180/jax_compat.py.)
+
+if not hasattr(jax.core, "get_opaque_trace_state"):        # flax wants this
+    jax.core.get_opaque_trace_state = jax.extend.core.get_opaque_trace_state
+    print("patched jax.core.get_opaque_trace_state")
+
+if not hasattr(jax, "device_put_replicated"):              # brax wants this
+    def device_put_replicated(x, devices):
+        stacked = jax.tree.map(lambda v: jnp.stack([jnp.asarray(v)] * len(devices)), x)
+        return jax.device_put(stacked, devices[0]) if len(devices) == 1 else stacked
+    jax.device_put_replicated = device_put_replicated
+    print("patched jax.device_put_replicated")
+
 print("jax", jax.__version__, "| devices:", jax.devices())   # want a CudaDevice
 ```
 
-`jax.core.get_opaque_trace_state` simply moved to `jax.extend.core`.
-`jax.device_put_replicated` stacked an array once per device, which is a few
-lines of `jnp.stack`. Read `soc4180/jax_compat.py` — it is short, and it is the
-kind of patch you will write repeatedly in this field.
+`get_opaque_trace_state` simply moved to `jax.extend.core`.
+`device_put_replicated` stacked an array once per device, which is a few lines of
+`jnp.stack`. Neither is deep magic, and this is the kind of patch you will write
+repeatedly in this field.
+
+Note it is written out here rather than imported from `soc4180`. A cell whose job
+is repairing a broken environment should not depend on a package install having
+succeeded — that just adds a second thing that can fail.
 
 **Pin versions in a course repo and bump them once a semester.** Half of these
 failures are simply the calendar moving.
@@ -275,8 +296,6 @@ from mujoco_playground import registry, wrapper
 from mujoco_playground.config import locomotion_params
 from brax.training.agents.ppo import train as ppo
 from brax.training.agents.ppo import networks as ppo_networks
-
-soc4180.jax_compat.patch_jax()          # must happen before brax/flax are used
 
 env_name = "BerkeleyHumanoidJoystickFlatTerrain"
 

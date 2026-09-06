@@ -32,8 +32,8 @@ agentic content returns only where it attaches to the robot, in weeks 14–15.
 | 5 | Actuation, PD control, and CPG gaits | `w05` | built, Colab-verified |
 | 6 | Sensing, state estimation, observation design | `w06` | built, Colab-verified |
 | 7 | From control to learning: MDPs and environment design | `w07` | built, Colab-verified |
-| 8 | Policy gradients and PPO | `w08` | built; **Colab untested** |
-| 9 | Reward shaping and diagnosing failed runs | — | not written |
+| 8 | Policy gradients and PPO | `w08` | built, Colab-verified |
+| 9 | Reward shaping and diagnosing failed runs | `w09` | built; **Colab untested** |
 | 10 | Scaling: GPU-parallel locomotion training | — | not written |
 | 11 | Domain randomization and robustness | — | not written |
 | 12 | Sim-to-real, measured | — | not written |
@@ -69,7 +69,19 @@ to ~180 and the same 30k run then scores 776 instead of 95.
 Even fixed, it only matches the standing baseline — it has learned not to fall,
 not to walk (which is worth 1250). 30k steps is 0.02% of a real run.
 
-Week 8 is the longest lab (~6 min); it trains four times.
+Week 8 is ~6 min; it trains four times.
+
+**Week 9 facts, measured.** The reward's *ranking* is correct — walking at target
+1250, slow walk 1023, standing 776, lunge-and-fall 51. But the planned six-way
+ablation **failed to discriminate**: every variant stood still for all 500 steps
+at 30k steps, because none of our five terms changes whether standing is
+attractive. The real G1 reward in MuJoCo Playground has **24 terms**, notably
+`feet_air_time=+2.0`, `stand_still=-1.0`, and `alive=0.0` with
+`termination=-100.0` (a per-step alive bonus is what makes standing profitable).
+Adding `stand_still` or `air_time` alone changes nothing; **both together** break
+the standing optimum — 224 steps, −0.524 m, feet lifted 0.08 — i.e. it falls over
+backwards. Shaping picks which optimum you land in; it does not buy the search.
+`G1WalkEnv` now takes `reward_weights`; see `DEFAULT_REWARD` in `envs.py`.
 
 **Week 7 facts, measured.** `G1WalkEnv` (in `envs.py`) passes gymnasium's
 `check_env`: 42 observations, 12 actions (legs only), residual actions about the

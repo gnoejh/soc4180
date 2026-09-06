@@ -23,7 +23,18 @@ from ._gl import GL_BACKEND  # noqa: F401  (sets MUJOCO_GL before mujoco loads)
 
 import mujoco
 
-__all__ = ["G1WalkEnv", "walker_actions"]
+__all__ = ["DEFAULT_REWARD", "G1WalkEnv", "walker_actions"]
+
+#: Reward term weights. Week 9 removes these one at a time.
+DEFAULT_REWARD = {
+    "tracking": 1.5,   # match the commanded forward velocity -- the actual goal
+    "upright": 0.5,    # shaping: stay vertical
+    "effort": -0.01,   # penalise large actions
+    "smooth": -0.05,   # penalise jerky changes between actions
+    "alive": 0.5,      # constant bonus per surviving step
+    "stand_still": 0.0,  # penalty for not moving when asked to (playground: -1.0)
+    "air_time": 0.0,     # reward for having a foot off the ground (playground: +2.0)
+}
 
 try:  # gymnasium lives in the `env` extra
     import gymnasium as gym
@@ -54,6 +65,7 @@ class G1WalkEnv(_BASE):
         episode_seconds: float = 10.0,
         min_height: float = 0.5,
         max_tilt: float = 0.7,
+        reward_weights: dict | None = None,
     ):
         if gym is None:
             raise ImportError(
@@ -76,6 +88,12 @@ class G1WalkEnv(_BASE):
             dtype=int,
         )
 
+        self.reward_weights = dict(DEFAULT_REWARD)
+        if reward_weights:
+            unknown = set(reward_weights) - set(DEFAULT_REWARD)
+            if unknown:
+                raise ValueError(f"unknown reward terms: {sorted(unknown)}")
+            self.reward_weights.update(reward_weights)
         self.target_velocity = target_velocity
         self.action_scale = action_scale
         self.min_height = min_height
@@ -147,24 +165,34 @@ class G1WalkEnv(_BASE):
 
     def _reward(self, action):
         forward = float(self.data.qvel[0])
-        tracking = np.exp(-((forward - self.target_velocity) ** 2) / 0.25)
-        upright = float(-gravity_z(self.data))
-        effort = float(np.sum(np.square(action)))
-        smooth = float(np.sum(np.square(action - self._prev_action)))
-
-        reward = (
-            1.5 * tracking
-            + 0.5 * upright
-            - 0.01 * effort
-            - 0.05 * smooth
-            + 0.5                       # alive bonus
-        )
-        return reward, {
-            "forward_velocity": forward,
-            "tracking": tracking,
-            "upright": upright,
-            "effort": effort,
+        terms = {
+            "tracking": np.exp(-((forward - self.target_velocity) ** 2) / 0.25),
+            "upright": float(-gravity_z(self.data)),
+            "effort": float(np.sum(np.square(action))),
+            "smooth": float(np.sum(np.square(action - self._prev_action))),
+            "alive": 1.0,
+            "stand_still": 1.0 if abs(forward) < 0.1 else 0.0,
+            "air_time": float(self._feet_airborne()),
         }
+        w = self.reward_weights
+        reward = float(sum(w[k] * v for k, v in terms.items()))
+        info = {"forward_velocity": forward, **terms}
+        return reward, info
+
+    def _feet_airborne(self) -> int:
+        """How many feet are clear of the ground right now (0, 1 or 2).
+
+        Rewarding this is how real locomotion rewards stop a policy from
+        settling into a shuffle: taking a step has to be worth something.
+        """
+        from .kinematics import foot_site_id
+
+        if not hasattr(self, "_foot_sites"):
+            self._foot_sites = [foot_site_id(self.model, s) for s in ("left", "right")]
+        return sum(
+            1 for sid in self._foot_sites
+            if self.data.site_xpos[sid][2] > 0.033 + 0.02
+        )
 
     def _fallen(self) -> bool:
         from .estimation import gravity_body

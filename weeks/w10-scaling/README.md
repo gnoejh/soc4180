@@ -113,11 +113,18 @@ This **reverses** earlier advice in this repo to leave Colab's JAX alone. That
 was right about `playground[all]` clobbering a working GPU build, and wrong
 about the build being usable: JAX 0.11 breaks brax and flax regardless.
 
+## Verified on Colab
+
+With the pin and auto-restart in place, the check cell prints
+`0.9.2 [CudaDevice(id=0)]` on a Colab A100. The dependency path is settled: the
+recipe installs, the restart takes effect, and JAX sees the GPU.
+
 ## Still not verified
 
-The GPU cell remains `eval: false`. Everything above is verified **on CPU**; no
-CUDA run has happened, because JAX has no Windows CUDA wheels. Track A needs one
-timed run on a Colab T4 to set `num_timesteps` for a 12–15 minute lab.
+**No Track A training run has completed.** The throughput numbers above are
+CPU-only, since JAX has no Windows CUDA wheels. One timed run on Colab is needed
+to set `num_timesteps` so the lab lands at 12–15 minutes — and note that an A100
+will be substantially faster than the T4 the current figure assumes.
 
 ## Rebuilding this week
 

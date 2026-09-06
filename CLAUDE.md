@@ -166,6 +166,7 @@ uv sync                                        # lean env: mujoco + rendering on
 uv sync --extra rl                             # + gymnasium, SB3, torch (CUDA on Windows)
 uv sync --extra gpu                            # + JAX/MJX/playground (Linux/WSL2)
 uv run python -c "import soc4180"              # smoke test
+uv run scripts/view.py --walk                  # interactive viewer (desktop only)
 quarto render weeks/w01-intro/slides.qmd       # -> slides.html + lab.ipynb
 ```
 

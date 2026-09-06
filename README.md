@@ -64,22 +64,19 @@ ctrl-drag to shove the robot around. Far more informative than a rendered video
 when a controller is misbehaving:
 
 ```bash
-uv run python -c "import soc4180; soc4180.launch_viewer()"          # the G1
-uv run python -m mujoco.viewer --mjcf="$(uv run python -c 'import soc4180; print(soc4180.robot_path())')"
+uv run scripts/view.py                    # the G1, standing
+uv run scripts/view.py --walk             # the week 4 walker, live
+uv run scripts/view.py --limp             # motors off; watch it collapse
+uv run scripts/view.py --robot robotis_op3 --keyframe home
+uv run scripts/view.py --list             # every humanoid available
 ```
 
-To watch your own controller live, use the non-blocking form:
+Double-click a body to select it, then **ctrl-drag to push the robot** — the
+quickest way to find out whether a controller survives a disturbance, and much
+more informative than a rendered video.
 
-```python
-import mujoco, soc4180
-ctrl = soc4180.WalkingController(soc4180.load_g1())
-data = ctrl.initial_data()
-with soc4180.launch_viewer(ctrl.model, data, passive=True) as viewer:
-    while viewer.is_running():
-        data.ctrl[:] = ctrl.control(data.time)
-        mujoco.mj_step(ctrl.model, data)
-        viewer.sync()
-```
+`soc4180.launch_viewer(model, data, passive=True)` is the underlying helper if
+you want to drive the loop yourself.
 
 **On Colab there is no interactive viewer** — a notebook has no window to draw
 into, which is why every lab renders video with `mediapy` instead. For an

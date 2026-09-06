@@ -256,22 +256,41 @@ import jax.core, jax.extend.core
 # repairs a broken environment, so it must not itself depend on a package
 # install having gone through. (The same code is in soc4180/jax_compat.py.)
 
-# Applied unconditionally. Whether these attributes "exist" depends on the JAX
-# version and on how its deprecation machinery is configured, so testing first
-# makes the behaviour environment-dependent for no benefit. Assigning is cheap
-# and idempotent.
+# Where this function lives varies between JAX builds -- the deprecation message
+# points at jax.extend.core, but it is not always there. Search, never assume,
+# and never let the repair cell itself raise.
 
-jax.core.get_opaque_trace_state = jax.extend.core.get_opaque_trace_state  # flax
+import importlib
 
-if not hasattr(jax, "device_put_replicated"):                             # brax
+def _find(name, modules):
+    for mod in modules:
+        try:
+            found = getattr(importlib.import_module(mod), name, None)
+        except Exception:
+            continue
+        if found is not None:
+            return found, mod
+    return None, None
+
+fn, where = _find("get_opaque_trace_state",
+                  ["jax.extend.core", "jax._src.core", "jax.core"])
+if fn is None:
+    print("get_opaque_trace_state: not found anywhere - flax may fail")
+else:
+    jax.core.get_opaque_trace_state = fn                      # flax looks here
+    print(f"get_opaque_trace_state: patched from {where}")
+
+if not hasattr(jax, "device_put_replicated"):                 # brax looks here
     def device_put_replicated(x, devices):
         stacked = jax.tree.map(lambda v: jnp.stack([jnp.asarray(v)] * len(devices)), x)
         return jax.device_put(stacked, devices[0]) if len(devices) == 1 else stacked
     jax.device_put_replicated = device_put_replicated
+    print("device_put_replicated : patched")
+else:
+    print("device_put_replicated : already present")
 
 print("jax", jax.__version__, "| devices:", jax.devices())   # want a CudaDevice
-print("get_opaque_trace_state:", callable(jax.core.get_opaque_trace_state))
-print("device_put_replicated :", callable(jax.device_put_replicated))
+
 ```
 
 `get_opaque_trace_state` simply moved to `jax.extend.core`.

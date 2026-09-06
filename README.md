@@ -17,6 +17,7 @@ Every lab runs in **Google Colab with zero installation**.
 | [03](weeks/w03-inverse-kinematics/) | Inverse kinematics | [![Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gnoejh/soc4180/blob/main/weeks/w03-inverse-kinematics/lab.ipynb) | GPU (render) |
 | [04](weeks/w04-walking/) | Making a humanoid walk — LIPM & ZMP | [![Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gnoejh/soc4180/blob/main/weeks/w04-walking/lab.ipynb) | GPU (render) |
 | [05](weeks/w05-actuation/) | Actuation, PD control, and rhythm | [![Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gnoejh/soc4180/blob/main/weeks/w05-actuation/lab.ipynb) | GPU (render) |
+| [06](weeks/w06-sensing/) | Sensing and state estimation | [![Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gnoejh/soc4180/blob/main/weeks/w06-sensing/lab.ipynb) | GPU (render) |
 
 Week 00 is the day-one lecture, taught before Week 01.
 
@@ -86,6 +87,7 @@ src/soc4180/     shared helpers, installed as a package
   kinematics.py  leg FK/IK (damped least squares)
   walking.py     LIPM, footstep planning, the analytic gait, CPG
   actuators.py   servo gains and torque limits
+  estimation.py  IMU reading, tilt, complementary filter
   seeding.py     reproducibility
   checkpoints.py pre-trained policy loading (the RL-week safety net)
 weeks/wNN-*/     slides.qmd (source) -> slides.html + lab.ipynb

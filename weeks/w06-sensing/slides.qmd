@@ -1,0 +1,336 @@
+---
+title: "Week 6 — Sensing and State Estimation"
+subtitle: "What the robot can actually know · SOC4180 Robot and AI"
+author: "Hong Jeong"
+format:
+  revealjs:
+    output-file: slides.html
+  ipynb:
+    output-file: lab.ipynb
+jupyter: python3
+---
+
+::: {.content-visible when-format="ipynb"}
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gnoejh/soc4180/blob/main/weeks/w06-sensing/lab.ipynb)
+
+**Before you start, two things:**
+
+1. **Runtime → Change runtime type → T4 GPU.** Not for training — MuJoCo renders
+   video through EGL on Colab, and that needs the GPU runtime.
+2. **File → Save a copy in Drive.** This notebook is opened from GitHub and is
+   *not* saved. Without a copy, your work disappears when you close the tab.
+:::
+
+## Six weeks, zero sensors
+
+Both controllers we have built are **open loop**. The LIPM walker follows a plan
+computed before it started moving. The CPG oscillates on a timer. Neither has
+ever looked at the robot.
+
+That is why the CPG fell every time, and why the LIPM walker drifts sideways with
+nothing to pull it back.
+
+Today the robot finds out about itself. This is the week that makes feedback
+possible — and the observation vector we build here is exactly what a learned
+policy will consume from Week 8 onward.
+
+---
+
+## The cheating we have been doing {.smaller}
+
+In simulation you can ask the robot anything:
+
+```{python}
+try:
+    import soc4180
+except ImportError:
+    %pip install -q "soc4180 @ git+https://github.com/gnoejh/soc4180.git"
+    import soc4180
+
+import numpy as np
+import mujoco
+
+model = soc4180.load_g1()
+data = soc4180.keyframe_data(model, "stand")
+mujoco.mj_forward(model, data)
+
+print(f"pelvis position in the world : {np.round(data.qpos[:3], 3)}")
+print(f"orientation quaternion       : {np.round(data.qpos[3:7], 3)}")
+```
+
+**A real robot knows neither of these.** There is no sensor for "where am I in
+the room" and none for absolute attitude. Everything in `qpos[:7]` is
+*privileged* information the simulator happens to have.
+
+Build a controller on it and it cannot leave the simulator.
+
+---
+
+## What the G1 actually has {.smaller}
+
+```{python}
+for i in range(model.nsensor):
+    name = mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_SENSOR, i)
+    kind = mujoco.mjtSensor(model.sensor_type[i]).name.replace("mjSENS_", "")
+    print(f"  {kind:14s} dim={model.sensor_dim[i]}  {name}")
+print(f"\n  total sensordata: {model.nsensordata} numbers")
+```
+
+**Two IMUs** — torso and pelvis — each a gyroscope plus an accelerometer.
+Twelve numbers per timestep, and that is the entire sensory world of this robot.
+
+No cameras. No joint torque sensors. No foot contact switches. Joint *encoders*
+are implicit: a real robot reads its own joint angles, which is why using
+`qpos[7:]` is fair while using `qpos[:7]` is not.
+
+---
+
+## What an accelerometer really measures {.smaller}
+
+Not acceleration. **Specific force** — the non-gravitational force per unit mass.
+A device sitting still on a table is being pushed *up* by the table:
+
+```{python}
+for _ in range(300):
+    mujoco.mj_step(model, data)
+gyro, accel = soc4180.read_imu(model, data, "torso")
+print(f"at rest  : accel = {np.round(accel, 3)}   |accel| = {np.linalg.norm(accel):.3f}")
+
+falling = soc4180.keyframe_data(model, "stand")
+falling.qpos[2] += 1.0                      # drop it
+mujoco.mj_forward(model, falling)
+mujoco.mj_step(model, falling)
+_, accel_ff = soc4180.read_imu(model, falling, "torso")
+print(f"in free fall: accel = {np.round(accel_ff, 3)}")
+```
+
+Standing still it reads **9.81 upward**. In free fall it reads **zero** — nothing
+is pushing it. That is the whole reason an accelerometer is a *tilt* sensor: at
+rest, the direction it reports is "down".
+
+---
+
+## Gravity is the only compass {.smaller}
+
+Rotate the body and gravity moves in the body's frame. That vector is the
+robot's attitude reference:
+
+```{python}
+print(f"gravity in the body frame (upright): {np.round(soc4180.gravity_body(data), 4)}")
+print(f"roll, pitch from the accelerometer : "
+      f"{np.round(np.degrees(soc4180.tilt_from_accel(accel)), 3)} deg")
+```
+
+Two things this gives you, and one it does not:
+
+- **roll and pitch** — recoverable, because gravity is not aligned with either
+- **yaw** — *not* recoverable. Spin about the vertical axis and gravity does not
+  move. A gyroscope drifts; a magnetometer is unreliable indoors near motors
+
+Locomotion policies therefore observe **gravity in the body frame** rather than
+absolute pose. It is the largest piece of attitude a real robot can honestly know.
+
+---
+
+## In simulation the sensors are perfect {.smaller}
+
+```{python}
+a = soc4180.keyframe_data(model, "stand")
+b = soc4180.keyframe_data(model, "stand")
+for _ in range(200):
+    mujoco.mj_step(model, a); mujoco.mj_step(model, b)
+print(f"two identical runs, identical sensordata: {np.array_equal(a.sensordata, b.sensordata)}")
+print(f"noise declared in the model: {np.unique(model.sensor_noise)}  (gyro, accel)")
+```
+
+The MJCF declares noise magnitudes, but this MuJoCo build applies none — readings
+are **exactly** deterministic.
+
+That is convenient and dishonest. A real gyroscope has a slowly wandering bias; a
+real accelerometer is noisy and lags. **We will inject those ourselves**, because
+an estimator tested on perfect sensors teaches nothing.
+
+---
+
+## Watch the assumption break {.smaller}
+
+Tilt-from-gravity assumes the accelerometer sees *only* gravity. Walk, and it
+does not:
+
+```{python}
+from soc4180.walking import WalkingController, GaitParams
+
+controller = WalkingController(model, GaitParams(n_steps=8))
+sim = controller.initial_data()
+
+log = []
+while sim.time < controller.total_time:
+    sim.ctrl[:] = controller.control(sim.time)
+    mujoco.mj_step(model, sim)
+    g, a = soc4180.read_imu(model, sim, "torso")
+    truth = soc4180.gravity_body(sim)
+    log.append([sim.time, *g, *a,
+                np.arctan2(-truth[1], -truth[2]),
+                np.arctan2(truth[0], np.hypot(truth[1], truth[2]))])
+
+log = np.array(log)
+walk = log[log[:, 0] > controller.params.settle_time]
+mag = np.linalg.norm(walk[:, 4:7], axis=1)
+print(f"|accel| during the walk : {mag.min():.2f} .. {mag.max():.2f} m/s^2")
+print(f"                          (it would be 9.81 if only gravity acted)")
+print(f"true roll  : {np.degrees(walk[:,7]).min():+.2f} .. {np.degrees(walk[:,7]).max():+.2f} deg")
+```
+
+The accelerometer swings from **3.4 to 19.3 m/s²**. Half of that is the robot,
+not the planet.
+
+---
+
+## Neither sensor is enough {.smaller}
+
+```{python}
+t = walk[:, 0]; gyro_w = walk[:, 1:4]; acc_w = walk[:, 4:7]; roll_true = walk[:, 7]
+dt = float(np.mean(np.diff(t)))
+
+acc_roll = np.arctan2(acc_w[:, 1], acc_w[:, 2])
+print(f"accelerometer only : mean err {np.degrees(np.abs(acc_roll-roll_true)).mean():5.2f} deg, "
+      f"worst {np.degrees(np.abs(acc_roll-roll_true)).max():5.2f} deg")
+
+def integrate(bias):
+    r = np.empty(len(t)); r[0] = roll_true[0]
+    for k in range(1, len(t)):
+        r[k] = r[k-1] + (gyro_w[k, 0] + bias) * dt
+    return r
+
+for bias in (0.0, 0.01):
+    r = integrate(bias)
+    print(f"gyroscope only, bias {bias:.3f} rad/s : final err "
+          f"{np.degrees(abs(r[-1]-roll_true[-1])):5.2f} deg")
+```
+
+**Complementary failure modes.** The accelerometer is wrong *now* but never gets
+worse. The gyroscope is right *now* but gets worse forever. A perfect gyro is
+near-exact — which is precisely why we injected a bias to see the real problem.
+
+---
+
+## Blend them {.smaller}
+
+Trust the gyroscope over short intervals; let gravity correct it slowly.
+
+$$\theta_k = \alpha\,(\theta_{k-1} + \omega_k \Delta t) \;+\; (1-\alpha)\,\theta_{\text{accel}}$$
+
+```{python}
+def run_filter(alpha, bias=0.01):
+    f = soc4180.ComplementaryFilter(dt=dt, alpha=alpha, roll=roll_true[0])
+    out = []
+    for k in range(len(t)):
+        g = gyro_w[k].copy(); g[0] += bias          # a realistically biased gyro
+        out.append(f.update(g, acc_w[k])[0])
+    return np.array(out)
+
+for alpha in (0.90, 0.98, 0.995, 1.0):
+    est = run_filter(alpha)
+    label = "1.0 (gyro only)" if alpha == 1.0 else f"{alpha}"
+    print(f"  alpha = {label:<16} mean err {np.degrees(np.abs(est-roll_true)).mean():5.2f} deg,"
+          f"  final err {np.degrees(abs(est[-1]-roll_true[-1])):5.2f} deg")
+```
+
+At $\alpha = 0.995$ the **final** error is 1.37 deg, against 2.85 deg for the
+drifting gyroscope and far worse for the accelerometer.
+
+Read the two columns carefully: $\alpha = 1.0$ has a marginally *lower mean*
+error but twice the final error. That gap is drift, and drift only grows --
+which is why mean error is the wrong way to judge an estimator you intend to
+run for an hour.
+
+---
+
+## Seeing it {.smaller}
+
+```{python}
+import matplotlib.pyplot as plt
+
+fig, ax = plt.subplots(figsize=(9, 3.4))
+ax.plot(t, np.degrees(roll_true), lw=2, color="0.2", label="true roll")
+ax.plot(t, np.degrees(acc_roll), lw=0.8, alpha=0.7, label="accelerometer only")
+ax.plot(t, np.degrees(integrate(0.01)), lw=1.0, ls="--", label="gyro only (biased)")
+ax.plot(t, np.degrees(run_filter(0.995)), lw=1.4, label="complementary, $\\alpha$=0.995")
+ax.set_xlabel("time (s)"); ax.set_ylabel("roll (deg)")
+ax.legend(fontsize=8, ncol=2); ax.grid(alpha=0.3)
+fig.tight_layout(); plt.show()
+```
+
+The dashed line walks away. The thin line is jagged. The filter is neither.
+
+---
+
+## Designing an observation {.smaller}
+
+This is the week's real product. What may a policy be given?
+
+| Quantity | Real robot? | Use it |
+| --- | --- | --- |
+| Joint angles `qpos[7:]` | encoders | **yes** |
+| Joint velocities `qvel[6:]` | differentiated encoders | **yes** |
+| Gravity in body frame | IMU + filter | **yes** |
+| Angular velocity | gyroscope | **yes** |
+| Previous action | it commanded it | **yes** |
+| Body height `qpos[2]` | no sensor | no |
+| World position `qpos[:2]` | no sensor | no |
+| Foot contact forces | not on this robot | no |
+
+```{python}
+obs = np.concatenate([
+    soc4180.gravity_body(sim),                       # 3
+    soc4180.read_imu(model, sim, "torso")[0],        # 3 angular velocity
+    sim.qpos[7:],                                    # 29 joint angles
+    sim.qvel[6:],                                    # 29 joint velocities
+])
+print(f"observation vector: {obs.shape[0]} numbers, every one measurable on hardware")
+```
+
+---
+
+## Privileged information {.smaller}
+
+Some quantities are unavailable at deployment but *known* during training — body
+height, contact forces, the terrain, the friction coefficient.
+
+Throwing them away entirely is wasteful. The standard trick, which you will meet
+again in Week 10:
+
+- the **policy** sees only what a real robot can measure
+- the **value function** may see everything, since it is discarded after training
+
+This is **asymmetric actor-critic**. The critic gets a clearer view of how good a
+state was; the actor stays deployable.
+
+The discipline starts today: *what does the robot know, and how does it know it?*
+
+---
+
+## Exercises {.smaller}
+
+1. **Noise, properly.** Add Gaussian noise to the accelerometer at the magnitude
+   the MJCF declares (0.01). How much does the accelerometer-only estimate
+   degrade, and how much does the filter?
+2. **Sweep $\alpha$.** Plot mean and final error against $\alpha$ from 0.9 to
+   1.0. Where is the optimum, and how sharp is it?
+3. **Latency.** Delay the IMU by 20 ms before filtering. Which estimator suffers
+   most, and does a different $\alpha$ compensate?
+4. **The second IMU.** The pelvis IMU has been ignored all lecture. Does
+   averaging both improve the estimate? Explain the result either way.
+5. **Yaw.** Try to estimate yaw from these sensors. Show where it fails, and say
+   what hardware would fix it.
+6. **Close the loop.** Feed the estimated roll back into the Week 4 walker as a
+   small lateral correction. Does it reduce the sideways drift?
+
+---
+
+## Next week
+
+**Week 7 — from control to learning.** We stop deriving controllers and start
+specifying *problems*: states, actions, rewards, and episodes. The observation
+vector built today becomes the input to a policy, and the walker you wrote by
+hand becomes the baseline it has to beat.

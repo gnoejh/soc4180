@@ -30,7 +30,7 @@ agentic content returns only where it attaches to the robot, in weeks 14–15.
 | 3 | Inverse kinematics | `w03` | built, Colab-verified |
 | 4 | Contact, balance, analytic walking (LIPM/ZMP) | `w04` | built, Colab-verified |
 | 5 | Actuation, PD control, and CPG gaits | `w05` | built, Colab-verified |
-| 6 | Sensing, state estimation, observation design | — | not written |
+| 6 | Sensing, state estimation, observation design | `w06` | built; **Colab untested** |
 | 7 | From control to learning: MDPs and environment design | — | not written |
 | 8 | Policy gradients and PPO | — | not written |
 | 9 | Reward shaping and diagnosing failed runs | — | not written |
@@ -44,7 +44,16 @@ agentic content returns only where it attaches to the robot, in weeks 14–15.
 Capstone presentations occupy the final-exam slot. Weeks 0 and 1 share the first
 session — the stack lecture is short, the MuJoCo lab is hands-on.
 
-Weeks 1–5 are built and **all are confirmed working on Colab**.
+Weeks 1–5 are built and confirmed on Colab; week 6 is built but only run locally.
+
+**Week 6 facts, measured.** The G1's whole sensory world is 12 numbers (two IMUs).
+Accelerometer reads 9.81 at rest and **zero in free fall** — it senses specific
+force. Sensors are exactly deterministic; the MJCF declares noise but this MuJoCo
+build applies none, so inject it by hand. During the week-4 walk `|accel|` spans
+3.36–19.34 m/s², so accel-only tilt errs 6.09° mean / 20.59° worst; a gyro with
+0.01 rad/s bias drifts to 2.85°; a complementary filter at alpha=0.995 gives
+1.46° mean / 1.37° final. Note alpha=1.0 has *lower mean* but double the final
+error — judge estimators on drift, not mean.
 
 **Week 5 facts, measured — do not restate them from memory.** The actuator law
 is `tau = kp*(ctrl - q) - kv*qdot`, verified exactly. `kp = 500` uniformly;

@@ -111,6 +111,20 @@ The GPU cell remains `eval: false`. Everything above is verified **on CPU**; no
 CUDA run has happened, because JAX has no Windows CUDA wheels. Track A needs one
 timed run on a Colab T4 to set `num_timesteps` for a 12–15 minute lab.
 
+## Rebuilding this week
+
+`mujoco_playground` must be present or the config cells fail, and a plain
+`uv run` re-syncs the environment and **drops the extras**. Sync explicitly
+first:
+
+```bash
+uv sync --extra rl --extra gpu --extra env
+quarto render weeks/w10-scaling/slides.qmd
+```
+
+The setup cell's auto-restart calls `os.kill(os.getpid(), 9)` **only when
+`soc4180.is_colab()`**, so rendering locally cannot kill its own kernel.
+
 ## Rebuild
 
 ```bash

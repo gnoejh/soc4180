@@ -68,15 +68,24 @@ if _installed("jax") != "0.9.2" or _installed("mujoco_playground") is None:
     now = _installed("jax")
     print("=" * 70)
     if now == "0.9.2":
-        print("  jax 0.9.2 is now installed ON DISK.")
-        print("  RESTART THE RUNTIME:  Runtime > Restart session")
-        print("  then run this notebook again from the top.")
-        print("  pip cannot replace a module Python has already imported,")
-        print("  so nothing changes for THIS session until you restart.")
+        print("  jax 0.9.2 installed. RESTARTING THE RUNTIME AUTOMATICALLY.")
+        print()
+        print("  Colab will say the session crashed. That is expected and fine:")
+        print("  pip cannot replace a module Python has already imported, so the")
+        print("  runtime has to be restarted before the new jax can be used.")
+        print()
+        print("  >>> When it comes back, just Run All again. <<<")
+        print("=" * 70)
+        if soc4180.is_colab():
+            import os
+            os.kill(os.getpid(), 9)      # the standard Colab restart idiom
+        else:
+            print("  (not on Colab: restart your kernel by hand)")
     else:
         print(f"  INSTALL FAILED - jax on disk is {now}, expected 0.9.2.")
-        print("  Read the pip output above for the conflict; do not restart yet.")
-    print("=" * 70)
+        print("  Read the pip output above for the conflict. Not restarting,")
+        print("  because a restart would not fix a failed install.")
+        print("=" * 70)
 else:
     print(f"jax {_installed('jax')} installed - restart already done, good")
 
@@ -316,9 +325,14 @@ about a hundred times slower than it should be.
 > The most expensive bug in this ecosystem is the one that does not raise.
 
 **And restart the runtime after installing.** `pip` rewrites files on disk; it
-cannot replace a module the interpreter has already imported. If the traceback
-still names JAX 0.11 after a successful install, you did not restart — the
-ipykernel process id in the traceback path is the giveaway.
+cannot replace a module the interpreter has already imported. If a traceback
+still names JAX 0.11 after a successful install, the runtime was not restarted —
+the unchanged `ipykernel_NNNN` id in the traceback path is the giveaway.
+
+The setup cell does this for you: on a successful install it calls
+`os.kill(os.getpid(), 9)`, which forces the restart. **Colab will report that the
+session crashed. That is the intended behaviour** — read the message printed just
+above it, then Run All again.
 
 Check, every time:
 

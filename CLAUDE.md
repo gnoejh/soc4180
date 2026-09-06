@@ -108,6 +108,13 @@ not a brax env, so training needs `wrap_env_fn=wrapper.wrap_for_brax_training`;
 `jax.device_put_replicated`, both removed in JAX 0.11** — and Colab ships 0.11,
 so it is broken out of the box.
 
+Week 10's setup cell **force-restarts the Colab runtime** with
+`os.kill(os.getpid(), 9)` after a successful install, gated on
+`soc4180.is_colab()` so a local render can never kill its own kernel. Colab
+reports "session crashed" — that is intended, and the printed message says so.
+Rendering week 10 needs `uv sync --extra rl --extra gpu --extra env` first; a
+plain `uv run` drops the extras and removes `mujoco_playground`.
+
 **The pin must be UNCONDITIONAL and followed by a runtime restart.** Gating it
 on `except ImportError: import mujoco_playground` silently skips it whenever
 playground is already installed; check `importlib.metadata.version("jax")`

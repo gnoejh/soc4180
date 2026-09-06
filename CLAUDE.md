@@ -34,7 +34,7 @@ agentic content returns only where it attaches to the robot, in weeks 14–15.
 | 7 | From control to learning: MDPs and environment design | `w07` | built, Colab-verified |
 | 8 | Policy gradients and PPO | `w08` | built, Colab-verified |
 | 9 | Reward shaping and diagnosing failed runs | `w09` | built, Colab-verified |
-| 10 | Scaling: GPU-parallel locomotion training | `w10` | built; GPU cell **unrun** |
+| 10 | Scaling: GPU-parallel locomotion training | `w10` | built; CPU parts verified, **GPU run untimed** |
 | 11 | Domain randomization and robustness | — | not written |
 | 12 | Sim-to-real, measured | — | not written |
 | 13 | Perception and imitation | — | not written |
@@ -83,100 +83,66 @@ the standing optimum — 224 steps, −0.524 m, feet lifted 0.08 — i.e. it fal
 backwards. Shaping picks which optimum you land in; it does not buy the search.
 `G1WalkEnv` now takes `reward_weights`; see `DEFAULT_REWARD` in `envs.py`.
 
-**Week 10 facts, measured locally (36-core Windows).** Single env 1308 control
-steps/s (13,083 physics steps/s), so 150M steps is ~32 hours. `DummyVecEnv` gives
-**no speedup** (1173/1240/1250 for 1/4/16 envs) because it steps sequentially —
-vectorised is not parallel. `SubprocVecEnv` does scale (1649/3205/5570 for 2/4/8)
-but is capped by core count, and a Colab CPU runtime has 2. Verified from the
-library: Berkeley Humanoid is 150M timesteps at 8192 parallel envs, Op3 100M;
-network policy (512,256,128) on `state`, value (512,256,128) on
-**`privileged_state`** — the week-6 asymmetric actor-critic in production.
+### Week 10 — scaling
 
-Week 10's setup cell must install **`playground` as well as `soc4180[rl]`** —
-the config-reading cells need `mujoco_playground` and it is not in the `rl`
-extra. Use plain `playground`, **never `playground[all]`**: the `[all]` extra
-pulls `jax[cuda12]` and would reinstall over Colab's preinstalled GPU JAX,
-silently dropping to CPU. Plain `playground` declares `jax` unpinned so pip
-leaves it alone.
+**Measured locally (36-core Windows).** Single env 1308 control steps/s (13,083
+physics steps/s), so 150M steps is ~32 hours. `DummyVecEnv` gives **no speedup**
+(1173/1240/1250 for 1/4/16 envs) — it steps sequentially, so vectorised is not
+parallel. `SubprocVecEnv` does scale (1649/3205/5570 for 2/4/8) but is capped by
+core count; a Colab CPU runtime has 2, against a tuned config asking for 8192.
 
-**Four verified failures in the playground GPU path**, all taught in the slides:
-(1) `mujoco_playground` is not in `soc4180[rl]`; (2) env configs default to
-`impl="warp"` needing separate `mujoco-warp`, so use
-`registry.load(name, config_overrides={"impl": "jax"})`; (3) a playground env is
-not a brax env, so training needs `wrap_env_fn=wrapper.wrap_for_brax_training`;
-(4) **flax calls `jax.core.get_opaque_trace_state` and brax calls
-`jax.device_put_replicated`, both removed in JAX 0.11** — and Colab ships 0.11,
-so it is broken out of the box.
+**Read from the library, not memory.** Berkeley Humanoid is 150M timesteps at
+8192 envs, Op3 100M. Network: policy (512,256,128) on `state`, value
+(512,256,128) on **`privileged_state`** — the week-6 asymmetric actor-critic in
+production.
 
-**Keep dependency setup in its own cell, with no imports in it.** Week 10's
-setup cell can restart the kernel; when imports shared that cell, the restart
-killed it before `from soc4180.envs import G1WalkEnv` ran and the *next* cell
-failed with a `NameError` that looks unrelated to the install.
+#### The GPU path: five failures, all hit for real
 
-Week 10's setup cell **force-restarts the Colab runtime** with
-`os.kill(os.getpid(), 9)` after a successful install, gated on
-`soc4180.is_colab()` so a local render can never kill its own kernel. Colab
-reports "session crashed" — that is intended, and the printed message says so.
-Rendering week 10 needs `uv sync --extra rl --extra gpu --extra env` first; a
-plain `uv run` drops the extras and removes `mujoco_playground`.
+1. `ModuleNotFoundError: mujoco_playground` — not in `soc4180[rl]`; install
+   `playground` separately.
+2. `AttributeError: type object 'int' has no attribute 'WARP'` — env configs
+   default to `impl="warp"` (MJWarp), needing the separate `mujoco-warp`
+   package. Use `registry.load(name, config_overrides={"impl": "jax"})`.
+3. `'State' object has no attribute 'pipeline_state'` — a playground env is not
+   a brax env. Training needs `wrap_env_fn=wrapper.wrap_for_brax_training`.
+4. **JAX 0.11 removed two APIs still called by flax
+   (`jax.core.get_opaque_trace_state`) and brax (`jax.device_put_replicated`).**
+   brax requires only `jax>=0.4.6`, no upper bound, so pip installs a broken
+   pair — and **Colab ships 0.11, so it is broken out of the box.**
+5. `NameError` in a later cell — caused by putting imports in the same cell as
+   the install, so the auto-restart killed it before they ran.
 
-**The pin must be UNCONDITIONAL and followed by a runtime restart.** Gating it
-on `except ImportError: import mujoco_playground` silently skips it whenever
-playground is already installed; check `importlib.metadata.version("jax")`
-instead. And pip cannot swap a module Python already imported — if a traceback
-still names JAX 0.11 after installing, the runtime was not restarted (the
-`ipykernel_NNNN` id in the traceback path is unchanged).
+#### The recipe
 
-**Verified recipe: `pip install "jax[cuda12]==0.9.2" playground`.** 0.9.2 is the
-newest JAX retaining both APIs; the full path was run end to end on CPU (130 s,
-6054 sps). Install **with** `[cuda12]` — bare `jax==0.9.2` is CPU-only, raises
-nothing, and is ~100x slower. This **reverses** the earlier note about leaving
-Colab's JAX alone: avoid `playground[all]`, but JAX itself must be pinned down.
+```bash
+pip install "jax[cuda12]==0.9.2" playground     # then RESTART the runtime
+```
 
-**The GPU training cell is `eval: false` and has NEVER completed a run.** JAX CUDA is
-Linux-only so it cannot be tested here; `playground` imports fine on CPU JAX,
-which is how the registry and configs are read. Run Track A once on a Colab T4
-and set `num_timesteps` so it lands at 12–15 min before teaching this week.
+`jax==0.9.2` is the newest release retaining both removed APIs (cp313 wheels
+exist, so it installs on Colab's Python 3.13). Verified end to end on CPU in a
+clean env: `registry.load`, `ppo.train`, a full tiny run at 6054 steps/s.
 
-**Week 7 facts, measured.** `G1WalkEnv` (in `envs.py`) passes gymnasium's
-`check_env`: 42 observations, 12 actions (legs only), residual actions about the
-week-4 crouch, 50 Hz control over 500 Hz physics. Baselines: hold-the-crouch
-returns 774 and survives; random falls in 0.5 s. **The week-4 analytic walker
-FAILS inside the env** — falls at 4.2 s having gone 0.24 m, with actions clipped
-on 35.7% of steps. It needs `action_scale = 1.0` *and* >= 100 Hz to survive
-(1.05 m, against 0.99 m at 500 Hz). Defaults stay at 0.3/50 Hz because that is
-what the locomotion literature trains with. Also: **return is not comparable
-across control rates** — 200 Hz scores ~5x purely from having more steps.
+Rules that took several rounds to learn — do not undo them:
 
-Week 7 needs the `env` extra (gymnasium only), which is deliberately lighter
-than `rl` (torch + SB3) so a Colab install stays small.
+- **Install with `[cuda12]`.** A bare `jax==0.9.2` is CPU-only, raises nothing,
+  and is ~100x slower. The most expensive bug here is the one that never throws.
+- **Pin unconditionally.** Gating the install on `except ImportError:
+  import mujoco_playground` skips it whenever playground already exists. Check
+  `importlib.metadata.version("jax")` instead.
+- **Restart after installing.** pip cannot replace an already-imported module.
+  An unchanged `ipykernel_NNNN` in a traceback path means no restart happened.
+  The setup cell now force-restarts via `os.kill(os.getpid(), 9)`, gated on
+  `soc4180.is_colab()` so a local render cannot kill its own kernel.
+- **Dependency setup gets its own cell, containing no imports.**
+- Avoid `playground[all]` — it pulls `jax[cuda12]` unpinned and would undo the
+  version pin.
 
-**Week 6 facts, measured.** The G1's whole sensory world is 12 numbers (two IMUs).
-Accelerometer reads 9.81 at rest and **zero in free fall** — it senses specific
-force. Sensors are exactly deterministic; the MJCF declares noise but this MuJoCo
-build applies none, so inject it by hand. During the week-4 walk `|accel|` spans
-3.36–19.34 m/s², so accel-only tilt errs 6.09° mean / 20.59° worst; a gyro with
-0.01 rad/s bias drifts to 2.85°; a complementary filter at alpha=0.995 gives
-1.46° mean / 1.37° final. Note alpha=1.0 has *lower mean* but double the final
-error — judge estimators on drift, not mean.
+Rendering this week needs `uv sync --extra rl --extra gpu --extra env` first; a
+plain `uv run` re-syncs and drops `mujoco_playground`.
 
-**Week 5 facts, measured — do not restate them from memory.** The actuator law
-is `tau = kp*(ctrl - q) - kv*qdot`, verified exactly. `kp = 500` uniformly;
-`kv` spans 4.55–43.01. The walker sags 11 mm on average. The model has **no
-torque limit**; the gait needs > 50 N·m (falls at 50, walks at 55). Only the
-nominal gain walks, and scaling `kv` as sqrt(kp) does not help — the gait timing
-is tuned to this plant. All nine CPG settings fall: rhythm is not balance.
-
-**Weeks 14–15 are blocked on a trained locomotion policy.** Both labs issue
-velocity commands to a walking policy: week 14 grounds a natural-language
-instruction into that command via CLIP, week 15 wraps a planner around it. Build
-them only after reference checkpoints exist. Neither trains a VLA — students use
-a pretrained multimodal model as a grounding layer, since training one is far
-outside Colab-scale compute.
-
-Two merges made room for that module: state estimation folded into week 6's
-observation design (estimation is what supplies a policy's observations), and
-perception and imitation merged into week 13.
+**The GPU training cell has still never completed a run here** — JAX has no
+Windows CUDA wheels, so everything above is CPU-verified only. Track A needs one
+timed run on Colab to set `num_timesteps` for a 12–15 minute lab.
 
 ## Commands
 

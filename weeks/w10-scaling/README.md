@@ -96,22 +96,21 @@ after a successful install, the runtime was not restarted — the `ipykernel_NNN
 process id in the traceback path is the tell, since it stays the same across
 re-runs.
 
-### The verified recipe
+### The fix: patch, do not pin
 
-```bash
-pip install -q "jax[cuda12]==0.9.2" playground
+```python
+soc4180.jax_compat.patch_jax()      # before brax or flax are used
 ```
 
-`jax==0.9.2` is the newest release retaining **both** removed APIs. Verified end
-to end in a clean environment: env load, `ppo.train`, and a complete tiny
-training run (130 s on CPU, 6054 steps/s).
+Restores both functions — `get_opaque_trace_state` simply moved to
+`jax.extend.core`, and `device_put_replicated` is a few lines of `jnp.stack`.
+**Verified: a full tiny training run completes on jax 0.11.1 with the shims.**
 
-Install with the **`[cuda12]` extra**. A bare `jax==0.9.2` is CPU-only, runs
-without error, and is roughly a hundred times slower — a bug that never raises.
-
-This **reverses** earlier advice in this repo to leave Colab's JAX alone. That
-was right about `playground[all]` clobbering a working GPU build, and wrong
-about the build being usable: JAX 0.11 breaks brax and flax regardless.
+An earlier version pinned `jax[cuda12]==0.9.2` instead. That works too, but on
+Colab it required a large download **and a forced runtime restart on every fresh
+session**, since Colab always starts on JAX 0.11 — so each lab opened with a
+"session crashed for an unknown reason". The patch leaves Colab's own
+GPU-enabled JAX untouched and needs no restart.
 
 ## Verified on Colab
 

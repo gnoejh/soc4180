@@ -7,6 +7,7 @@ machine, so labs behave the same locally and in Colab.
 # MUST be first: selects MUJOCO_GL before any submodule imports mujoco.
 from .actuators import gains, scale_gains, set_torque_limit, torque_limit
 from .estimation import ComplementaryFilter, gravity_body, read_imu, tilt_from_accel
+from . import jax_compat
 from ._gl import GL_BACKEND, gl_report, is_colab
 from .kinematics import fk_foot, ik_legs, leg_chain, leg_qpos_indices
 from .models import (
@@ -29,6 +30,7 @@ __version__ = "0.1.0"
 __all__ = [
     "ComplementaryFilter",
     "GL_BACKEND",
+    "jax_compat",
     "gravity_body",
     "read_imu",
     "tilt_from_accel",

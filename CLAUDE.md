@@ -112,39 +112,26 @@ production.
 5. `NameError` in a later cell — caused by putting imports in the same cell as
    the install, so the auto-restart killed it before they ran.
 
-#### The recipe
+#### The fix: patch, do not pin
 
-```bash
-pip install "jax[cuda12]==0.9.2" playground     # then RESTART the runtime
-```
+`soc4180.jax_compat.patch_jax()` restores both removed functions
+(`jax.core.get_opaque_trace_state` moved to `jax.extend.core`;
+`jax.device_put_replicated` is a few lines of `jnp.stack`). **Verified: training
+runs end to end on jax 0.11.1 with the shims.** Call it before brax/flax are used.
 
-`jax==0.9.2` is the newest release retaining both removed APIs (cp313 wheels
-exist, so it installs on Colab's Python 3.13). Verified end to end on CPU in a
-clean env: `registry.load`, `ppo.train`, a full tiny run at 6054 steps/s.
+This replaced an earlier `jax[cuda12]==0.9.2` pin. The pin also works, but on
+Colab it meant a large download *and* a forced runtime restart on **every fresh
+session** — Colab always starts on JAX 0.11 — so every lab began with a
+"session crashed for an unknown reason". Do not reintroduce it.
 
-Rules that took several rounds to learn — do not undo them:
-
-- **Install with `[cuda12]`.** A bare `jax==0.9.2` is CPU-only, raises nothing,
-  and is ~100x slower. The most expensive bug here is the one that never throws.
-- **Pin unconditionally.** Gating the install on `except ImportError:
-  import mujoco_playground` skips it whenever playground already exists. Check
-  `importlib.metadata.version("jax")` instead.
-- **Restart after installing.** pip cannot replace an already-imported module.
-  An unchanged `ipykernel_NNNN` in a traceback path means no restart happened.
-  The setup cell now force-restarts via `os.kill(os.getpid(), 9)`, gated on
-  `soc4180.is_colab()` so a local render cannot kill its own kernel. **Colab
-  discards a dying cell's output**, so flush stdout and sleep ~3 s before the
-  kill, and repeat the warning in a markdown cell above — otherwise the user
-  sees only "session crashed for an unknown reason" with no explanation.
-- **Dependency setup gets its own cell, containing no imports.**
-- Avoid `playground[all]` — it pulls `jax[cuda12]` unpinned and would undo the
-  version pin.
+Still required regardless: `impl="jax"` in `registry.load`,
+`wrap_env_fn=wrapper.wrap_for_brax_training`, `playground` installed separately
+(never `playground[all]`), and dependency setup in a cell containing no imports.
 
 Rendering this week needs `uv sync --extra rl --extra gpu --extra env` first; a
 plain `uv run` re-syncs and drops `mujoco_playground`.
 
-**Confirmed on Colab (A100):** the check cell prints `0.9.2 [CudaDevice(id=0)]`,
-so the pin installs, the restart takes effect, and JAX sees the GPU.
+**Confirmed on Colab (A100):** JAX sees a `CudaDevice`.
 
 **That is all it confirms.** It says nothing about `registry.load` or
 `ppo.train`; the training cell has produced no output on any machine. Do not

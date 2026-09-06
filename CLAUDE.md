@@ -140,13 +140,18 @@ Rules that took several rounds to learn — do not undo them:
 Rendering this week needs `uv sync --extra rl --extra gpu --extra env` first; a
 plain `uv run` re-syncs and drops `mujoco_playground`.
 
-**Confirmed on Colab (A100):** after the pin and the auto-restart, the check
-cell prints `0.9.2 [CudaDevice(id=0)]` — so the recipe works and JAX sees the
-GPU. The dependency path is settled.
+**Confirmed on Colab (A100):** the check cell prints `0.9.2 [CudaDevice(id=0)]`,
+so the pin installs, the restart takes effect, and JAX sees the GPU.
 
-**Still untimed:** no Track A run has completed, here or on Colab. JAX has no
-Windows CUDA wheels, so the training numbers above are CPU-only. One timed run
-on Colab is still needed to set `num_timesteps` for a 12–15 minute lab.
+**That is all it confirms.** It says nothing about `registry.load` or
+`ppo.train`; the training cell has produced no output on any machine. Do not
+report the dependency path as "working" on the strength of a version print —
+that mistake was made once already. **No Track A run has completed anywhere**,
+so `num_timesteps` remains an unmeasured guess.
+
+Ordering matters here: the verification cell must come **before** the training
+cell. It originally landed after it, because the troubleshooting slides sat
+after the "Running it" slide, so a Run All hit training first.
 
 ## Commands
 

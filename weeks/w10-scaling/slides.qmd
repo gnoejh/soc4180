@@ -242,53 +242,6 @@ what an IMU and joint encoders provide, so it remains deployable.
 
 ---
 
-## Running it {.smaller}
-
-This needs a **GPU runtime**, and it will not run on a Windows machine at all —
-JAX publishes CUDA wheels for Linux only.
-
-```{python}
-#| eval: false
-import functools
-from mujoco_playground import registry, wrapper
-from mujoco_playground.config import locomotion_params
-from brax.training.agents.ppo import train as ppo
-from brax.training.agents.ppo import networks as ppo_networks
-
-import jax
-assert jax.__version__ == "0.9.2", (
-    f"jax {jax.__version__} is loaded, but brax and flax need 0.9.2. "
-    "Install it and RESTART THE RUNTIME - pip cannot swap a loaded module."
-)
-print("jax", jax.__version__, "| devices:", jax.devices())   # want a CudaDevice
-
-env_name = "BerkeleyHumanoidJoystickFlatTerrain"
-
-# impl="jax" picks the MJX backend. The config default is "warp" (MJWarp), which
-# needs the separate `mujoco-warp` package; without it registry.load dies with
-#   AttributeError: type object 'int' has no attribute 'WARP'
-env = registry.load(env_name, config_overrides={"impl": "jax"})
-
-params = dict(locomotion_params.brax_ppo_config(env_name))
-net = params.pop("network_factory")
-params["network_factory"] = functools.partial(ppo_networks.make_ppo_networks, **net)
-params.update(num_timesteps=15_000_000,   # 10% of the tuned budget
-              num_envs=2048,              # a T4 has less memory than the target device
-              num_evals=5)
-
-make_inference, weights, metrics = ppo.train(
-    environment=env,
-    # a playground env is not a brax env; this adapts it
-    wrap_env_fn=wrapper.wrap_for_brax_training,
-    **params,
-)
-```
-
-`registry.load` clones its **own** copy of Menagerie on first call — about 40
-seconds, separate from the copy `soc4180` uses.
-
----
-
 ## Three things that will bite you {.smaller}
 
 Every one of these was hit while preparing this lab, and none is your code being
@@ -341,16 +294,63 @@ The setup cell does this for you: on a successful install it calls
 session crashed. That is the intended behaviour** — read the message printed just
 above it, then Run All again.
 
-Check, every time:
+Check before training, every time — the training cell below asserts this for
+you and stops with one sentence rather than a deprecation traceback:
 
 ```{python}
-#| eval: false
 import jax
 print(jax.__version__, jax.devices())     # want 0.9.2 and a CudaDevice
 ```
 
 **Pin versions in a course repo and bump them once a semester.** Half of these
 failures are simply the calendar moving.
+
+---
+
+## Running it {.smaller}
+
+This needs a **GPU runtime**, and it will not run on a Windows machine at all —
+JAX publishes CUDA wheels for Linux only.
+
+```{python}
+#| eval: false
+import functools
+from mujoco_playground import registry, wrapper
+from mujoco_playground.config import locomotion_params
+from brax.training.agents.ppo import train as ppo
+from brax.training.agents.ppo import networks as ppo_networks
+
+import jax
+assert jax.__version__ == "0.9.2", (
+    f"jax {jax.__version__} is loaded, but brax and flax need 0.9.2. "
+    "Install it and RESTART THE RUNTIME - pip cannot swap a loaded module."
+)
+print("jax", jax.__version__, "| devices:", jax.devices())   # want a CudaDevice
+
+env_name = "BerkeleyHumanoidJoystickFlatTerrain"
+
+# impl="jax" picks the MJX backend. The config default is "warp" (MJWarp), which
+# needs the separate `mujoco-warp` package; without it registry.load dies with
+#   AttributeError: type object 'int' has no attribute 'WARP'
+env = registry.load(env_name, config_overrides={"impl": "jax"})
+
+params = dict(locomotion_params.brax_ppo_config(env_name))
+net = params.pop("network_factory")
+params["network_factory"] = functools.partial(ppo_networks.make_ppo_networks, **net)
+params.update(num_timesteps=15_000_000,   # 10% of the tuned budget
+              num_envs=2048,              # a T4 has less memory than the target device
+              num_evals=5)
+
+make_inference, weights, metrics = ppo.train(
+    environment=env,
+    # a playground env is not a brax env; this adapts it
+    wrap_env_fn=wrapper.wrap_for_brax_training,
+    **params,
+)
+```
+
+`registry.load` clones its **own** copy of Menagerie on first call — about 40
+seconds, separate from the copy `soc4180` uses.
 
 ---
 

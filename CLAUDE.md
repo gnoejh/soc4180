@@ -132,7 +132,10 @@ Rules that took several rounds to learn — do not undo them:
 - **Restart after installing.** pip cannot replace an already-imported module.
   An unchanged `ipykernel_NNNN` in a traceback path means no restart happened.
   The setup cell now force-restarts via `os.kill(os.getpid(), 9)`, gated on
-  `soc4180.is_colab()` so a local render cannot kill its own kernel.
+  `soc4180.is_colab()` so a local render cannot kill its own kernel. **Colab
+  discards a dying cell's output**, so flush stdout and sleep ~3 s before the
+  kill, and repeat the warning in a markdown cell above — otherwise the user
+  sees only "session crashed for an unknown reason" with no explanation.
 - **Dependency setup gets its own cell, containing no imports.**
 - Avoid `playground[all]` — it pulls `jax[cuda12]` unpinned and would undo the
   version pin.

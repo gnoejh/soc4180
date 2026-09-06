@@ -38,6 +38,16 @@ it. Today we find out what that costs and how it is bought.
 
 ## Where the time goes {.smaller}
 
+::: {.callout-important}
+**The first cell will deliberately crash this session, once.**
+
+It installs a pinned JAX and then restarts the runtime, because pip cannot
+replace a module Python has already imported. Colab reports it as
+*"세션이 알 수 없는 이유로 다운되었습니다" / "session crashed for an unknown
+reason"*. **That is expected. Just Run All again** — the second time it skips the
+install and runs straight through.
+:::
+
 Not in the neural network. In the physics.
 
 ```{python}
@@ -77,7 +87,9 @@ if _installed("jax") != "0.9.2" or _installed("mujoco_playground") is None:
         print("  >>> When it comes back, just Run All again. <<<")
         print("=" * 70)
         if soc4180.is_colab():
-            import os
+            import os, sys, time as _t
+            sys.stdout.flush()           # or Colab loses this message entirely
+            _t.sleep(3)                  # give the frontend time to receive it
             os.kill(os.getpid(), 9)      # the standard Colab restart idiom
         else:
             print("  (not on Colab: restart your kernel by hand)")
@@ -290,9 +302,13 @@ still names JAX 0.11 after a successful install, the runtime was not restarted �
 the unchanged `ipykernel_NNNN` id in the traceback path is the giveaway.
 
 The setup cell does this for you: on a successful install it calls
-`os.kill(os.getpid(), 9)`, which forces the restart. **Colab will report that the
-session crashed. That is the intended behaviour** — read the message printed just
-above it, then Run All again.
+`os.kill(os.getpid(), 9)`, which forces the restart. **Colab reports it as a
+session crash for an unknown reason. That is the intended behaviour** — Run All
+again and the second pass skips the install entirely.
+
+Note that Colab may discard the cell's output when the kernel dies, so the
+explanation printed there can vanish. That is why the warning also appears as
+markdown at the top of the notebook, where nothing can erase it.
 
 Check before training, every time — the training cell below asserts this for
 you and stops with one sentence rather than a deprecation traceback:

@@ -25,7 +25,13 @@ By the end of this lab a student can:
 5. Predict `nq` and `nv` from the joint types in a file, and explain why `nq > nv`
    for a floating-base robot.
 6. **Write a working MJCF from scratch**, compile it, and drive it.
-7. Load a Menagerie robot, step the physics, and render video.
+7. Use the words **roll, pitch and yaw** correctly, and name the axis each one
+   turns about.
+8. Distinguish `model` (the constant blueprint) from `data` (one robot at one
+   instant), and say what `mj_step` advances.
+9. Read contact forces back out of a standing robot and check them against `mg`.
+10. Explain why a falling robot is deterministic on one machine and irreproducible
+    across two — and why convergence is therefore never graded.
 
 ## Expected output
 

@@ -43,15 +43,15 @@ agentic content returns only where it attaches to the robot, in weeks 14–15.
 
 Capstone presentations occupy the final-exam slot. Weeks 0 and 1 share the first
 session — the stack lecture is short, the MuJoCo lab is hands-on. **That session
-is now the longest of the course**: week 1 grew from 14 slides to 30 when MJCF
+is now the longest of the course**: week 1 grew from 14 slides to 38 when MJCF
 was taught properly, so plan to split it or set part of the MJCF read as
 preparation.
 
 **Current state.** Weeks 1–9 are built and confirmed working on Colab, except
-week 1's MJCF section, which is new: its 19 cells execute locally under
-`nbclient`, but it has not been rendered or run on Colab, because quarto is not
-installed on this machine. Week 10 is built and its GPU training path now runs
-on a Colab A100, after a long series of dependency failures documented below —
+week 1's new material (MJCF, conventions, the simulation loop): it renders
+cleanly here — 27 cells, 38 slides, `lab.ipynb` regenerated — but has **not been
+run on Colab**. Week 10 is built and its GPU training path now runs on a Colab
+A100, after a long series of dependency failures documented below —
 but **no run has been timed**, so `num_timesteps = 5M` is a reduction from a
 known-too-slow figure rather than a measured one. Weeks 11–15 are designed and
 unwritten; 14–15 additionally depend on a trained locomotion policy that does
@@ -388,22 +388,60 @@ The system Python defaults to **cp949**, not UTF-8. This bites constantly:
 not. `render.py` resolves this at import by pointing mediapy at the binary
 bundled with `imageio-ffmpeg`. Do not remove that fallback.
 
-### Quarto is not installed on this machine
+### Rendering locally: two flags that are not optional
 
-`where.exe quarto` finds nothing, and there is no install under `Program Files`
-or `%LOCALAPPDATA%\Programs`. Steps 4-5 of *Adding a week* therefore cannot run
-here, and **`lab.ipynb` cannot be regenerated locally**. Rendering happens on
-another machine, or through `.github/workflows/pages.yml`.
+Quarto is installed (winget `Posit.Quarto`, 1.10.18). Two things bite on this
+machine, both every time:
 
-Verify a week the equivalent way instead: pull every `{python}` cell out of the
-`.qmd`, run them in order through `nbclient`, and `compile()` the `eval: false`
-ones. That catches exactly what `execute.error: false` catches during a render.
-Week 1's 19 cells run in ~10 s that way.
+- **Do not invoke it as `& "C:\Program Files\Quarto\bin\quarto.cmd"`.** The
+  launcher mangles its own path at the space and dies with
+  `Module not found "file:///W:/soc4180GH/Files/Quarto/bin/tools/x86_64/deno.exe"`
+  — note it resolved `Files/Quarto` against the *working directory*. Put the bin
+  directory on `PATH` and call `quarto` bare.
+- **Set `QUARTO_PYTHON` to the project venv.** Quarto otherwise picks a system
+  Python with no `nbformat` and stops with *"There is an unactivated Python
+  environment in .venv. Did you forget to activate it?"*
 
-**The consequence to watch:** `lab.ipynb` is committed and is what the Colab badge
-serves, so a `slides.qmd` change does not reach students until someone with
-quarto re-renders and commits. Week 1's notebook is currently behind its slides
-for this reason.
+So, from PowerShell:
+
+```powershell
+$env:PATH = "C:\Program Files\Quarto\bin;$env:PATH"
+$env:QUARTO_PYTHON = "W:\soc4180GH\.venv\Scripts\python.exe"
+$env:PYTHONIOENCODING = 'utf-8'
+quarto render weeks/w01-intro/slides.qmd
+```
+
+**When quarto is unavailable** (another machine, or a broken install), verify a
+week the equivalent way: pull every `{python}` cell out of the `.qmd`, run them in
+order through `nbclient`, and `compile()` the `eval: false` ones. That catches
+what `execute.error: false` catches during a render — but it does **not** produce
+`lab.ipynb`, and a stale committed notebook is what students actually open.
+
+### Re-rendering a week is never a no-op in git
+
+- **Pandoc assigns fresh random cell ids on every render**, so `lab.ipynb` shows a
+  diff even when nothing changed. That is expected, not drift. To see whether
+  anything real moved, filter them out:
+
+  ```bash
+  git diff -- weeks/wNN-slug/lab.ipynb | grep "^[-+]" | grep -v '"id"'
+  ```
+
+- **Never leave `lab.ipynb` open in the VS Code notebook editor.** It re-serialises
+  the JSON on save — `id` moves above `metadata`, `name`/`output_type` swap — and
+  that is exactly where the unexplained churn in w00/w01/w04/w09 came from. After
+  a render the editor offers Save or Ignore: **Ignore, always.** Save writes the
+  editor's stale buffer over the notebook quarto just generated, silently
+  reverting a week for every student who opens the badge.
+
+- **Cost, measured re-rendering all four:** w00, w01 and w04 take seconds;
+  **w09 takes 746 s**, because it trains four 40k-step PPO runs on CPU.
+
+- **They reproduce bit-identically on this machine.** w04's walking numbers and
+  w09's entire ablation table came back unchanged — including `+ both` at 224
+  steps, −0.524 m, feet up 0.08 — with a fixed seed and `device="cpu"`. The only
+  thing that moved was the wall-clock seconds the w09 cell prints about itself.
+  So re-rendering is safe to do freely: **a changed number means a real change.**
 
 ### MUJOCO_GL ordering (this has already broken once)
 
@@ -530,6 +568,19 @@ Measured against the pinned G1, and used on slides:
   week-4 singularity, visible in week 1.
 - Geoms may be unnamed — the foot spheres are — but ids always exist.
 
+Week 1 also teaches the conventions and the simulation loop, all measured:
+
+- **roll/pitch/yaw are x/y/z**, and on the G1 the names are not decoration: every
+  one of the 29 named hinges has the axis its name claims — checked in a slide
+  cell, zero mismatches. `+z` up (gravity is `-z`), `+y` the robot's left (hips at
+  `y = ±0.064`), so `+x` is forward. Students arrive not knowing these words; the
+  deck defined joint names for nine weeks without ever defining *pitch*.
+- **Standing, `ncon = 8`** — the four foot spheres each side — and the normal
+  forces sum to **327.1 N against a weight of 327.1 N**. A free physics check that
+  needs no ground truth.
+- **~16,000 physics steps/s single-core here, about 32x real time.** The slide
+  measures it live rather than hardcoding it, so the number is the student's own.
+
 ### Week-1 demo facts, each learned by getting it wrong first
 
 - **A `<freejoint/>` cannot share a body with a hinge**: the compiler refuses with
@@ -539,6 +590,14 @@ Measured against the pinned G1, and used on slides:
   servo commanded to zero "succeeds" at any gain — a `kp` sweep from there proves
   nothing. The demo therefore commands a *bent* pose (`TARGET = [1.2, -0.8]`),
   which gravity fights; at `kp=200` the hip holds with −0.08 rad of droop.
+- **Test sensitivity along a direction that is not a symmetry.** Perturbing
+  `qpos[0]` (x) before a fall amplifies 1x, because translating along an infinite
+  flat floor is an exact symmetry — the run is the same trajectory, shifted. It
+  looks like proof that the fall is *not* chaotic, and it is not. Nudge a **joint
+  angle** instead: `1e-12` rad at the knee grows ~100,000x in 3 s, and `1e-6` rad
+  puts the robot in a different heap. Same-machine reruns are still bit-identical
+  (max diff exactly 0.0), which is why the rule is *assert direction and
+  magnitude, never a float from a fall*.
 - **A stiff servo plus a coarse timestep fails silently.** At `dt=0.02` with
   `kp=200`, MuJoCo raises `mjWARN_BADQACC` and **resets**, so `qpos` comes back
   `[0, 0]` — which reads as success. The same model run passively at `dt=0.02`

@@ -190,6 +190,91 @@ robot arm, and that difference drives everything about balance.
 
 ---
 
+## Which way is up? {.smaller}
+
+Before any joint name makes sense, you need the frame those names live in.
+
+```{python}
+print("gravity     :", model.opt.gravity)
+for side in ("left", "right"):
+    b = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, f"{side}_hip_pitch_link")
+    print(f"{side:5s} hip at:", model.body_pos[b])
+```
+
+- **`+z` is up** — gravity points along $-z$.
+- **`+y` is the robot's left** — the left hip sits at $y = +0.064$ m, the right at
+  $y = -0.064$ m.
+- **`+x` is forward.** You do not have to take that on faith: the frame is
+  right-handed, and $x = y \times z$, so left-cross-up gives forward.
+
+Lengths are **metres** and angles are **radians** — `<compiler angle="radian"/>`
+said so. The `1.28` you saw in the `stand` keyframe is an elbow bent 73°.
+
+---
+
+## Roll, pitch, and yaw {.smaller}
+
+Three words for turning about the three axes. Try them with your own head:
+
+| Name | Turns about | Your head | The robot |
+| --- | --- | --- | --- |
+| **roll** | `x` — forward | tilt an ear toward your shoulder | tipping sideways |
+| **pitch** | `y` — left | nod "yes" | leaning forward or back |
+| **yaw** | `z` — up | shake "no" | turning to face a new direction |
+
+The G1's joint names are not decoration — each one *is* its axis:
+
+```{python}
+for n in ["left_hip_pitch_joint", "left_hip_roll_joint", "left_hip_yaw_joint",
+          "left_knee_joint", "left_ankle_pitch_joint", "left_ankle_roll_joint"]:
+    j = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, n)
+    print(f"{n:24s} axis {model.jnt_axis[j]}")
+```
+
+Check it across the whole robot — every named hinge agrees with its axis:
+
+```{python}
+axis_name = {(1, 0, 0): "roll", (0, 1, 0): "pitch", (0, 0, 1): "yaw"}
+mismatch = []
+for j in range(model.njnt):
+    n = mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_JOINT, j)
+    if not n or model.jnt_type[j] != mujoco.mjtJoint.mjJNT_HINGE:
+        continue
+    got = axis_name.get(tuple(int(round(v)) for v in model.jnt_axis[j]))
+    for word in ("roll", "pitch", "yaw"):
+        if word in n and got != word:
+            mismatch.append((n, got))
+print("joints whose name disagrees with their axis:", mismatch or "none")
+```
+
+---
+
+## Why a hip needs three and a knee needs one {.smaller}
+
+The hip is **three separate joints stacked** — `hip_pitch`, `hip_roll`,
+`hip_yaw` — because a leg must do three independent things:
+
+- **pitch** — swing forward to take a step
+- **roll** — spread sideways, and shift weight onto one foot
+- **yaw** — turn the leg so the robot can change direction
+
+The knee has only **pitch**: `left_knee_joint` has axis `[0 1 0]`, and its range
+is `[-0.087, 2.880]` — it bends one way and essentially does not straighten past
+zero. Yours is the same. That single-axis, one-sided knee is why week 3's inverse
+kinematics has a reachable set with a *hole* in the middle.
+
+Three notes you will need later:
+
+- Two of these are easy to sense and one is not. An accelerometer feels gravity,
+  so it can tell you **roll and pitch** — but gravity says nothing about which
+  way you are *facing*, so **yaw is unobservable** from it. Week 6.
+- Rotations do not commute: roll-then-pitch is not pitch-then-roll. This is why
+  week 2 uses matrices and quaternions rather than three angles.
+- The floating base stores its orientation as the quaternion `(w, x, y, z)` —
+  **scalar first**, which is MuJoCo's convention and not everyone's.
+
+---
+
 ## Naming the joints {.smaller}
 
 ```{python}
@@ -549,6 +634,87 @@ wins a little. That residue is where week 5 begins.
 
 ---
 
+## `model` is the robot; `data` is the moment {.smaller}
+
+You have been using both since the third cell. They are not the same kind of
+thing, and confusing them is the most common MuJoCo mistake.
+
+```{python}
+print("model  — compiled from the XML, and constant while you simulate")
+print(f"   nq={model.nq}  nv={model.nv}  nu={model.nu}   body_pos, jnt_range, actuator_gainprm ...")
+
+d = mujoco.MjData(model)
+print("\ndata   — everything that changes")
+print(f"   qpos {d.qpos.shape}   joint positions")
+print(f"   qvel {d.qvel.shape}   joint velocities")
+print(f"   ctrl {d.ctrl.shape}   what you command")
+print(f"   xpos {d.xpos.shape}  where every body ended up, in world coordinates")
+print(f"   time {d.time}")
+```
+
+`model` is the blueprint; `data` is one robot, at one instant, in one universe.
+
+**One `model` can serve many `data`.** That is not a curiosity — it is how week 10
+runs thousands of robots at once on a GPU: one description, thousands of moments.
+
+---
+
+## One step of physics {.smaller}
+
+```{python}
+d = soc4180.keyframe_data(model, "stand")
+print(f"before  t={d.time:.3f}s  pelvis z={d.qpos[2]:.6f}  max |qvel|={np.abs(d.qvel).max():.4f}")
+
+mujoco.mj_step(model, d)
+
+print(f"after   t={d.time:.3f}s  pelvis z={d.qpos[2]:.6f}  max |qvel|={np.abs(d.qvel).max():.4f}")
+print(f"\none step advanced time by exactly opt.timestep = {model.opt.timestep} s")
+```
+
+That is the whole simulation. Everything else in this course is a decision about
+what to write into `data.ctrl` before each step:
+
+```python
+while not done:
+    data.ctrl[:] = my_controller(data)   # weeks 2-6: maths.  weeks 7-10: a policy.
+    mujoco.mj_step(model, data)
+```
+
+`mj_step` advances time. Its cousin **`mj_forward`** computes positions from
+`qpos` *without* advancing time — that is what draws a pose without letting the
+robot fall over, and why `render_poses` exists for the kinematics weeks.
+
+---
+
+## Faster than real time {.smaller}
+
+The whole argument for simulation is on this slide.
+
+```{python}
+import time
+
+d = soc4180.keyframe_data(model, "stand")
+N = 5000
+t0 = time.perf_counter()
+for _ in range(N):
+    mujoco.mj_step(model, d)
+elapsed = time.perf_counter() - t0
+
+sim_seconds = N * model.opt.timestep
+print(f"{N} steps in {elapsed:.2f} s of your life")
+print(f"  = {N/elapsed:,.0f} physics steps per second")
+print(f"  = {sim_seconds:.1f} s of robot time in {elapsed:.2f} s  ->  {sim_seconds/elapsed:.0f}x real time")
+```
+
+A 29-joint humanoid, tens of times faster than reality, on one core of whatever
+machine you happen to be on. A real G1 falls over in real time, once, and then
+needs repairing.
+
+Hold on to your number. In week 10 you will want **150 million** steps, and this
+is the figure that decides whether that takes an afternoon or a month.
+
+---
+
 ## Watching it fall {.smaller}
 
 Back to the G1, and do to it exactly what you just did to your own leg. We start
@@ -582,6 +748,76 @@ Weeks 2–6 answer it with mathematics. Weeks 8–14 answer it with learning.
 
 ---
 
+## The numbers behind the video {.smaller}
+
+Contacts are not declared anywhere in the MJCF. MuJoCo *finds* them, every step,
+and you can read them.
+
+```{python}
+d = soc4180.keyframe_data(model, "stand")     # servos on: the robot just stands
+for _ in range(1000):
+    mujoco.mj_step(model, d)
+
+force = np.zeros(6)
+total = 0.0
+for i in range(d.ncon):
+    mujoco.mj_contactForce(model, d, i, force)
+    total += force[0]                          # normal component
+
+print(f"contacts        : {d.ncon}")
+print(f"sum of normals  : {total:.1f} N")
+print(f"weight (m*g)    : {model.body_mass.sum() * 9.81:.1f} N")
+```
+
+**Eight contacts** — the four spheres under each foot, exactly the geoms you
+found in the XML. And the ground pushes up with precisely the robot's weight,
+because a standing robot is not accelerating. That is Newton's third law falling
+out of the simulator, and it is the first thing to check when a robot misbehaves.
+
+Week 4 lives entirely inside this number: to walk, you must move where those
+contact forces act.
+
+---
+
+## Run it twice {.smaller}
+
+```{python}
+knee = model.jnt_qposadr[mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, "left_knee_joint")]
+
+def fall(nudge=0.0, steps=1500):
+    d = soc4180.keyframe_data(model, "stand")
+    d.qpos[knee] += nudge
+    with soc4180.actuation_disabled(model):
+        for _ in range(steps):
+            mujoco.mj_step(model, d)
+    return d.qpos.copy()
+
+base = fall()
+print(f"same run, twice        : max difference {np.abs(base - fall()).max():.1e}")
+for nudge in (1e-12, 1e-9, 1e-6):
+    diff = np.abs(base - fall(nudge)).max()
+    print(f"knee nudged {nudge:.0e} rad : max difference {diff:.1e}   ({diff/nudge:,.0f}x bigger)")
+```
+
+Two facts, and they only *look* contradictory:
+
+- **On one machine, the simulator is exactly deterministic** — the difference is
+  a hard zero, not "small". Same input, same arithmetic, same answer.
+- **A falling robot amplifies everything.** A knee nudge of $10^{-12}$ rad moves
+  the foot about $3 \times 10^{-13}$ m — a fraction of an atom's width — and it
+  grows five orders of magnitude in three seconds. At $10^{-6}$ rad the robot
+  lands somewhere else entirely.
+
+So the same code on a different machine gives a *different* fall — not through
+randomness, but because the arithmetic is reordered. Ours settles at 0.134 m
+here and 0.142 m on a Colab T4.
+
+**Therefore, all semester: never assert an exact number from a fall, and never
+grade one.** Assert direction and size — "dropped more than 0.5 m", "stayed above
+0.7 m". A stable robot reproduces exactly; a falling one never will.
+
+---
+
 ## Exercises: the G1 {.smaller}
 
 1. Re-run the fall with `duration=6.0`. Where does the robot come to rest?
@@ -596,27 +832,39 @@ Weeks 2–6 answer it with mathematics. Weeks 8–14 answer it with learning.
    actually goes?
 6. The `foot` class sets `friction="0.6"`. Find it in `model.geom_friction`, then
    explain why only the *foot* spheres needed it and the elbow did not.
+7. Set `left_hip_roll_joint` to 0.4 rad in `data.qpos`, run `mj_forward`, and
+   render the pose. Which way did the leg go? Now do the same with
+   `left_hip_yaw_joint`. Name each motion before you look.
+8. Make two `MjData` from the one `model`. Step one 500 times and leave the other
+   alone. Confirm `model` is unchanged and the two `data` disagree — this is the
+   week-10 trick in miniature.
+9. From your measured steps-per-second, work out how long week 10's **150 million**
+   steps would take on this machine, in hours. Then read the week-10 title again.
+10. Watch `data.ncon` during the fall — print it every 100 steps. When does it
+    exceed 8, and which body has just hit the floor?
+11. Re-run *Run it twice* with a **6 s** fall instead of 3 s. Does the
+    amplification grow? Should it?
 
 ---
 
 ## Exercises: your own MJCF {.smaller}
 
-7. Add `<freejoint/>` to `upper_leg` and re-compile. It refuses: *"more than 6
-   dofs in body 'upper_leg'"*. A free joint **is** a body's entire freedom, so it
-   cannot share a body with a hinge. Fix it by wrapping the leg in a parent body
-   that carries the `<freejoint/>`, predict `nq` and `nv`, then re-render. What
-   can the leg do now that it could not?
-8. Sweep the servo gain — `kp` = 200, 100, 50, 20, 5 — and record the hip's droop
-   from `TARGET`. Plot droop against `kp`. Does the error ever reach zero, and
-   what would you have to add to the controller to make it?
-9. Change `<option timestep="0.002"/>` to `0.02`. Re-run the **passive** swing:
-   nothing crashes, nothing warns, and the final angles are simply different. Now
-   re-run it **with the servos on** and inspect `data_leg.warning`. One of those
-   two results is a silent approximation and the other is a silent failure —
-   which is which, and which would have fooled you?
-10. Add a third body, a foot, below `lower_leg`, with its own hinge. Confirm `nq`
+12. Add `<freejoint/>` to `upper_leg` and re-compile. It refuses: *"more than 6
+    dofs in body 'upper_leg'"*. A free joint **is** a body's entire freedom, so it
+    cannot share a body with a hinge. Fix it by wrapping the leg in a parent body
+    that carries the `<freejoint/>`, predict `nq` and `nv`, then re-render. What
+    can the leg do now that it could not?
+13. Sweep the servo gain — `kp` = 200, 100, 50, 20, 5 — and record the hip's droop
+    from `TARGET`. Plot droop against `kp`. Does the error ever reach zero, and
+    what would you have to add to the controller to make it?
+14. Change `<option timestep="0.002"/>` to `0.02`. Re-run the **passive** swing:
+    nothing crashes, nothing warns, and the final angles are simply different. Now
+    re-run it **with the servos on** and inspect `data_leg.warning`. One of those
+    two results is a silent approximation and the other is a silent failure —
+    which is which, and which would have fooled you?
+15. Add a third body, a foot, below `lower_leg`, with its own hinge. Confirm `nq`
     rose by one and that the foot moves when the knee does.
-11. Replace the repeated `rgba` on the two capsules with a `<default>` class.
+16. Replace the repeated `rgba` on the two capsules with a `<default>` class.
     Confirm the render is unchanged — this is the same mechanism that hides
     `kp=500` in the G1.
 

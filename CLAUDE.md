@@ -25,7 +25,7 @@ agentic content returns only where it attaches to the robot, in weeks 14–15.
 
 | Wk | Topic | Deck | Status |
 | --- | --- | --- | --- |
-| 1 | The five-layer robot stack; MuJoCo and MJCF | `w00`, `w01` | built, Colab-verified |
+| 1 | The five-layer robot stack; MuJoCo and MJCF | `w00`, `w01` | built; w01's MJCF section **not yet Colab-tested** |
 | 2 | Transforms and forward kinematics | `w02` | built, Colab-verified |
 | 3 | Inverse kinematics | `w03` | built, Colab-verified |
 | 4 | Contact, balance, analytic walking (LIPM/ZMP) | `w04` | built, Colab-verified |
@@ -42,14 +42,20 @@ agentic content returns only where it attaches to the robot, in weeks 14–15.
 | 15 | Agentic robotics: perception, reasoning, action | — | **blocked** |
 
 Capstone presentations occupy the final-exam slot. Weeks 0 and 1 share the first
-session — the stack lecture is short, the MuJoCo lab is hands-on.
+session — the stack lecture is short, the MuJoCo lab is hands-on. **That session
+is now the longest of the course**: week 1 grew from 14 slides to 30 when MJCF
+was taught properly, so plan to split it or set part of the MJCF read as
+preparation.
 
-**Current state.** Weeks 1–9 are built and confirmed working on Colab. Week 10
-is built and its GPU training path now runs on a Colab A100, after a long series
-of dependency failures documented below — but **no run has been timed**, so
-`num_timesteps = 5M` is a reduction from a known-too-slow figure rather than a
-measured one. Weeks 11–15 are designed and unwritten; 14–15 additionally depend
-on a trained locomotion policy that does not yet exist.
+**Current state.** Weeks 1–9 are built and confirmed working on Colab, except
+week 1's MJCF section, which is new: its 19 cells execute locally under
+`nbclient`, but it has not been rendered or run on Colab, because quarto is not
+installed on this machine. Week 10 is built and its GPU training path now runs
+on a Colab A100, after a long series of dependency failures documented below —
+but **no run has been timed**, so `num_timesteps = 5M` is a reduction from a
+known-too-slow figure rather than a measured one. Weeks 11–15 are designed and
+unwritten; 14–15 additionally depend on a trained locomotion policy that does
+not yet exist.
 
 **Week 8 facts, measured.** REINFORCE from scratch on CartPole: 60 -> 489 in
 173 s, using a **batch of 8 episodes per update** — with one episode per update
@@ -321,7 +327,10 @@ notebooks; it would commit executed outputs over the generated file.
   cell. No post-render cell injector is needed.
 - The Week-1 setup cell uses `try: import soc4180 / except ImportError: %pip install`
   rather than a bare `!pip install`, so the notebook is safe to run locally *and*
-  installs on Colab. Keep that shape.
+  installs on Colab. Keep that shape. This is the one place it outranks *Install
+  unconditionally, before the first import* below: week 1 must stay renderable
+  without reaching GitHub, so **week 1 slides may not depend on new package
+  code** — see *MJCF (week 1)*.
 - **Video survives into `slides.html` (embedded base64) but is stripped from
   `lab.ipynb`.** Students still see it when they *run* the notebook, which is the
   actual Colab workflow. This is accepted, not a bug to chase.
@@ -378,6 +387,23 @@ The system Python defaults to **cp949**, not UTF-8. This bites constantly:
 `mediapy` shells out to a **system** ffmpeg, which Colab has and Windows does
 not. `render.py` resolves this at import by pointing mediapy at the binary
 bundled with `imageio-ffmpeg`. Do not remove that fallback.
+
+### Quarto is not installed on this machine
+
+`where.exe quarto` finds nothing, and there is no install under `Program Files`
+or `%LOCALAPPDATA%\Programs`. Steps 4-5 of *Adding a week* therefore cannot run
+here, and **`lab.ipynb` cannot be regenerated locally**. Rendering happens on
+another machine, or through `.github/workflows/pages.yml`.
+
+Verify a week the equivalent way instead: pull every `{python}` cell out of the
+`.qmd`, run them in order through `nbclient`, and `compile()` the `eval: false`
+ones. That catches exactly what `execute.error: false` catches during a render.
+Week 1's 19 cells run in ~10 s that way.
+
+**The consequence to watch:** `lab.ipynb` is committed and is what the Colab badge
+serves, so a `slides.qmd` change does not reach students until someone with
+quarto re-renders and commits. Week 1's notebook is currently behind its slides
+for this reason.
 
 ### MUJOCO_GL ordering (this has already broken once)
 
@@ -469,6 +495,55 @@ pins its own upstream commit) — not a git clone. Use `soc4180.load_g1()` /
 - 11 humanoids available; Cassie is categorised `biped`, not `humanoid`.
 - Known upstream gotcha: `assets()` raises for `robotis_op3` (duplicate mesh
   basenames). Use `load()`/`path()` instead.
+
+## MJCF (week 1)
+
+Week 1 reads the G1's real MJCF section by section and then has students write a
+working one. Week 0 teaches the same robot from the *compiled* side
+(`model.nbody`, `actuator_gainprm`) and shows no XML at all; the two are
+deliberately complementary, so do not move material between them without
+preserving that split.
+
+**The `mjcf()` section-printer lives in the slide, not in the package.** That
+breaks the usual "reusable code goes in `src/soc4180/`" rule, on purpose: moving
+it into the package would force week 1's setup cell to the unconditional-upgrade
+form, and a local `quarto render` would then install the *committed* package from
+GitHub — which would not yet contain the new module. Week 1 keeps the
+`try: import soc4180 / except ImportError` shape for exactly this reason. If a
+later week needs the helper, promote it and switch week 1's cell in the same
+commit.
+
+Measured against the pinned G1, and used on slides:
+
+- `<option>` sets only `integrator="implicitfast"`. **`timestep = 0.002` and
+  gravity are MuJoCo's defaults, not the file's** — an MJCF is a diff against a
+  default robot.
+- `kp="500"` appears nowhere near the 29 `<position>` actuators; it lives in
+  `<default class="g1">`, inherited via `childclass="g1"` on the pelvis.
+  `inheritrange="1"` is why `actuator_ctrlrange == jnt_range`.
+- 72 geoms: 1 floor, **35 in group 2** (`contype=0 conaffinity=0`, invisible to
+  physics) and **36 in group 3** (what actually collides). Each foot touches
+  ground through **four spheres of 5 mm radius**, and `friction="0.6"` is on
+  exactly those 8 geoms; everything else is at MuJoCo's default 1.0.
+- The `stand` keyframe's 36 numbers are 3 position + 4 quaternion + 29 joints.
+  Only the arms are bent; **every leg joint is exactly zero**, which is the
+  week-4 singularity, visible in week 1.
+- Geoms may be unnamed — the foot spheres are — but ids always exist.
+
+### Week-1 demo facts, each learned by getting it wrong first
+
+- **A `<freejoint/>` cannot share a body with a hinge**: the compiler refuses with
+  *"more than 6 dofs in body"*. The fix is a parent body carrying the freejoint.
+  This is now an exercise, not an accident.
+- **Zero is also gravity's rest position** for a pendulum leg hanging down, so a
+  servo commanded to zero "succeeds" at any gain — a `kp` sweep from there proves
+  nothing. The demo therefore commands a *bent* pose (`TARGET = [1.2, -0.8]`),
+  which gravity fights; at `kp=200` the hip holds with −0.08 rad of droop.
+- **A stiff servo plus a coarse timestep fails silently.** At `dt=0.02` with
+  `kp=200`, MuJoCo raises `mjWARN_BADQACC` and **resets**, so `qpos` comes back
+  `[0, 0]` — which reads as success. The same model run passively at `dt=0.02`
+  warns about nothing and merely gives a different, wrong trajectory. Both
+  failure modes are exercises.
 
 ## Cross-platform reproducibility
 

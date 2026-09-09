@@ -1,5 +1,5 @@
 ---
-title: "Week 1 — Robots, Simulation, and MuJoCo"
+title: "Week 1 — Robots, Simulation, MuJoCo and MJCF"
 subtitle: "SOC4180 · Robot and AI"
 author: "Hong Jeong"
 format:
@@ -76,27 +76,55 @@ pip install mujoco
 
 ---
 
-## MJCF: describing a robot
+## MJCF: a robot is a text file
 
-MuJoCo reads **MJCF**, an XML format. A robot is a tree of bodies, each with
-geometry, joints, and inertia.
+MuJoCo reads **MJCF**, an XML format. One file describes an entire robot, and
+each top-level section answers a different question about it.
 
 ```xml
-<mujoco>
-  <worldbody>
-    <body name="upper_leg" pos="0 0 1">
-      <joint name="hip" type="hinge" axis="0 1 0"/>
-      <geom type="capsule" size="0.05" fromto="0 0 0 0 0 -0.4"/>
-      <body name="lower_leg" pos="0 0 -0.4">
-        <joint name="knee" type="hinge" axis="0 1 0"/>
-        <geom type="capsule" size="0.04" fromto="0 0 0 0 0 -0.4"/>
-      </body>
-    </body>
-  </worldbody>
+<mujoco model="my_robot">
+  <compiler angle="radian" meshdir="assets"/>    <!-- how to read this file   -->
+  <option timestep="0.002" gravity="0 0 -9.81"/> <!-- how the world behaves   -->
+  <default>   ...  </default>                    <!-- values tags inherit     -->
+  <asset>     ...  </asset>                      <!-- meshes, materials       -->
+  <worldbody> ...  </worldbody>                  <!-- the robot: bodies       -->
+  <actuator>  ...  </actuator>                   <!-- what you can command    -->
+  <sensor>    ...  </sensor>                     <!-- what you can measure    -->
+  <keyframe>  ...  </keyframe>                   <!-- named poses             -->
 </mujoco>
 ```
 
-Nesting `<body>` *is* the kinematic chain. Week 2 makes this precise.
+A file with nothing but `<worldbody>` compiles happily. The other seven sections
+are the difference between a shape and a robot.
+
+---
+
+## Body, joint, geom {.smaller}
+
+Three tags carry almost all the meaning.
+
+```xml
+<body name="upper_leg" pos="0 0 1">                            <!-- frame + mass -->
+  <joint name="hip" type="hinge" axis="0 1 0"/>                <!-- how it moves -->
+  <geom type="capsule" size="0.05" fromto="0 0 0  0 0 -0.4"/>  <!-- its shape    -->
+
+  <body name="lower_leg" pos="0 0 -0.4">                       <!-- a child link -->
+    <joint name="knee" type="hinge" axis="0 1 0"/>
+    <geom type="capsule" size="0.04" fromto="0 0 0  0 0 -0.4"/>
+  </body>
+</body>
+```
+
+- **`<body>`** — a coordinate frame carrying mass. `pos` is measured **from its
+  parent**, not from the world — which is why moving the thigh moves the shin
+  with it, and why you never recompute a child's position by hand.
+- **`<joint>`** — how this body may move *relative to its parent*. A body with no
+  joint is welded to its parent and adds no freedom.
+- **`<geom>`** — shape: what you see, and what collides.
+
+Nesting `<body>` **is** the kinematic chain — rotate the hip and the shin comes
+with it, because its frame is defined inside the thigh's. Week 2 makes this
+precise.
 
 ---
 
@@ -179,11 +207,355 @@ These leg joints are the ones we will command to produce a step.
 
 ---
 
+## The file you actually loaded {.smaller}
+
+`load_g1()` compiled a real file that is sitting on this machine. Here it is, in
+full — the *scene*, which is not the robot.
+
+```{python}
+from pathlib import Path
+
+scene_xml = soc4180.robot_path("unitree_g1", "scene")
+print(scene_xml, end="\n\n")
+print(Path(scene_xml).read_text(encoding="utf-8"))
+```
+
+Twenty lines: a floor, a sky, a light — and `<include file="g1.xml"/>`, which
+pulls in the robot. **The robot and its world are separate files**, so the same
+G1 can be dropped onto a different floor without editing the robot.
+
+---
+
+## Reading the robot's own file {.smaller}
+
+`g1.xml` is 350 lines, so we print it one section at a time.
+
+```{python}
+def mjcf(path, tag, limit=40):
+    """Print one top-level block of an MJCF file: <tag> ... </tag>."""
+    lines = Path(path).read_text(encoding="utf-8").splitlines()
+    i = next(k for k, l in enumerate(lines) if l.lstrip().startswith(f"<{tag}"))
+    if lines[i].rstrip().endswith("/>"):          # self-closing, e.g. <option .../>
+        return print(lines[i].strip())
+    pad = len(lines[i]) - len(lines[i].lstrip())  # close the tag at *this* depth
+    j = next(k for k, l in enumerate(lines[i:], i)
+             if l.lstrip().startswith(f"</{tag}") and len(l) - len(l.lstrip()) == pad)
+    block = lines[i:j + 1]
+    extra = len(block) - limit
+    print("\n".join(block[:limit] + ([f"  ... {extra} more lines"] if extra > 0 else [])))
+
+g1_xml = soc4180.robot_path("unitree_g1", "g1")
+mjcf(g1_xml, "compiler")
+mjcf(g1_xml, "option")
+```
+
+`angle="radian"` sets the units of every angle in the file. `meshdir` says where
+the STL files live.
+
+---
+
+## What the file does not say {.smaller}
+
+That `<option>` line sets an integrator and nothing else. Yet the simulation
+plainly has a timestep and a gravity vector:
+
+```{python}
+print(f"timestep = {model.opt.timestep} s  ->  {1/model.opt.timestep:.0f} Hz")
+print(f"gravity  = {model.opt.gravity}")
+```
+
+Those are **MuJoCo's defaults**, not the model's choices. An MJCF is a *diff
+against a default robot*: every attribute you leave out still has a value.
+
+That cuts both ways. It keeps files short — and it means a number you never
+wrote is shaping your results.
+
+---
+
+## `<default>`: where `kp=500` comes from {.smaller}
+
+Search the G1's 29 actuator lines for a gain and you will not find one.
+
+```{python}
+mjcf(g1_xml, "default")
+```
+
+`<default class="g1">` names a bundle of attributes. The pelvis carries
+`childclass="g1"`, so every tag beneath it inherits them, and any tag can opt
+into a class by name — `class="visual"`, `class="collision"`, `class="foot"`.
+
+**This is where the position gain of 500 that runs your whole semester lives.**
+Classes nest: `foot` inherits from `collision`, which inherits from `g1`.
+
+---
+
+## One link, in full {.smaller}
+
+```{python}
+mjcf(g1_xml, "body", limit=13)
+```
+
+Everything a link can carry, in one place:
+
+- `pos="0 0 0.793"` — the pelvis starts 79 cm above the floor
+- `<inertial>` — mass and rotational inertia: the numbers the physics integrates
+- `<freejoint>` — this body may translate and rotate freely: it is **not** bolted
+  to the world
+- `<geom class="visual">` twice, `class="collision"` once — one link, drawn one
+  way and collided another
+- `<site>` — a named point carrying no physics; sensors mount here
+- then a nested `<body>`, where the left leg begins
+
+---
+
+## Nesting is the kinematic chain {.smaller}
+
+The compiled model remembers the tree that the XML indentation drew.
+
+```{python}
+def tree(m, body=0, depth=0, maxdepth=2):
+    name = mujoco.mj_id2name(m, mujoco.mjtObj.mjOBJ_BODY, body) or "world"
+    print("    " * depth + name)
+    if depth == maxdepth:
+        return
+    for b in range(m.nbody):
+        if m.body_parentid[b] == body and b != body:
+            tree(m, b, depth + 1, maxdepth)
+
+tree(model, maxdepth=3)
+print(f"\n{model.nbody} bodies in total")
+```
+
+One root (`pelvis`) and three branches: two legs, and a waist carrying torso,
+head and arms.
+
+---
+
+## Every link is drawn twice {.smaller}
+
+```{python}
+import numpy as np
+from collections import Counter
+
+groups = Counter(int(g) for g in model.geom_group)
+non_colliding = sum((model.geom_contype[i] == 0) and (model.geom_conaffinity[i] == 0)
+                    for i in range(model.ngeom))
+print("geoms by group :", dict(sorted(groups.items())))
+print("non-colliding  :", non_colliding, f"of {model.ngeom}")
+
+foot = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "left_ankle_roll_link")
+for g in range(model.ngeom):
+    if model.geom_bodyid[g] == foot:
+        print(f"  foot geom: group {model.geom_group[g]}  "
+              f"type {mujoco.mjtGeom(model.geom_type[g]).name:14s} "
+              f"collides={bool(model.geom_contype[g])}")
+```
+
+Group 2 is the pretty mesh, declared `contype="0" conaffinity="0"` — **invisible
+to physics**. Group 3 is what actually touches the world.
+
+The foot reaches the ground through **four spheres of 5 mm radius**, not a mesh.
+Sphere contacts are cheap and stable; mesh-on-mesh contact is neither. Choices
+like this one are what keep a 29-joint humanoid fast enough to learn in.
+
+---
+
+## Joints decide `nq` and `nv` {.smaller}
+
+The joint type you write determines how many numbers the state needs.
+
+```{python}
+def dof_count(joint_xml):
+    xml = f"""<mujoco><worldbody><body pos="0 0 1">{joint_xml}
+              <geom type="box" size=".1 .1 .1"/></body></worldbody></mujoco>"""
+    m = mujoco.MjModel.from_xml_string(xml)
+    return m.nq, m.nv
+
+for label, tag in [("<freejoint/>",      "<freejoint/>"),
+                   ('type="ball"',       '<joint type="ball"/>'),
+                   ('type="slide"',      '<joint type="slide" axis="0 0 1"/>'),
+                   ('type="hinge"',      '<joint type="hinge" axis="0 1 0"/>'),
+                   ("no joint (welded)", "")]:
+    nq, nv = dof_count(tag)
+    print(f"{label:20s} nq={nq}  nv={nv}")
+```
+
+`freejoint` and `ball` are the only rows where **`nq` exceeds `nv`**: both store
+orientation as a 4-number quaternion for 3 real freedoms.
+
+The G1 is one `freejoint` plus 29 hinges — `nq` = 7 + 29 = 36, `nv` = 6 + 29 = 35.
+The gap you met a few slides ago is now fully explained.
+
+---
+
+## Actuators live outside the body tree {.smaller}
+
+```{python}
+mjcf(g1_xml, "actuator", limit=6)
+```
+
+A `<position>` actuator is a **servo**: you command an angle and an internal loop
+with gain `kp` produces the torque. Note what is *not* written — the limits.
+
+```{python}
+a = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, "left_knee_joint")
+j = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, "left_knee_joint")
+print("joint range   :", np.round(model.jnt_range[j], 4))
+print("ctrl range    :", np.round(model.actuator_ctrlrange[a], 4))
+print("position gain :", model.actuator_gainprm[a][0])
+```
+
+`inheritrange="1"` in the class copied the joint's range onto the actuator, so a
+command outside the joint's travel cannot even be expressed. The gain came from
+the class too.
+
+**29 actuators for 35 degrees of freedom.** The missing six are the floating
+base: nothing pushes the robot around except the floor.
+
+---
+
+## Sensors attach to sites {.smaller}
+
+```{python}
+mjcf(g1_xml, "sensor")
+```
+
+Every sensor names a `<site>` — the frame it measures in. Move that site in the
+XML and the readings change, exactly as remounting the real IMU would.
+
+Note what is **absent**: no camera, no foot contact switch, no joint-torque
+sensor. A robot cannot sense what its file does not declare. The `noise` and
+`cutoff` attributes are a week-6 topic.
+
+---
+
+## Keyframes: named poses {.smaller}
+
+```{python}
+mjcf(g1_xml, "keyframe")
+
+key = model.key_qpos[0]
+print("\nposition   :", key[:3])
+print("quaternion :", key[3:7], " (w, x, y, z — scalar first)")
+names = [mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_JOINT, i) for i in range(model.njnt)]
+bent = {n: float(key[model.jnt_qposadr[i]])
+        for i, n in enumerate(names)
+        if n != "floating_base_joint" and key[model.jnt_qposadr[i]]}
+print("non-zero joints:", bent)
+```
+
+Those 36 numbers are exactly `qpos`: 3 for position, 4 for the quaternion, 29 for
+the joints. `<key>` sets `ctrl` too, so the servos are told to hold the pose the
+robot starts in.
+
+Only the arms are bent. **Every leg joint is exactly zero** — perfectly straight
+legs. It looks tidy, and it is a trap: week 4 shows why inverse kinematics cannot
+escape it.
+
+---
+
+## XML in, arrays out {.smaller}
+
+The compiler flattens the tree into arrays. Learning this mapping is most of what
+"knowing MuJoCo" means:
+
+| In the file | In `model` |
+| --- | --- |
+| `<body pos="...">` | `body_pos`, `body_parentid`, `body_mass` |
+| `<joint type=... range=...>` | `jnt_type`, `jnt_range`, `jnt_qposadr` |
+| `<geom class="collision">` | `geom_type`, `geom_group`, `geom_contype` |
+| `<position kp="500">` | `actuator_gainprm`, `actuator_ctrlrange` |
+| `<site>` | `site_pos`, and `data.site_xpos` once kinematics runs |
+| `<key qpos="...">` | `key_qpos`, `key_ctrl` |
+| `<option>` and defaults | `model.opt` |
+
+Names are optional in MJCF — the G1's foot spheres have none — but ids always
+exist. `mj_name2id` and `mj_id2name` cross between the two worlds.
+
+---
+
+## Now write one yourself {.smaller}
+
+A robot, from nothing, in twenty lines.
+
+```{python}
+LEG = """
+<mujoco model="two_link_leg">
+  <option timestep="0.002"/>
+  <worldbody>
+    <light pos="0 0 3" dir="0 0 -1" directional="true"/>
+    <geom name="floor" type="plane" size="5 5 0.05" rgba="0.3 0.4 0.5 1"/>
+
+    <body name="upper_leg" pos="0 0 1">
+      <joint name="hip" type="hinge" axis="0 1 0"/>
+      <geom type="capsule" size="0.05" fromto="0 0 0  0 0 -0.4" rgba="0.7 0.7 0.7 1"/>
+
+      <body name="lower_leg" pos="0 0 -0.4">
+        <joint name="knee" type="hinge" axis="0 1 0"/>
+        <geom type="capsule" size="0.04" fromto="0 0 0  0 0 -0.4" rgba="0.2 0.2 0.2 1"/>
+      </body>
+    </body>
+  </worldbody>
+
+  <actuator>
+    <position name="hip"  joint="hip"  kp="200" dampratio="1"/>
+    <position name="knee" joint="knee" kp="200" dampratio="1"/>
+  </actuator>
+</mujoco>
+"""
+
+leg = mujoco.MjModel.from_xml_string(LEG)
+print(f"nq={leg.nq}  nv={leg.nv}  nu={leg.nu}  nbody={leg.nbody}  ngeom={leg.ngeom}")
+```
+
+Two hinges, so `nq = nv = 2`. `nbody` is 3 because the world itself counts as a
+body. There is no `<freejoint>`, so the hip is bolted to the sky: this leg cannot
+fall over, only swing.
+
+---
+
+## Your robot, servos on and off {.smaller}
+
+Start it bent, and ask the servos to **hold that bent pose** — a pose gravity
+would never choose.
+
+```{python}
+TARGET = np.array([1.2, -0.8])          # hip forward, knee bent
+
+data_leg = mujoco.MjData(leg)
+data_leg.qpos[:] = TARGET
+data_leg.ctrl[:] = TARGET               # servos: stay exactly where you are
+servo = soc4180.render_rollout(leg, data_leg, duration=3.0, fps=30, width=480, height=360)
+print("servos on :", np.round(data_leg.qpos, 3), " droop:", np.round(data_leg.qpos - TARGET, 3))
+
+data_leg = mujoco.MjData(leg)
+data_leg.qpos[:] = TARGET
+with soc4180.actuation_disabled(leg):
+    passive = soc4180.render_rollout(leg, data_leg, duration=3.0, fps=30,
+                                     width=480, height=360)
+print("no actuation:", np.round(data_leg.qpos, 3))
+
+soc4180.show_video(servo, fps=30)
+soc4180.show_video(passive, fps=30)
+```
+
+Same file, same start, same gravity. The first is a machine holding a pose; the
+second is a double pendulum. **The difference is entirely `<actuator>`** — the
+week-0 lesson, in a model you wrote yourself.
+
+It does not hold *perfectly*: the hip sags a few hundredths of a radian. A
+proportional servo only makes torque when it is already wrong, so gravity always
+wins a little. That residue is where week 5 begins.
+
+---
+
 ## Watching it fall {.smaller}
 
-We start from the robot's `stand` pose and **switch its motors off**, then let
-physics run. (Week 0: `ctrl = 0` would *not* do this — the position servos would
-hold a pose. To get no controller at all, actuation must be disabled.)
+Back to the G1, and do to it exactly what you just did to your own leg. We start
+from the `<keyframe>` pose you read a few slides ago and **switch its motors
+off**, then let physics run. (Week 0: `ctrl = 0` would *not* do this — the
+position servos would hold a pose. To get no controller at all, actuation must be
+disabled.)
 
 ```{python}
 with soc4180.actuation_disabled(model):          # every servo dead
@@ -210,7 +582,7 @@ Weeks 2–6 answer it with mathematics. Weeks 8–14 answer it with learning.
 
 ---
 
-## Exercises
+## Exercises: the G1 {.smaller}
 
 1. Re-run the fall with `duration=6.0`. Where does the robot come to rest?
 2. Print the joint **limits** (`model.jnt_range`). Which joints are unlimited, and why?
@@ -219,6 +591,34 @@ Weeks 2–6 answer it with mathematics. Weeks 8–14 answer it with learning.
 4. `model.opt.gravity` holds the gravity vector. Set it to the Moon's
    $-1.62\ \text{m/s}^2$ and re-render. Does the robot fall more slowly than you
    expected?
+5. `mjcf(g1_xml, "asset", limit=8)` lists the meshes. How many STL files does one
+   humanoid need, and what does that say about where model-building effort
+   actually goes?
+6. The `foot` class sets `friction="0.6"`. Find it in `model.geom_friction`, then
+   explain why only the *foot* spheres needed it and the elbow did not.
+
+---
+
+## Exercises: your own MJCF {.smaller}
+
+7. Add `<freejoint/>` to `upper_leg` and re-compile. It refuses: *"more than 6
+   dofs in body 'upper_leg'"*. A free joint **is** a body's entire freedom, so it
+   cannot share a body with a hinge. Fix it by wrapping the leg in a parent body
+   that carries the `<freejoint/>`, predict `nq` and `nv`, then re-render. What
+   can the leg do now that it could not?
+8. Sweep the servo gain — `kp` = 200, 100, 50, 20, 5 — and record the hip's droop
+   from `TARGET`. Plot droop against `kp`. Does the error ever reach zero, and
+   what would you have to add to the controller to make it?
+9. Change `<option timestep="0.002"/>` to `0.02`. Re-run the **passive** swing:
+   nothing crashes, nothing warns, and the final angles are simply different. Now
+   re-run it **with the servos on** and inspect `data_leg.warning`. One of those
+   two results is a silent approximation and the other is a silent failure —
+   which is which, and which would have fooled you?
+10. Add a third body, a foot, below `lower_leg`, with its own hinge. Confirm `nq`
+    rose by one and that the foot moves when the knee does.
+11. Replace the repeated `rgba` on the two capsules with a `<default>` class.
+    Confirm the render is unchanged — this is the same mechanism that hides
+    `kp=500` in the G1.
 
 ---
 

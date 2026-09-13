@@ -32,57 +32,15 @@ above it works without it.
 - Week 4 uses that to place footsteps
 - Week 12 feeds it into a policy's observations
 
-Today you will write it yourself and check it against MuJoCo to the last
-decimal place.
+Today you will work it out **on paper for a two-link leg**, then write it in code
+for all six joints, and check it against MuJoCo to the last decimal place.
 
 ---
 
-## Frames
+## Why this is a question at all {.smaller}
 
-A position is meaningless without saying *relative to what*. Robotics is
-bookkeeping about frames:
-
-- **world** — fixed to the ground
-- **pelvis** — the robot's body frame, which moves
-- one frame per link, each fixed to its own piece of metal
-- **foot site** — the point we actually care about
-
-"The foot is at $(0.15, 0.12, 0.03)$" is only true in a stated frame. Most
-robotics bugs are a quantity used in the wrong one.
-
----
-
-## A transform is a rotation and a translation
-
-To move a point from a child frame into its parent:
-
-$$\mathbf{p}_{\text{parent}} = R\,\mathbf{p}_{\text{child}} + \mathbf{t}$$
-
-$R$ is a $3\times3$ rotation, $\mathbf{t}$ the origin offset. Chaining two:
-
-$$R_{ac} = R_{ab} R_{bc}, \qquad \mathbf{t}_{ac} = R_{ab}\mathbf{t}_{bc} + \mathbf{t}_{ab}$$
-
-**Rotations do not commute.** $R_x R_y \neq R_y R_x$, and confusing the order is
-the single most common kinematics bug.
-
----
-
-## Ways to write a rotation {.smaller}
-
-| Representation | Numbers | Good | Bad |
-| --- | --- | --- | --- |
-| Rotation matrix | 9 | Composes by multiplication | 6 redundant constraints |
-| **Quaternion** | 4 | Compact, no gimbal lock, interpolates | Sign ambiguity: $q$ and $-q$ are the same rotation |
-| Axis–angle | 3 | Matches angular velocity | Awkward to compose |
-| Euler angles | 3 | Human-readable | **Gimbal lock**; a dozen conventions |
-
-**MuJoCo stores quaternions as `(w, x, y, z)`** — scalar first. Many other
-libraries put the scalar last. Mixing the two produces rotations that look
-plausible and are wrong.
-
----
-
-## Why `nq` exceeds `nv`, precisely {.smaller}
+A real robot does not know where its foot is. It knows **only what its sensors
+report**, and in each leg joint sits an encoder reporting one number: an angle.
 
 ```{python}
 try:
@@ -93,30 +51,285 @@ except ImportError:
 
 import numpy as np
 import mujoco
+from soc4180 import kinematics as kin
 
 model = soc4180.load_g1()
 data = soc4180.keyframe_data(model, "stand")
 mujoco.mj_forward(model, data)
 
-print(f"nq = {model.nq}   nv = {model.nv}   difference = {model.nq - model.nv}")
-print(f"floating base qpos = {np.round(data.qpos[:7], 3)}")
-print(f"             = 3 position + 4 quaternion")
-print(f"quaternion norm = {np.linalg.norm(data.qpos[3:7]):.6f}  <- always 1")
+idx = kin.leg_qpos_indices(model, "left")
+crouch = [-0.35, 0.0, 0.0, 0.70, -0.35, 0.0]
+
+print("what the left leg's six encoders report, in the crouch pose:")
+for name, angle in zip(kin.LEG_JOINTS, crouch):
+    print(f"   {name:20s} {angle:+.2f} rad  = {np.degrees(angle):+6.1f} deg")
 ```
 
-The quaternion has 4 numbers but only 3 freedoms, because it is constrained to
-unit length. **Position and velocity live in different-sized spaces**, which is
-why you cannot simply add a velocity to `qpos`.
+Six numbers. Nowhere among them is a position. **Forward kinematics is the
+function that turns those six angles into "the foot is here."**
+
+---
+
+## Frames: a position needs a "relative to what" {.smaller}
+
+Ask where your phone is. *On the desk* — but the desk is in a room, in a moving
+building, on a spinning planet. Every answer is relative to something you did not
+say out loud.
+
+Robotics makes it explicit. A **frame** is an origin plus three axes, and every
+position is measured in some frame:
+
+- **world** — fixed to the ground, never moves
+- **pelvis** — the robot's own body frame, which moves with the robot
+- one frame per link — thigh, shin, foot, each fixed to its own piece of metal
+
+"The foot is at $(0, 0.12, 0.03)$" is only true in a *stated* frame. Most
+robotics bugs are one number used in the wrong one, and they do not look like
+bugs — they look like a robot that is slightly, confusingly wrong.
+
+---
+
+## The same foot, three frames {.smaller}
+
+One physical point. Three legitimate, different answers:
+
+```{python}
+def quat2mat(q):
+    """MuJoCo quaternion (w, x, y, z) -> 3x3 rotation matrix."""
+    out = np.zeros(9)
+    mujoco.mju_quat2Mat(out, np.asarray(q, float))
+    return out.reshape(3, 3)
+
+foot_world = data.site_xpos[kin.foot_site_id(model, "left")]
+pelvis_pos, pelvis_rot = data.qpos[:3], quat2mat(data.qpos[3:7])
+hip_world = data.xpos[mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "left_hip_pitch_link")]
+
+print(f"in the WORLD frame        : {np.round(foot_world, 4)}")
+print(f"in the PELVIS frame       : {np.round(pelvis_rot.T @ (foot_world - pelvis_pos), 4)}")
+print(f"relative to the HIP joint : {np.round(foot_world - hip_world, 4)}")
+```
+
+The world answer says the foot is 3 cm above the floor. The pelvis answer says it
+is 76 cm below the hips. **Both are correct.** Neither is usable without its
+label.
+
+---
+
+## A transform is a rotation and a translation {.smaller}
+
+To move a point from a child frame into its parent, do two things — turn it, then
+shift it:
+
+$$\mathbf{p}_{\text{parent}} = \underbrace{R\,\mathbf{p}_{\text{child}}}_{\text{turn}} + \underbrace{\mathbf{t}}_{\text{shift}}$$
+
+$R$ is a $3\times3$ **rotation matrix**; $\mathbf{t}$ is where the child's origin
+sits in the parent. Chaining two of them — child to parent to grandparent — gives:
+
+$$R_{ac} = R_{ab} R_{bc}, \qquad \mathbf{t}_{ac} = R_{ab}\mathbf{t}_{bc} + \mathbf{t}_{ab}$$
+
+That second formula is the whole of forward kinematics. Everything else today is
+applying it six times in a row.
+
+Note where $R_{ab}$ sits in the translation: **the parent's rotation acts on the
+child's offset.** Forget that and the leg swings from the wrong place.
+
+---
+
+## Rotating a point, in 2D, by hand {.smaller}
+
+Start with one link in the $xz$ plane, hanging straight down from a pivot, tip at
+$(0, -L)$. Rotate it by $\theta$ about the $y$ axis:
+
+$$\text{tip} = (-L\sin\theta,\; -L\cos\theta)$$
+
+Check it with a calculator before trusting any code:
+
+```{python}
+L = 0.34
+for deg in (0, 30, 90):
+    t = np.radians(deg)
+    print(f"  theta = {deg:2d} deg -> tip at x = {-L*np.sin(t):+.4f},  z = {-L*np.cos(t):+.4f}")
+```
+
+Read the signs. At $0°$ the tip hangs at $z = -0.34$, directly below. At $90°$ it
+has swung to horizontal at $x = -0.34$ — **backwards**. So a *positive* pitch
+angle swings the leg **back**, and that is why the Week 4 crouch commands a hip
+pitch of $-0.35$: negative means knee forward.
+
+---
+
+## Order matters, and you can feel it {.smaller}
+
+Put a book flat on the desk, cover up. Then:
+
+1. Turn it $90°$ about the **vertical** axis, then tip it $90°$ **toward you**
+2. Start over. Tip it $90°$ **toward you** first, then turn $90°$ about vertical
+
+The book ends in two different orientations. This is not an illusion:
+
+```{python}
+def Rx(t): return np.array([[1, 0, 0], [0, np.cos(t), -np.sin(t)], [0, np.sin(t), np.cos(t)]])
+def Rz(t): return np.array([[np.cos(t), -np.sin(t), 0], [np.sin(t), np.cos(t), 0], [0, 0, 1]])
+
+p, h = np.array([1.0, 0.0, 0.0]), np.pi / 2
+print(f"  start with the point       {p}")
+print(f"  about z, then x        ->  {np.round(Rx(h) @ Rz(h) @ p, 3)}")
+print(f"  about x, then z        ->  {np.round(Rz(h) @ Rx(h) @ p, 3)}")
+print(f"  the answers are {np.linalg.norm(Rx(h) @ Rz(h) @ p - Rz(h) @ Rx(h) @ p):.3f} apart")
+```
+
+Same point, same two rotations, **a different axis entirely**. Matrix
+multiplication does not commute, and neither does turning things in space.
+
+**Consequence:** "roll 10°, pitch 20°, yaw 5°" is meaningless until you say in
+which order. That is why we compose matrices down the chain instead.
+
+---
+
+## Two links on paper: the leg you are about to code {.smaller}
+
+Chain the 2D result twice. Hip at height $z_h$, thigh $L_1$, shin $L_2$, hip
+angle $\theta_1$, knee angle $\theta_2$:
+
+$$\text{knee} = \big(-L_1\sin\theta_1,\;\; z_h - L_1\cos\theta_1\big)$$
+$$\text{ankle} = \big(\text{knee}_x - L_2\sin(\theta_1{+}\theta_2),\;\; \text{knee}_z - L_2\cos(\theta_1{+}\theta_2)\big)$$
+
+The angles **add**, because the knee angle is measured relative to the thigh and
+the thigh has already turned by $\theta_1$.
+
+Now measure $L_1$ and $L_2$ from the real robot — **between joint anchors**, not
+from any single body offset:
+
+```{python}
+def anchor(d, body_name):
+    """World position of a body's joint axis — the point the link pivots about."""
+    b = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, body_name)
+    return d.xpos[b] + d.xmat[b].reshape(3, 3) @ model.jnt_pos[model.body_jntadr[b]]
+
+H = anchor(data, "left_hip_pitch_link")
+K = anchor(data, "left_knee_link")
+A = anchor(data, "left_ankle_pitch_link")
+foot_drop = np.linalg.norm(data.site_xpos[kin.foot_site_id(model, "left")] - A)
+
+L1 = np.hypot(*(K - H)[[0, 2]])
+L2 = np.hypot(*(A - K)[[0, 2]])
+print(f"  hip -> knee   : {np.round(K - H, 4)}   "
+      f"true length {np.linalg.norm(K - H):.4f} m,  in-plane L1 = {L1:.4f} m")
+print(f"  knee -> ankle : {np.round(A - K, 4)}   "
+      f"true length {np.linalg.norm(A - K):.4f} m,  in-plane L2 = {L2:.4f} m")
+print(f"  ankle -> sole : {foot_drop:.4f} m")
+```
+
+Look at the thigh: it is **not** straight down. It splays 5.4 cm sideways, so its
+true length 0.3409 m is not the number a flat picture needs — 0.3366 m is.
+
+---
+
+## Does the paper answer match the simulator? {.smaller}
+
+Three angles in, one foot position out — pure arithmetic, no physics:
+
+```{python}
+def paper_fk(th1, th2, th3):
+    """Foot (x, z) from hip, knee and ankle pitch angles. Nothing but sin and cos."""
+    kx, kz = H[0] - L1 * np.sin(th1),     H[2] - L1 * np.cos(th1)
+    ax, az = kx - L2 * np.sin(th1 + th2), kz - L2 * np.cos(th1 + th2)
+    return np.array([ax - foot_drop * np.sin(th1 + th2 + th3),
+                     az - foot_drop * np.cos(th1 + th2 + th3)])
+
+def xz(v):
+    return f"({v[0]:+.6f}, {v[1]:+.6f})"
+
+print(f"{'hip, knee, ankle':>21}  {'paper (x, z)':>22}  {'mujoco (x, z)':>22}   error")
+for angles in [(0, 0, 0), (-0.35, 0.70, -0.35), (-0.4, 0.9, -0.5), (0.3, 0.2, -0.1)]:
+    th1, th2, th3 = angles
+    d = soc4180.keyframe_data(model, "stand")
+    d.qpos[idx] = [th1, 0, 0, th2, th3, 0]          # roll and yaw held at zero
+    mujoco.mj_forward(model, d)
+    mine = paper_fk(th1, th2, th3)
+    theirs = d.site_xpos[kin.foot_site_id(model, "left")][[0, 2]]
+    print(f"{str(angles):>21}  {xz(mine):>22}  {xz(theirs):>22}   "
+          f"{np.abs(mine - theirs).max():.1e}")
+```
+
+**Two micrometres.** Your `sin` and `cos` predict a 29-degree-of-freedom
+simulator to about the width of a bacterium.
+
+Not *zero*, though, and the gap is honest: the flat two-link picture is a **model**
+of the leg. At the zero pose MuJoCo puts the foot $2.3\,\mu$m *behind* the hip
+rather than exactly beneath it, because the G1's own offsets do not quite cancel.
+Later in this lab we compose the real chain and the error drops to $10^{-16}$.
+
+---
+
+## What the two-link picture leaves out {.smaller}
+
+It reached micrometres, so why not stop there? Because we cheated three times:
+
+- **We held hip roll, hip yaw and ankle roll at zero.** Switch any of them on and
+  the foot leaves the $xz$ plane, and flat trigonometry has nowhere to put it.
+- **We computed a position, not a pose.** A foot also has an *orientation* — it
+  has to land flat — and that is three more numbers.
+- **We derived it for this leg.** Change the robot and you redo the algebra by hand.
+
+**Six joints, six freedoms** — three of position, three of orientation. That match
+is not an accident of design: it is the minimum needed to put a foot *anywhere*,
+*any way up*. It is also why next week's inverse problem is solvable at all.
+
+So we need a method that handles all six, needs no algebra, and works for any
+robot. That method is: compose the transforms, one body at a time.
+
+---
+
+## Ways to write a rotation {.smaller}
+
+Before composing, pick how to store one. Four common choices, no free lunch:
+
+| Representation | Numbers | Good | Bad |
+| --- | --- | --- | --- |
+| Rotation matrix | 9 | Composes by multiplication | 6 redundant constraints |
+| **Quaternion** | 4 | Compact, no gimbal lock, interpolates | Sign ambiguity: $q$ and $-q$ are the same rotation |
+| Axis–angle | 3 | Matches angular velocity | Awkward to compose |
+| Euler angles | 3 | Human-readable | **Gimbal lock**; a dozen conventions |
+
+You do not need quaternion algebra today. You need three rules:
+
+- **MuJoCo stores quaternions as `(w, x, y, z)`** — scalar *first*. SciPy, ROS and
+  most game engines put it *last*. Mixing the two gives rotations that look
+  plausible and are wrong.
+- **Never add or interpolate Euler angles** near vertical — that is gimbal lock.
+- **Convert to a matrix and compose matrices.** That is what `quat2mat` is for.
+
+---
+
+## Why `nq` is bigger than `nv` {.smaller}
+
+You met this gap in Week 1. Here is the consequence that matters this week:
+
+```{python}
+print(f"nq = {model.nq}   nv = {model.nv}   difference = {model.nq - model.nv}")
+print(f"floating base qpos = {np.round(data.qpos[:7], 3)}")
+print(f"                     = 3 position + 4 quaternion")
+print(f"quaternion norm    = {np.linalg.norm(data.qpos[3:7]):.6f}   <- always exactly 1")
+```
+
+Four numbers, three freedoms, because the quaternion is pinned to unit length.
+
+**So positions and velocities live in different-sized spaces**, and
+`qpos += qvel * dt` is not merely inaccurate — the shapes do not even match. To
+advance a rotation you need `mj_integratePos`, which knows to *rotate* the
+quaternion rather than add to it. Next week's IK computes its step in velocity
+space and has to apply it in position space; this is why.
 
 ---
 
 ## The body tree is the robot {.smaller}
 
-Each body stores a fixed offset from its parent, then rotates about its joint.
+Week 1 showed the tree that the XML nesting draws. Here is that same tree with the
+numbers forward kinematics actually consumes — each body's **fixed offset from its
+parent**, and the **axis** its joint turns about:
 
 ```{python}
-from soc4180 import kinematics as kin
-
 for bid in kin.leg_chain(model, "left"):
     name = mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_BODY, bid)
     jnt = model.body_jntadr[bid]
@@ -124,56 +337,54 @@ for bid in kin.leg_chain(model, "left"):
     print(f"  {name:24s} offset={np.round(model.body_pos[bid], 4)}  axis={axis}")
 ```
 
-Read the axes: pitch joints turn about $y$, roll about $x$, yaw about $z$. The
-hip has all three, the knee only pitch, the ankle pitch and roll.
-
-**Six joints, six freedoms** — enough to place the foot at an arbitrary position
-*and* orientation. That is not an accident of design.
+Each row is one link: *go here* (the offset), *then turn about this* (the axis).
+Six rows, hip to sole. The axes are Week 1's roll, pitch and yaw — $x$, $y$, $z$
+respectively — so the leg's whole design is readable straight off the table.
 
 ---
 
 ## Forward kinematics, by hand {.smaller}
 
-Walk the chain, composing as you go. For each body: apply its fixed offset, then
-rotate about its joint axis — anchored at the joint, not the origin.
+Now walk the chain, carrying a running position and rotation. For each body: apply
+its fixed offset, then rotate about its joint.
 
 ```{python}
-def quat2mat(q):
-    out = np.zeros(9); mujoco.mju_quat2Mat(out, np.asarray(q, float))
-    return out.reshape(3, 3)
-
 def axis_angle(axis, angle):
-    q = np.zeros(4); mujoco.mju_axisAngle2Quat(q, np.asarray(axis, float), float(angle))
+    """Rotation matrix for turning `angle` radians about `axis`."""
+    q = np.zeros(4)
+    mujoco.mju_axisAngle2Quat(q, np.asarray(axis, float), float(angle))
     return quat2mat(q)
 
 def my_fk(model, qpos, side="left"):
-    pos = qpos[:3].copy()             # start at the pelvis
-    rot = quat2mat(qpos[3:7])
+    pos = qpos[:3].copy()                           # start at the pelvis...
+    rot = quat2mat(qpos[3:7])                       # ...facing wherever it faces
     for bid in kin.leg_chain(model, side):
-        pos = pos + rot @ model.body_pos[bid]      # fixed offset
-        rot = rot @ quat2mat(model.body_quat[bid])
+        pos = pos + rot @ model.body_pos[bid]       # step to the next joint
+        rot = rot @ quat2mat(model.body_quat[bid])  # apply any built-in tilt
         jnt = model.body_jntadr[bid]
         if jnt >= 0:
-            a = model.jnt_pos[jnt]                 # the joint anchor
+            a = model.jnt_pos[jnt]                  # where the axis sits in the body
             Rj = axis_angle(model.jnt_axis[jnt], qpos[model.jnt_qposadr[jnt]])
-            pos = pos + rot @ (a - Rj @ a)         # rotate about the anchor
-            rot = rot @ Rj
+            pos = pos + rot @ (a - Rj @ a)          # rotate about the anchor, not the origin
+            rot = rot @ Rj                          # ...and carry the turn onward
     s = kin.foot_site_id(model, side)
-    return pos + rot @ model.site_pos[s]
+    return pos + rot @ model.site_pos[s]            # finally, out to the sole
 ```
 
-Twelve lines. That is the whole idea.
+Twelve lines, and every one of them is $\mathbf{p} \mapsto R\mathbf{p} +
+\mathbf{t}$ from four slides ago. **`rot` always means "how the current link is
+turned, in world coordinates"** — which is why every offset is multiplied by it
+before being added.
 
 ---
 
 ## Check it against MuJoCo {.smaller}
 
-Never trust kinematics you have not validated. Pick a non-trivial pose so the
-test cannot pass by accident:
+Never trust kinematics you have not validated. Pick a pose with **nothing at
+zero**, so the test cannot pass by accident:
 
 ```{python}
-idx = kin.leg_qpos_indices(model, "left")
-data.qpos[idx] = [-0.30, 0.10, 0.05, 0.70, -0.35, 0.02]   # nothing at zero
+data.qpos[idx] = [-0.30, 0.10, 0.05, 0.70, -0.35, 0.02]   # roll and yaw switched on
 mujoco.mj_forward(model, data)
 
 mine = my_fk(model, data.qpos, "left")
@@ -184,8 +395,10 @@ print(f"mujoco  site_xpos     : {np.round(theirs, 10)}")
 print(f"max absolute error    : {np.abs(mine - theirs).max():.2e}")
 ```
 
-**Agreement to machine precision.** Not "close enough" — the same floating-point
-answer, because it is the same computation.
+**Agreement to machine precision** — around $10^{-16}$, a hundred million times
+tighter than the paper model, and on a pose the paper model could not describe at
+all. Not "close enough": the *same* floating-point answer, because it is the same
+computation.
 
 If your own version disagrees, it is almost always **composition order** or a
 **scalar-last quaternion**. The third candidate — the joint anchor — cannot bite
@@ -204,24 +417,26 @@ nonzero = [mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_JOINT, j)
 print(f"{model.njnt} joints; with a non-zero anchor: {nonzero or 'none'}")
 ```
 
-So `a` is the zero vector, `a - Rj @ a` is zero, and the term is dead code —
-**on this robot**. MJCF lets you put the joint anywhere in the body, and then it
-is not dead. A link hinged at its far end, of the kind you wrote last week:
+So `a` is the zero vector, `a - Rj @ a` is zero, and the term is dead code — **on
+this robot**. MJCF lets you put the joint anywhere inside the body, and then it is
+not dead at all. A link hinged at its far end, of the kind you wrote last week:
 
 ```{python}
-XML = '''<mujoco><worldbody>
+XML = """<mujoco><worldbody>
   <body name="link" pos="0 0 1">
     <joint name="h" type="hinge" axis="0 1 0" pos="0.3 0 0"/>
     <geom type="capsule" fromto="0 0 0 0.3 0 0" size=".02"/>
     <site name="tip" pos="0.3 0 0"/>
   </body>
-</worldbody></mujoco>'''
+</worldbody></mujoco>"""
 m2 = mujoco.MjModel.from_xml_string(XML)
-d2 = mujoco.MjData(m2); d2.qpos[0] = 0.8
+d2 = mujoco.MjData(m2)
+d2.qpos[0] = 0.8
 mujoco.mj_forward(m2, d2)
 
-a, Rj = m2.jnt_pos[0], axis_angle(m2.jnt_axis[0], d2.qpos[0])
-base = m2.body_pos[1] + quat2mat(m2.body_quat[1]) @ np.zeros(3)
+a = m2.jnt_pos[0]
+Rj = axis_angle(m2.jnt_axis[0], d2.qpos[0])
+base = m2.body_pos[1]
 with_anchor    = base + (a - Rj @ a) + Rj @ m2.site_pos[0]
 without_anchor = base + Rj @ m2.site_pos[0]
 
@@ -231,27 +446,27 @@ print(f"without anchor : {np.round(without_anchor, 6)}   <- off by "
       f"{np.abs(without_anchor - d2.site_xpos[0]).max():.3f} m")
 ```
 
-The site sits **on** the axis, so rotating the joint must not move it at all.
-Drop the anchor and it swings 21 cm. Keep the term: it costs nothing on the G1
-and is the difference between right and wrong on a robot you write yourself.
+The site sits **on** the axis, so turning the joint must not move it at all. Drop
+the anchor and it swings 21 cm. Keep the term: it costs nothing on the G1, and it
+is the difference between right and wrong on a robot you write yourself.
 
 ---
 
 ## The workspace {.smaller}
 
-Sweep the joints and see where the foot *can* go:
+You now have a function from angles to position. Call it three thousand times with
+random *legal* angles and you get the set of places the foot **can** be:
 
 ```{python}
 import matplotlib.pyplot as plt
 
 soc4180.set_seed(4180)
-lo = model.jnt_range[[mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, f"left_{j}")
-                      for j in kin.LEG_JOINTS], 0]
-hi = model.jnt_range[[mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, f"left_{j}")
-                      for j in kin.LEG_JOINTS], 1]
+jids = [mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, f"left_{j}") for j in kin.LEG_JOINTS]
+lo, hi = model.jnt_range[jids, 0], model.jnt_range[jids, 1]
 
 q = data.qpos.copy()
-q[:3] = [0, 0, 0.793]; q[3:7] = [1, 0, 0, 0]
+q[:3] = [0, 0, 0.793]                 # park the pelvis, so we see the leg alone
+q[3:7] = [1, 0, 0, 0]
 pts = []
 for _ in range(3000):
     q[idx] = np.random.uniform(lo, hi)
@@ -259,78 +474,142 @@ for _ in range(3000):
 pts = np.array(pts)
 
 fig, ax = plt.subplots(1, 2, figsize=(9, 3.6))
-ax[0].scatter(pts[:, 0], pts[:, 2], s=1, alpha=0.25); ax[0].set_xlabel("x fwd"); ax[0].set_ylabel("z up")
-ax[1].scatter(pts[:, 1], pts[:, 2], s=1, alpha=0.25); ax[1].set_xlabel("y left"); ax[1].set_ylabel("z up")
-for a in ax: a.set_aspect("equal"); a.grid(alpha=0.3)
-fig.suptitle("reachable left-foot positions, pelvis fixed"); fig.tight_layout(); plt.show()
+ax[0].scatter(pts[:, 0], pts[:, 2], s=1, alpha=0.25)
+ax[0].set_xlabel("x forward"); ax[0].set_ylabel("z up")
+ax[1].scatter(pts[:, 1], pts[:, 2], s=1, alpha=0.25)
+ax[1].set_xlabel("y left"); ax[1].set_ylabel("z up")
+for a_ in ax:
+    a_.set_aspect("equal"); a_.grid(alpha=0.3)
+fig.suptitle("reachable left-foot positions, pelvis fixed")
+fig.tight_layout(); plt.show()
 ```
 
 ---
 
-## Reading the workspace
+## Reading the workspace {.smaller}
 
-The cloud is **not** a ball. It is bounded by joint limits, and it is denser in
-the middle than at the edges — many joint combinations reach the centre, very few
-reach the extremes.
+The cloud is **not** a ball, and its shape is telling you about the robot:
+
+- It is **bounded by joint limits**, not by link lengths alone — the knee bends
+  only one way, so whole regions are simply missing
+- It is **denser in the middle**: many combinations of angles reach the centre,
+  very few reach the edges
 
 Two consequences that matter later:
 
-- A foot target near the boundary is reachable by essentially **one** posture,
-  so there is no freedom left for anything else
-- Near the boundary the leg is nearly straight, and small foot motions demand
-  enormous joint motions
+- A foot target near the boundary is reachable by essentially **one** posture, so
+  no freedom is left over for balance or for avoiding an obstacle
+- Near the boundary the leg is nearly **straight**, and there small foot motions
+  demand enormous joint motions
 
-That second point is the **singularity** that dominates next week — and it is
-why the Week 4 walker crouches.
+That second point is the **singularity** that dominates next week — and it is why
+the Week 4 walker crouches instead of standing tall. The next two slides turn it
+into a number.
 
 ---
 
-## The Jacobian, one slide early {.smaller}
+## The Jacobian, in millimetres {.smaller}
 
-Forward kinematics maps angles to position. Its derivative maps joint *velocity*
-to foot velocity:
+Forget the name for a moment and ask a concrete question: **if I nudge one joint
+by half a degree, how far does the foot move?** Measure it by simply doing it:
+
+```{python}
+d = soc4180.keyframe_data(model, "stand")
+d.qpos[idx] = crouch                      # hip -0.35, knee 0.70, ankle -0.35
+mujoco.mj_forward(model, d)
+p0 = d.site_xpos[kin.foot_site_id(model, "left")].copy()
+
+for k, name in enumerate(kin.LEG_JOINTS):
+    d2 = soc4180.keyframe_data(model, "stand")
+    d2.qpos[idx] = crouch
+    d2.qpos[idx[k]] += 0.01               # 0.01 rad = 0.57 degrees
+    mujoco.mj_forward(model, d2)
+    moved = np.linalg.norm(d2.site_xpos[kin.foot_site_id(model, "left")] - p0)
+    print(f"  {name:20s} +0.57 deg  ->  foot moves {moved * 1000:5.2f} mm")
+```
+
+Six joints, six different sensitivities. The hip is the big lever; the ankle
+barely matters. And `ankle_roll` moves the foot **0.00 mm** — the sole sits
+exactly on that axis, so rolling it changes the foot's *orientation* and not its
+position at all.
+
+---
+
+## ...and the Jacobian is that table {.smaller}
+
+Stack those sensitivities into a matrix and you have $J$. MuJoCo computes it
+directly, and it predicts exactly what we just measured:
 
 $$\dot{\mathbf{x}} = J(q)\,\dot{q}$$
 
-MuJoCo computes $J$ for you, and it is the engine of next week's IK:
-
 ```{python}
-jac_p = np.zeros((3, model.nv)); jac_r = np.zeros((3, model.nv))
-mujoco.mj_jacSite(model, data, jac_p, jac_r, kin.foot_site_id(model, "left"))
-J = np.vstack([jac_p, jac_r])[:, kin.leg_dof_indices(model, "left")]
+jac_p = np.zeros((3, model.nv))
+jac_r = np.zeros((3, model.nv))
+mujoco.mj_jacSite(model, d, jac_p, jac_r, kin.foot_site_id(model, "left"))
+dofs = kin.leg_dof_indices(model, "left")
 
-print(f"leg Jacobian shape : {J.shape}   (6 foot freedoms x 6 joints)")
+print("  jacobian's prediction for the same 0.57 deg nudges:")
+for k, name in enumerate(kin.LEG_JOINTS):
+    print(f"  {name:20s} {np.linalg.norm(jac_p[:, dofs[k]] * 0.01) * 1000:5.2f} mm")
+
+J = np.vstack([jac_p, jac_r])[:, dofs]
 sv = np.linalg.svd(J, compute_uv=False)
-print(f"singular values    : {np.round(sv, 4)}")
-print(f"condition number   : {sv[0]/sv[-1]:.1f}")
+print(f"\n  leg Jacobian shape : {J.shape}   (6 foot freedoms x 6 joints)")
+print(f"  singular values    : {np.round(sv, 4)}")
+print(f"  smallest           : {sv[-1]:.5f}")
 ```
 
-A **square** Jacobian: six joints for six freedoms. When its smallest singular
-value approaches zero the leg is singular — remember that number.
+A **square** Jacobian: six joints for six freedoms. The singular values say how
+strongly the foot responds in each of six independent directions. When the
+smallest approaches zero, one direction has stopped responding — the leg is
+**singular**. Remember that number; next week it is the whole story.
 
 ---
 
 ## Exercises {.smaller}
 
-1. **Break the anchor, properly.** Deleting `(a - Rj @ a)` changes nothing on the
-   G1. Edit the toy MJCF above so the hinge sits at `pos="0.15 0 0"` — the middle
-   of the link — and predict the error *before* you run it.
-2. **Scalar-last.** Swap the quaternion convention to $(x,y,z,w)$ in `quat2mat`.
-   Does the foot end up somewhere plausible? That is what makes this bug nasty.
-3. **Orientation too.** Extend `my_fk` to return the foot's rotation matrix and
-   check it against `site_xmat`.
-4. **Both legs.** Compute the vector from left foot to right foot in the *pelvis*
-   frame. Verify it is symmetric at the `stand` pose.
-5. **Straight-leg check.** Compute the Jacobian's smallest singular value at the
-   `stand` keyframe and at the Week 4 crouch. Which is closer to singular, and by
-   how much?
-6. **Workspace volume.** Estimate the reachable volume by Monte Carlo. How much
-   of it is usable if the foot must stay flat on the ground?
+**Warm-up — do these first**
+
+1. **Predict, then check.** Using the formula on the paper slide, work out by hand
+   where `paper_fk(0.0, 1.0, 0.0)` puts the foot. Then run it. Were the signs what
+   you expected?
+2. **Find the straight leg.** Call `paper_fk(0, 0, 0)` and compute the distance
+   from hip to foot. Compare it with $L_1 + L_2 + \text{foot drop}$. Why do they
+   agree, and what would break that agreement?
+3. **Order, again.** Rotate $(1,0,0)$ by $30°$ about $z$ then $30°$ about $x$, and
+   then in the other order. How far apart are the two answers?
+
+**Main**
+
+4. **Scalar-last.** Change `quat2mat` to read the quaternion as $(x,y,z,w)$ and
+   re-run the check. Does the foot land somewhere plausible? That plausibility is
+   exactly what makes this bug nasty.
+5. **Break the anchor, properly.** Deleting `(a - Rj @ a)` changes nothing on the
+   G1. Edit the toy MJCF so the hinge sits at `pos="0.15 0 0"` — the middle of the
+   link — and predict the error *before* you run it.
+6. **Orientation too.** Extend `my_fk` to return the foot's rotation matrix as
+   well, and check it against `site_xmat`. You should again reach $10^{-16}$.
+7. **Both legs.** Compute the vector from the left foot to the right foot **in the
+   pelvis frame**. Verify it is symmetric at the `stand` pose, and say what its
+   length means physically.
+
+**Harder**
+
+8. **Straight-leg check.** Compute the Jacobian's smallest singular value at the
+   `stand` keyframe and at the crouch. Which is closer to singular, and by what
+   factor? (The answer is larger than you will guess.)
+9. **Workspace volume.** Estimate the reachable volume by Monte Carlo. Then ask how
+   much of it survives the requirement that the sole stay **flat** — hint: look at
+   `R[2,2]` of the foot's rotation matrix.
 
 ---
 
 ## Next week
 
-**Inverse kinematics.** Today: angles in, position out. Next: *position in,
+**Inverse kinematics.** Today: angles in, position out. Next week: *position in,
 angles out* — which is harder, sometimes has many answers, sometimes none, and
 occasionally blows up entirely.
+
+We start by inverting the very two-link leg you built on paper today, with the
+same $L_1$ and $L_2$ — and then throw it away for a method that handles all six
+joints at once.

@@ -640,6 +640,28 @@ exactly that and the answer was an error of 0.0000. Week 2 now demonstrates the
 anchor on a nine-line MJCF with `<joint pos="0.3 0 0">`, where dropping the term
 moves the site 0.215 m while MuJoCo holds it exactly still.
 
+**Week 2 builds up from a planar two-link leg before the 3D chain**, because the
+audience is undergraduates with no robotics background. The paper model —
+`foot = f(hip_pitch, knee, ankle_pitch)` from sines and cosines, roll and yaw held
+at zero — agrees with MuJoCo to **2.3e-06 m**, and the residual is a constant, not
+noise: at the zero pose MuJoCo puts the foot at `x = -2.331e-06` rather than
+exactly under the hip anchor at `x = 0`. Say so on the slide; it is the difference
+between a *model* of the leg and the leg, and the full chain then reaches 1e-16.
+
+**Two different thigh lengths, both correct — do not "fix" either.** Week 2's
+planar model needs the **in-plane projection L1 = 0.3366 m**, because the
+hip->knee vector is `[0, +0.0541, -0.3366]` and splays 5.4 cm sideways. Week 3's
+law of cosines needs the **true 3D length 0.3409 m**. Using 0.3409 in the planar
+formula costs 4 mm. The shin is 0.3000 m either way, and the ankle-to-sole drop is
+0.0176 m.
+
+**The foot site sits exactly on the ankle-roll axis**, so that joint moves the
+foot 0.00 mm and the *position* Jacobian has a zero column there; it still changes
+orientation, which is why the full 6x6 is non-singular at the crouch. Week 2
+introduces the Jacobian as a measured mm-per-0.57-degree table (hip_pitch 6.16,
+hip_roll 5.09, hip_yaw 3.17, knee 3.17, ankle_pitch 0.18, ankle_roll 0.00) and
+only then names it — the finite differences and `mj_jacSite` agree exactly.
+
 **Leg segment lengths must be measured between joint anchors, not from
 `|body_pos|`.** The hip is three separate link bodies whose offsets accumulate,
 so `|body_pos|` of `knee_link` gives 0.194 m when the real thigh is **0.341 m**

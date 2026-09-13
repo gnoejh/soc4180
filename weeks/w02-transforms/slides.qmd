@@ -566,6 +566,136 @@ cube corner back to itself. Every row above is the **same rotation**, and each i
 the natural choice for a different job: the quaternion to *store*, the matrix to
 *compose*, axis-angle to *reason about*, Euler to *say out loud*.
 
+**But "same rotation" was asserted, not shown.** The next three slides do the
+conversions by hand — because the matrix is the one form that actually acts on a
+vector, so every other form has to reach it.
+
+---
+
+## Axis-angle $\to R$: Rodrigues' formula {.smaller}
+
+For a **unit** axis $\mathbf{u}$ and angle $\theta$:
+
+$$R = I\cos\theta \;+\; (1-\cos\theta)\,\mathbf{u}\mathbf{u}^{\top} \;+\; [\mathbf{u}]_{\times}\sin\theta,
+\qquad
+[\mathbf{u}]_{\times} = \begin{bmatrix} 0 & -u_z & u_y \\ u_z & 0 & -u_x \\ -u_y & u_x & 0\end{bmatrix}$$
+
+Three pieces: what survives the turn, what is flattened onto the axis, and what
+gets swung sideways. Written out and checked against MuJoCo:
+
+```{python}
+def rodrigues(u, theta):
+    u = np.asarray(u, float)
+    u = u / np.linalg.norm(u)                    # the formula needs a UNIT axis
+    K = np.array([[0, -u[2], u[1]],
+                  [u[2], 0, -u[0]],
+                  [-u[1], u[0], 0]])             # the cross-product matrix
+    return (np.eye(3) * np.cos(theta)
+            + (1 - np.cos(theta)) * np.outer(u, u)
+            + K * np.sin(theta))
+
+R_rod = rodrigues(diag, np.radians(120))
+for row in tidy(R_rod):
+    print("   ", row)
+print(f"\nmatches MuJoCo: {np.abs(R_rod - R120).max():.1e}")
+```
+
+With $\theta = 120°$: $\cos\theta = -\tfrac12$ and $\sin\theta = \tfrac{\sqrt3}{2}$,
+and since $u_x = u_y = u_z = \tfrac{1}{\sqrt3}$ every entry of
+$\mathbf{u}\mathbf{u}^{\top}$ is $\tfrac13$ — which is why the answer comes out in
+clean $0$s and $1$s.
+
+---
+
+## Quaternion $\to R$ {.smaller}
+
+For a **unit** quaternion $q = (w, x, y, z)$:
+
+$$R = \begin{bmatrix}
+1-2(y^2+z^2) & 2(xy - wz) & 2(xz + wy)\\
+2(xy + wz) & 1-2(x^2+z^2) & 2(yz - wx)\\
+2(xz - wy) & 2(yz + wx) & 1-2(x^2+y^2)
+\end{bmatrix}$$
+
+Every entry is quadratic in the components — which is exactly why $q$ and $-q$
+give the same $R$: every term has two factors, so the signs cancel.
+
+```{python}
+def quat_to_R(q):
+    w, x, y, z = q
+    return np.array([
+        [1 - 2*(y*y + z*z), 2*(x*y - w*z),     2*(x*z + w*y)],
+        [2*(x*y + w*z),     1 - 2*(x*x + z*z), 2*(y*z - w*x)],
+        [2*(x*z - w*y),     2*(y*z + w*x),     1 - 2*(x*x + y*y)]])
+
+R_quat = quat_to_R(q120)
+for row in tidy(R_quat):
+    print("   ", row)
+print(f"\nmatches MuJoCo: {np.abs(R_quat - R120).max():.1e}")
+```
+
+With $w = x = y = z = \tfrac12$ every product is $\tfrac14$, so each diagonal entry
+is $1 - 2(\tfrac14 + \tfrac14) = 0$, each $2(xy - wz) = 0$, and each
+$2(xy + wz) = 1$. Hence the permutation matrix.
+
+The rotation is also written $v' = q\,v\,q^{-1}$ — the same operation as $Rv$,
+which is why we convert once and then use the matrix.
+
+---
+
+## Euler $\to R$: multiply three matrices {.smaller}
+
+MuJoCo's lowercase `'xyz'` is **intrinsic**, so the three turns compose
+left to right:
+
+$$R = R_x(\text{roll})\,R_y(\text{pitch})\,R_z(\text{yaw})$$
+
+$$R_x(90°) = \begin{bmatrix}1&0&0\\0&0&-1\\0&1&0\end{bmatrix},\quad
+R_y(90°) = \begin{bmatrix}0&0&1\\0&1&0\\-1&0&0\end{bmatrix},\quad
+R_z(0°) = I$$
+
+```{python}
+def Ry(t):
+    return np.array([[np.cos(t), 0, np.sin(t)], [0, 1, 0], [-np.sin(t), 0, np.cos(t)]])
+
+R_euler = Rx(np.radians(90)) @ Ry(np.radians(90)) @ Rz(np.radians(0))
+for row in tidy(R_euler):
+    print("   ", row)
+print(f"\nmatches MuJoCo: {np.abs(R_euler - R120).max():.1e}")
+print(f"all three hand conversions agree: "
+      f"{np.allclose(R_rod, R_quat) and np.allclose(R_quat, R_euler)}")
+```
+
+**The order of the product is the convention.** Reverse it and you get a
+different, equally legal rotation — this is the "dozen conventions" line in the
+table, made concrete.
+
+---
+
+## What $R$ actually does {.smaller}
+
+All three forms converge on one matrix, and the matrix is the thing that acts on a
+vector:
+
+$$\mathbf{v}' = R\,\mathbf{v}
+\qquad\Longrightarrow\qquad
+\begin{bmatrix}x'\\y'\\z'\end{bmatrix}
+=\begin{bmatrix}0&0&1\\1&0&0\\0&1&0\end{bmatrix}
+\begin{bmatrix}x\\y\\z\end{bmatrix}
+=\begin{bmatrix}z\\x\\y\end{bmatrix}$$
+
+```{python}
+for v in ([1, 0, 0], [0, 1, 0], [0, 0, 1], [1, 2, 3]):
+    print(f"   R @ {str(v):10s} = {tidy(R120 @ np.array(v, float))}")
+```
+
+Read the last line: the rotation copies $z$ into the new $x$ slot, $x$ into $y$,
+and $y$ into $z$. That is the $x \to y \to z \to x$ cycle, now as arithmetic.
+
+**This is the only operation we ever need.** `my_fk` calls it once per link —
+`rot @ model.body_pos[bid]` is exactly $R\mathbf{v}$, and nothing else in forward
+kinematics does anything more exotic.
+
 ---
 
 ## Why a matrix needs nine numbers for three freedoms {.smaller}

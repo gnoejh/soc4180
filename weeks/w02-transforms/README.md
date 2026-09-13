@@ -91,6 +91,23 @@ form of it is memorable and hand-checkable:
 | matrix | a permutation matrix of 0s and 1s; it sends x→y→z→x |
 | Euler | roll 90, pitch 90, yaw 0 (`xyz`) |
 
+**Every conversion to $R$ is done by hand and then checked**, because the matrix
+is the only form that acts on a vector, so the other three have to reach it:
+
+| Conversion | Formula on the slide | Agreement with MuJoCo |
+| --- | --- | --- |
+| axis-angle -> R | Rodrigues, with the cross-product matrix written out | 2.2e-16 |
+| quaternion -> R | the quadratic 3x3 in `w,x,y,z` | 1.1e-16 |
+| Euler -> R | `Rx(roll) @ Ry(pitch) @ Rz(yaw)` | 1.1e-16 |
+
+**MuJoCo's lowercase `'xyz'` is intrinsic and equals `Rx @ Ry @ Rz`** — verified
+against a non-degenerate triple (20, 35, 50), where the reversed product does
+*not* match. Uppercase `'XYZ'` is extrinsic and equals `Rz @ Ry @ Rx`. Getting
+that backwards is the "dozen conventions" trap in person.
+
+The operator slide closes it: `R @ [1,2,3] = [3,1,2]`, the x->y->z->x cycle as
+arithmetic, and the same `rot @ body_pos` that `my_fk` runs once per link.
+
 The three failure modes are then measured, not asserted:
 
 - **sign** — `q` and `-q` give matrices differing by exactly `0.0`

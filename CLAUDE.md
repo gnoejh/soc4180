@@ -669,15 +669,28 @@ drop is 0.0176 m.
 **Week 2's rotation representations hang on one worked example**: 120° about
 `(1,1,1)/sqrt(3)`, chosen because every form is memorable and hand-checkable — the
 quaternion is `(0.5, 0.5, 0.5, 0.5)`, the matrix is a permutation sending
-x→y→z→x, and the Euler triple is roll 90 / pitch 90 / yaw 0 in `xyz`. All three
-failure modes are then measured: `q` vs `-q` differ by exactly `0.0`; the
+x→y→z→x, and the Euler triple is roll 90 / pitch 90 / yaw 0 in `xyz`.
+
+**Every conversion to `R` is written out and checked** rather than left inside a
+MuJoCo call — Rodrigues (2.2e-16), the quadratic quaternion 3x3 (1.1e-16), and
+`Rx @ Ry @ Rz` (1.1e-16) — because the matrix is the only form that acts on a
+vector. **MuJoCo's lowercase `'xyz'` is intrinsic and equals `Rx @ Ry @ Rz`;
+uppercase `'XYZ'` is extrinsic and equals `Rz @ Ry @ Rx`** — verified on a
+non-degenerate triple (20, 35, 50), where the reversed product does not match.
+Do not check this against a triple with a zero in it: `Rz(0) = I` hides the
+difference.
+
+All three failure modes are measured too: `q` vs `-q` differ by exactly `0.0`; the
 validated pose's foot quaternion is tilted 7.6° but reads as 174.8° scalar-last
 (the down-vector flips from -1.0 to +0.99, while staying unit length and legal);
 and at pitch 90° four different (roll, yaw) pairs sharing a sum give a
 bit-identical quaternion, with the degeneracy fading slowly — 0.52° apart at
-pitch 89°, 5.17° at 80°, 15.36° at 60°. MuJoCo supplies every conversion needed
-(`mju_axisAngle2Quat`, `mju_euler2Quat` with a `seq` string, `mju_mat2Quat`,
-`mju_quat2Vel`); do not hand-roll them.
+pitch 89°, 5.17° at 80°, 15.36° at 60°.
+
+MuJoCo supplies every conversion (`mju_axisAngle2Quat`, `mju_euler2Quat` with a
+`seq` string, `mju_mat2Quat`, `mju_quat2Vel`). Week 2 hand-writes them anyway and
+diffs against these — that is the teaching, not duplication — but **package code
+must call MuJoCo's**, never a copy of the slide's.
 
 **The `left_foot` site is NOT the sole — do not label it one.** It is a site at
 the `left_ankle_roll_link` **origin** (`site_pos = [0,0,0]`), and it sits **3.5 cm

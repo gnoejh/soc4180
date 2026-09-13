@@ -1316,11 +1316,60 @@ almost nothing.
 
 ---
 
+## What you built today, in order {.smaller}
+
+Two things, and **one depends on the other**. Keep the arrow pointing the right
+way:
+
+$$\underbrace{\mathbf{x} = f(\mathbf{q})}_{\text{forward kinematics}}
+\;\xrightarrow{\ \text{differentiate}\ }\;
+\underbrace{J = \dfrac{\partial f}{\partial \mathbf{q}}}_{\text{the Jacobian}}$$
+
+**1. Forward kinematics computes positions.** Walk the tree from the pelvis down,
+and at each link apply the fixed offset and the joint rotation,
+$\mathbf{p} \mapsto R\mathbf{p} + \mathbf{t}$, always relative to the parent. That
+is the *only* thing in this course that produces a position. Twelve lines, and
+it matched MuJoCo to $10^{-16}$.
+
+**2. The Jacobian computes *change*, not position.** It is the derivative of
+step 1 — it answers "if the joints move a little, where does the foot go?" It
+cannot tell you where the foot *is*, and it never could: differentiating throws
+that away.
+
+And the dependency runs one way only:
+
+```{python}
+calls = 0
+
+def counted_foot(angles):
+    global calls
+    calls += 1
+    return foot_at(angles)
+
+x0 = counted_foot(crouch)
+for j in range(6):
+    q = list(crouch); q[j] += 1e-6
+    _ = counted_foot(q)
+
+print(f"forward-kinematics evaluations needed to build J by hand: {calls}")
+print("   1 for the starting position, then 1 per joint")
+print("\nso: FK is the primitive. J is measured FROM it, never the reverse.")
+```
+
+Even the "empirical" Jacobian is **seven calls to forward kinematics**. MuJoCo's
+analytic version differentiates the same chain symbolically — faster, and with no
+$\varepsilon$ — but it is still $f$ that is being differentiated.
+
+---
+
 ## Next week
 
 **Inverse kinematics.** Today: angles in, position out. Next week: *position in,
 angles out* — which is harder, sometimes has many answers, sometimes none, and
 occasionally blows up entirely.
+
+That is where the Jacobian earns its keep. You cannot invert $f$ directly, but you
+*can* ask $J$ which way to nudge the joints, take a small step, and repeat.
 
 We start by inverting the very two-link leg you built on paper today, with the
 same $L_1$ and $L_2$ — and then throw it away for a method that handles all six

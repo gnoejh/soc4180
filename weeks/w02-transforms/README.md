@@ -78,6 +78,31 @@ here: all 30 of the G1's joints have `jnt_pos = 0` (so does every other humanoid
 in Menagerie). The slide demonstrates it on a nine-line MJCF instead, where
 dropping the term moves the tip 0.215 m.
 
+## Why three compact representations exist at all
+
+The deck states the purpose before it compares anything, because "four options,
+no free lunch" teaches nothing on its own. The reason is the **constraint count**,
+not the number count:
+
+| Form | Numbers | Constraints | Freedoms |
+| --- | --- | --- | --- |
+| matrix | 9 | 6 | 3 |
+| quaternion | 4 | 1 | 3 |
+| axis-angle / Euler | 3 | 0 | 3 |
+
+A matrix you keep multiplying drifts off the set of valid rotations and needs
+re-orthonormalising against six rules; a quaternion needs `q /= norm(q)`.
+
+**The traffic is one-way this week and reverses next week**, and the deck says so
+rather than leaving a rule that later looks broken. Forward kinematics only ever
+goes representation → R. But week 3's `pose_error` goes back — `mju_mat2Quat`
+then `mju_quat2Vel` — because the Jacobian's angular rows want a 3-vector, and an
+error must be something you can **scale and add**: half a rotation matrix is not a
+rotation, half an axis-angle vector is "go half way there". The slide runs it:
+ask for 2 cm and 10°, get back `[0.02, 0, 0, 0, 0.1745, 0]`.
+
+So: compress to **store**, expand to **act**, compress again to **correct**.
+
 ## The worked rotation
 
 One rotation carries the whole representations section: **120° about

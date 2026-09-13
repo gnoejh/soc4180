@@ -325,6 +325,16 @@ notebooks; it would commit executed outputs over the generated file.
 
 - `#| eval: false` **does** survive into `lab.ipynb` as a genuine unexecuted code
   cell. No post-render cell injector is needed.
+- **…which means a student's *Run All* executes it.** `eval: false` stops *Quarto*
+  from running the cell; it does not stop Colab. So an illustrative snippet with
+  undefined names is a `NameError` waiting for the first student who runs the
+  notebook top to bottom, and `execute.error: false` will never catch it because
+  the cell is never executed during render. Week 2 shipped one for exactly one
+  commit. **Either make the cell genuinely runnable, or make it a plain fenced
+  ```` ```python ```` block that is not a cell at all.** Week 10's is the only
+  legitimate use in the repo: an opt-in GPU training cell that carries its own
+  imports. Catch these by executing the generated notebook with `nbclient`, which
+  runs every cell regardless of `eval`.
 - The Week-1 setup cell uses `try: import soc4180 / except ImportError: %pip install`
   rather than a bare `!pip install`, so the notebook is safe to run locally *and*
   installs on Colab. Keep that shape. This is the one place it outranks *Install
@@ -665,6 +675,23 @@ hip->knee vector is `[0, +0.0541, -0.3366]` and splays 5.4 cm sideways. Week 3's
 law of cosines needs the **true 3D length 0.3409 m**. Using 0.3409 in the planar
 formula costs 4 mm. The shin is 0.3000 m either way, and the ankle-to-foot-site
 drop is 0.0176 m.
+
+**Say why three compact representations exist before comparing them.** The reason
+is the constraint count, not the number count: matrix 9 numbers / 6 constraints,
+quaternion 4 / 1, axis-angle and Euler 3 / 0. A matrix you keep multiplying drifts
+off SO(3) and needs re-orthonormalising against six rules; a quaternion needs
+`q /= norm(q)`. Measured over 100k compositions: matrix `|RRᵀ−I|` reaches 1.4e-12,
+quaternion `|q|−1` only 2.7e-13. That is why `qpos` stores the base as 4 numbers.
+
+**The "representation → R only" rule is true for week 2 and false for week 3 — so
+teach it with its scope.** Forward kinematics never asks "what quaternion is this
+matrix?", but `kinematics.pose_error` runs `mju_mat2Quat` then `mju_quat2Vel`,
+because the site Jacobian's angular rows want a 3-vector and **an error must be
+something you can scale and add** — half a rotation matrix is not a rotation, half
+an axis-angle vector is "go half way". Week 2 demonstrates it live: ask for 2 cm
+and 10° and `pose_error` returns exactly `[0.02, 0, 0, 0, 0.1745, 0]`. Do not write
+"the reverse conversion is never used"; it is used, and the reason it is used is
+the best argument for the compact forms.
 
 **Week 2's rotation representations hang on one worked example**: 120° about
 `(1,1,1)/sqrt(3)`, chosen because every form is memorable and hand-checkable — the

@@ -515,24 +515,82 @@ robot. That method is: compose the transforms, one body at a time.
 
 ## Ways to write a rotation {.smaller}
 
-Before composing, pick how to store one. Four common choices, no free lunch:
+**First, why bother?** Only the matrix multiplies a vector. So if the matrix does
+all the work, why does anyone use the other three?
 
-| Representation | Numbers | Good | Bad |
-| --- | --- | --- | --- |
-| Rotation matrix | 9 | Composes by multiplication | 6 redundant constraints |
-| **Quaternion** | 4 | Compact, no gimbal lock, interpolates | Sign ambiguity: $q$ and $-q$ are the same rotation |
-| Axis–angle | 3 | Matches angular velocity | Awkward to compose |
-| Euler angles | 3 | Human-readable | **Gimbal lock**; a dozen conventions |
+**Because a rotation is three numbers' worth of information, and the matrix
+spends nine.** The other three forms are compressions of it:
 
-The table is abstract until you see one rotation written all four ways. So take a
-single, concrete rotation and do exactly that.
+| Representation | Numbers | Constraints | Freedoms | Good at | Bad at |
+| --- | --- | --- | --- | --- | --- |
+| Rotation matrix | 9 | 6 | 3 | acting on a vector; composing | storing — 6 rules to keep true |
+| **Quaternion** | 4 | 1 | 3 | **storing**; interpolating | reading; sign ambiguity |
+| Axis–angle | 3 | 0 | 3 | **angular velocity and error** | composing |
+| Euler angles | 3 | 0 | 3 | **saying out loud** | gimbal lock; a dozen conventions |
+
+Count the constraints, not just the numbers. A matrix you keep multiplying drifts
+off the set of valid rotations and must be **re-orthonormalised** — six rules to
+restore. A quaternion needs only `q /= norm(q)`. That is why MuJoCo's `qpos`
+stores the floating base as **4 numbers, not 9**.
+
+---
+
+## Which way does the traffic flow? {.smaller}
+
+**Today, one way only.** Every representation gets converted *into* $R$, and never
+back:
+
+$$\text{axis-angle},\ \text{quaternion},\ \text{Euler} \;\longrightarrow\; R \;\longrightarrow\; \mathbf{v}' = R\mathbf{v}$$
+
+`my_fk` is the proof: it reads `body_quat` and a joint axis-angle, turns both into
+matrices, and from then on only multiplies. Nothing ever asks "what quaternion is
+this matrix?"
+
+**Next week, the traffic reverses** — and it is worth knowing now, so the rule
+does not become a superstition. Inverse kinematics needs an orientation *error*,
+and the Jacobian's angular rows expect a **3-vector**, not a 3×3. So
+`soc4180.kinematics.pose_error` runs the other way:
+
+Inside it: `residual = target_mat @ cur.T` is a 3×3 saying *how far the foot is
+from its target*, then `mju_mat2Quat` and `mju_quat2Vel` walk it back down to
+three numbers. Ask for a **2 cm** move and a **10°** turn, and see what comes out:
+
+```{python}
+d_err = soc4180.keyframe_data(model, "stand")
+d_err.qpos[idx] = crouch
+mujoco.mj_forward(model, d_err)
+
+sid = kin.foot_site_id(model, "left")
+cur = d_err.site_xmat[sid].reshape(3, 3)
+
+turn = np.zeros(4)                                  # a 10 degree turn about y
+mujoco.mju_axisAngle2Quat(turn, np.array([0.0, 1.0, 0.0]), np.radians(10))
+
+err = kin.pose_error(d_err, sid,
+                     d_err.site_xpos[sid] + np.array([0.02, 0.0, 0.0]),
+                     quat2mat(turn) @ cur)
+
+print("pose_error returns one 6-vector:", np.round(err, 4))
+print("   position part :", np.round(err[:3], 4), " <- the 2 cm we asked for")
+print("   rotation part :", np.round(err[3:], 4),
+      f" <- {np.degrees(np.linalg.norm(err[3:])):.2f} deg about y")
+print("   half of it    :", np.round(err[3:] / 2, 4), " <- and it can be halved")
+```
+
+There is the fourth reason for the compact forms, and the one that actually bites:
+**an error has to be a vector you can scale and add.** A 3×3 matrix cannot be
+halved — half of a rotation matrix is not a rotation. An axis-angle vector can,
+and halving it means exactly "go half way there", which is what every IK step does.
+
+So: compress to **store**, expand to **act**, compress again to **correct**.
 
 ---
 
 ## One rotation, four ways {.smaller}
 
-Turn by **120° about the diagonal axis $(1,1,1)/\sqrt{3}$** — the axis pointing out
-of the corner of a cube. Watch what it does to the three axes:
+A table is abstract until you see one rotation written all four ways. Turn by
+**120° about the diagonal axis $(1,1,1)/\sqrt{3}$** — the axis pointing out of the
+corner of a cube. Watch what it does to the three axes:
 
 ```{python}
 diag = np.ones(3) / np.sqrt(3)

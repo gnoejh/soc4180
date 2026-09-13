@@ -70,6 +70,68 @@ function that turns those six angles into "the foot is here."**
 
 ---
 
+## The names you will meet today {.smaller}
+
+Week 1 split the world in two: **`model`** is the robot (constants from the file,
+never change), **`data`** is this instant (changes every step). Every array below
+lives in one or the other, and there is a rule for telling which.
+
+**An `x` in front means "computed, in world coordinates".** No `x` means
+"declared in the MJCF, relative to the parent".
+
+| Declared — in `model` | Computed — in `data` |
+| --- | --- |
+| `body_pos[b]`, `body_quat[b]` — link's fixed offset from its **parent** | `xpos[b]`, `xmat[b]` — where body `b` **actually is**, in world |
+| `site_pos[s]` — a marker's fixed offset inside its body | `site_xpos[s]`, `site_xmat[s]` — where that marker actually is |
+| `jnt_pos[j]`, `jnt_axis[j]` — where the joint sits, and what it turns about | `qpos` — the current angles |
+
+```{python}
+b = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "left_knee_link")
+s = kin.foot_site_id(model, "left")
+
+print("model.body_pos [declared, from its parent] :", np.round(model.body_pos[b], 4))
+print("data .xpos     [computed, in world]        :", np.round(data.xpos[b], 4))
+print()
+print("model.site_pos [declared, inside its body] :", np.round(model.site_pos[s], 4))
+print("data .site_xpos[computed, in world]        :", np.round(data.site_xpos[s], 4))
+print("data .site_xmat[computed, 3x3 flattened]   :", np.round(data.site_xmat[s], 3))
+```
+
+**`mujoco.mj_forward(model, data)` is what connects the columns.** It reads
+`data.qpos` and fills in every `x` quantity. In other words: *MuJoCo already has
+forward kinematics, and `mj_forward` is it.* Today you write your own and check it
+against MuJoCo's, which is why we can demand agreement to the last decimal.
+
+(Functions beginning `mju_` are small maths utilities — quaternion and matrix
+conversions. Each is introduced where it is first needed.)
+
+---
+
+## ...and the helpers that do the index bookkeeping {.smaller}
+
+MuJoCo addresses everything by integer id, so `soc4180.kinematics` (imported as
+`kin`) carries the lookups for the left and right legs. Four you will see all day:
+
+```{python}
+print("kin.LEG_JOINTS            :", kin.LEG_JOINTS)
+print("kin.leg_chain(model,'left'):", kin.leg_chain(model, "left"), " <- body ids, hip to foot")
+print("kin.foot_site_id(...)      :", kin.foot_site_id(model, "left"), " <- the site id")
+print()
+print("kin.leg_qpos_indices(...)  :", kin.leg_qpos_indices(model, "left"), " <- slots in qpos (positions)")
+print("kin.leg_dof_indices(...)   :", kin.leg_dof_indices(model, "left"), " <- slots in qvel (velocities)")
+```
+
+**Look at those last two: `7..12` against `6..11`.** The same six joints have
+different addresses in position space and velocity space, off by one — because the
+floating base spends **7** numbers on position and only **6** on velocity. That is
+the `nq` versus `nv` gap of Week 1, showing up as an indexing hazard you will hit
+if you mix them.
+
+`soc4180.keyframe_data(model, "stand")` gives a fresh `data` already posed at a
+named keyframe — a shortcut for `MjData` plus a copy of `key_qpos`.
+
+---
+
 ## What those six numbers do {.smaller}
 
 Only the **left** leg's six angles change below. The right leg is untouched, so
@@ -1153,10 +1215,14 @@ def jacobian_fd(eps):
 
 J_fd = jacobian_fd(1e-6)
 
+              # mj_jacSite WRITES INTO the arrays you hand it -- it returns nothing.
+              # jac_p gets the position rows, jac_r the orientation rows, and both
+              # are (3 x nv): a column for every joint in the robot, not just the leg.
 jac_p = np.zeros((3, model.nv))
 jac_r = np.zeros((3, model.nv))
 mujoco.mj_jacSite(model, d, jac_p, jac_r, kin.foot_site_id(model, "left"))
-dofs = kin.leg_dof_indices(model, "left")
+
+dofs = kin.leg_dof_indices(model, "left")     # so pick out our six leg columns
 J_exact = jac_p[:, dofs]
 
 print("finite differences, eps = 1e-6   (units: metres per radian)")

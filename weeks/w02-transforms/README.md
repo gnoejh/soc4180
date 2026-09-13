@@ -80,6 +80,35 @@ here: all 30 of the G1's joints have `jnt_pos = 0` (so does every other humanoid
 in Menagerie). The slide demonstrates it on a nine-line MJCF instead, where
 dropping the term moves the tip 0.215 m.
 
+## The MuJoCo API is introduced before it is used
+
+The deck used to reach for `mj_forward` in its very first cell and `site_xmat`
+400 lines later, both unexplained. Two reference slides now sit right after the
+setup cell, before anything depends on them.
+
+The rule students are given: **an `x` in front means "computed, in world
+coordinates"; no `x` means "declared in the MJCF, relative to the parent"**.
+
+| Declared — in `model` | Computed — in `data` |
+| --- | --- |
+| `body_pos`, `body_quat` | `xpos`, `xmat` |
+| `site_pos` | `site_xpos`, `site_xmat` |
+| `jnt_pos`, `jnt_axis` | `qpos` |
+
+And the sentence that makes the whole lab make sense: **`mj_forward` is MuJoCo's
+own forward kinematics** — it reads `qpos` and fills every `x` quantity. The lab
+reimplements it and demands agreement to the last decimal.
+
+The second slide covers the `soc4180.kinematics` lookups, and uses them to expose
+a real hazard: `leg_qpos_indices` returns `7..12` while `leg_dof_indices` returns
+`6..11`. Same six joints, addresses off by one, because the floating base spends 7
+numbers on position and 6 on velocity. That is week 1's `nq`/`nv` gap reappearing
+as an indexing bug waiting to happen.
+
+`mj_jacSite` also gets an inline note where it first appears, because it **writes
+into** the arrays you pass and returns nothing — and they are `3 x nv`, columns for
+every joint in the robot, not just the leg.
+
 ## Why three compact representations exist at all
 
 The deck states the purpose before it compares anything, because "four options,

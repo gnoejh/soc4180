@@ -676,6 +676,23 @@ law of cosines needs the **true 3D length 0.3409 m**. Using 0.3409 in the planar
 formula costs 4 mm. The shin is 0.3000 m either way, and the ankle-to-foot-site
 drop is 0.0176 m.
 
+**Introduce a MuJoCo array before the slide that uses it.** Week 2 reached for
+`mj_forward` in its first cell and `site_xmat` 400 lines later, both unexplained,
+which made a deck aimed at beginners hard to follow. Two reference slides now sit
+straight after the setup cell. The rule worth reusing in any week: **an `x` prefix
+means "computed, in world coordinates"; no `x` means "declared in the MJCF,
+relative to the parent"** — `body_pos` vs `xpos`, `site_pos` vs `site_xpos`. And
+say plainly that **`mj_forward` IS MuJoCo's forward kinematics**: it reads `qpos`
+and fills every `x` quantity, which is what makes "write your own and compare"
+meaningful rather than arbitrary.
+
+The same slide pair exposes a genuine hazard worth keeping: `leg_qpos_indices`
+returns `7..12` and `leg_dof_indices` returns `6..11` — same six joints, addresses
+off by one, because the floating base spends 7 numbers on position and 6 on
+velocity. Mixing them is a silent bug. `mj_jacSite` needs its own note too: it
+**writes into** the arrays passed to it and returns nothing, and they are `3 x nv`
+— every joint in the robot, not just the leg.
+
 **The Jacobian is taught as a derivative, not a black box.** Week 2 measures first
 (nudge 0.01 rad, read millimetres), then divides by the nudge and writes
 `J = ∂x/∂q` with `J e_j ≈ [f(q + ε e_j) − f(q)] / ε`. The 3×6 finite-difference

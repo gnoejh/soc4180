@@ -626,10 +626,19 @@ not make it identical across machines.
 ## Kinematics (weeks 2-3)
 
 `fk_foot` composes the leg chain by hand and matches MuJoCo's `site_xpos` to
-**~1e-16**. Keep that as the week-2 acceptance test. The three ways to break it:
-omitting the joint anchor (`a - Rj @ a`, since joints rotate about `jnt_pos`, not
-the body origin), composing in the wrong order, and scalar-last quaternions —
-MuJoCo is `(w, x, y, z)`.
+**~1e-16**. Keep that as the week-2 acceptance test. Two ways to break it:
+composing in the wrong order, and scalar-last quaternions — MuJoCo is
+`(w, x, y, z)`.
+
+**The joint anchor is not a third way, on this robot.** `a - Rj @ a` in `fk_foot`
+is dead code for the G1: **all 30 joints have `jnt_pos = 0`**, and so does every
+humanoid in Menagerie (h1, berkeley_humanoid, op3, apollo, booster_t1 — checked).
+MJCF authors put the joint at the body origin and carry the offset in `body_pos`.
+Keep the term — it is right in general — but do not claim students can break FK
+by deleting it, and do not set it as an exercise: an earlier week-2 exercise did
+exactly that and the answer was an error of 0.0000. Week 2 now demonstrates the
+anchor on a nine-line MJCF with `<joint pos="0.3 0 0">`, where dropping the term
+moves the site 0.215 m while MuJoCo holds it exactly still.
 
 **Leg segment lengths must be measured between joint anchors, not from
 `|body_pos|`.** The hip is three separate link bodies whose offsets accumulate,
@@ -661,9 +670,11 @@ anything demonstrating kinematics, so the robot does not fall over mid-lesson.
 gait) make the G1 walk **~1.0 m in 9 s, open loop, with no learning**. Two bugs
 cost real time here; do not reintroduce them.
 
-**The `stand` keyframe is a kinematic singularity.** Every leg joint is exactly
-zero, i.e. a perfectly straight leg, so the Jacobian has no direction that
-shortens it and IK cannot lower the body at all (the knee range is
+**The `stand` keyframe is a kinematic singularity.** Measured: the leg Jacobian's
+smallest singular value is **8.96e-07 at `stand`** (numerical rank 5 of 6) against
+**0.0887 at the week-4 crouch** — a factor of ~99,000, and the answer to a week-2
+exercise. Every leg joint is exactly zero, i.e. a perfectly straight leg, so the
+Jacobian has no direction that shortens it and IK cannot lower the body at all (the knee range is
 `[-0.087, 2.880]`, so it also clips immediately). Seed IK from the bent-knee
 crouch in `WalkingController.nominal`, never from `stand`.
 

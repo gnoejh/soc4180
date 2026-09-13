@@ -23,8 +23,13 @@
 
 Hand-written FK agrees with MuJoCo's `site_xpos` to **~1e-16** — machine
 precision, because it is the same computation. Anything larger is a bug, and the
-three usual causes are named on the slide: a missing joint anchor, composition in
-the wrong order, or scalar-last quaternions.
+two causes that can actually bite on the G1 are named on the slide: composition
+in the wrong order, or scalar-last quaternions.
+
+The third textbook cause — a missing joint anchor — **cannot** produce an error
+here: all 30 of the G1's joints have `jnt_pos = 0` (so does every other humanoid
+in Menagerie). The slide demonstrates it on a nine-line MJCF instead, where
+dropping the term moves the tip 0.215 m.
 
 ## Rebuild
 

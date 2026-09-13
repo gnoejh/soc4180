@@ -524,13 +524,134 @@ Before composing, pick how to store one. Four common choices, no free lunch:
 | Axis–angle | 3 | Matches angular velocity | Awkward to compose |
 | Euler angles | 3 | Human-readable | **Gimbal lock**; a dozen conventions |
 
-You do not need quaternion algebra today. You need three rules:
+The table is abstract until you see one rotation written all four ways. So take a
+single, concrete rotation and do exactly that.
 
-- **MuJoCo stores quaternions as `(w, x, y, z)`** — scalar *first*. SciPy, ROS and
-  most game engines put it *last*. Mixing the two gives rotations that look
-  plausible and are wrong.
-- **Never add or interpolate Euler angles** near vertical — that is gimbal lock.
-- **Convert to a matrix and compose matrices.** That is what `quat2mat` is for.
+---
+
+## One rotation, four ways {.smaller}
+
+Turn by **120° about the diagonal axis $(1,1,1)/\sqrt{3}$** — the axis pointing out
+of the corner of a cube. Watch what it does to the three axes:
+
+```{python}
+diag = np.ones(3) / np.sqrt(3)
+q120 = np.zeros(4)
+mujoco.mju_axisAngle2Quat(q120, diag, np.radians(120))
+R120 = quat2mat(q120)
+
+def tidy(a):
+    """Round, and turn -0.0 into 0.0 so the numbers read cleanly."""
+    a = np.round(a, 4)
+    return np.where(a == 0, 0.0, a)
+
+q_euler = np.zeros(4)
+mujoco.mju_euler2Quat(q_euler, np.radians([90.0, 90.0, 0.0]), "xyz")
+
+print("AXIS-ANGLE  : 120 deg about", tidy(diag), "   <- 3 numbers")
+print("QUATERNION  :", tidy(q120), "                    <- 4 numbers (w, x, y, z)")
+print("EULER       : roll 90, pitch 90, yaw 0, 'xyz'        <- 3 numbers")
+print("              same rotation as the quaternion?", np.allclose(quat2mat(q_euler), R120))
+print("\nMATRIX      :                                       <- 9 numbers")
+for row in tidy(R120):
+    print("             ", row)
+
+print("\nwhat it does to the three axes:")
+for name, v in [("x", [1, 0, 0]), ("y", [0, 1, 0]), ("z", [0, 0, 1])]:
+    print(f"   {name} -> {tidy(R120 @ v)}")
+```
+
+It sends $x \to y \to z \to x$ — a three-fold cycle, which is why $120°$ brings the
+cube corner back to itself. Every row above is the **same rotation**, and each is
+the natural choice for a different job: the quaternion to *store*, the matrix to
+*compose*, axis-angle to *reason about*, Euler to *say out loud*.
+
+---
+
+## Why a matrix needs nine numbers for three freedoms {.smaller}
+
+A rotation has three degrees of freedom. The matrix spends nine, so six of them
+must be spoken for — and they are, by a constraint you can check:
+
+```{python}
+print("R @ R.T  (should be the identity):")
+for row in tidy(R120 @ R120.T):
+    print("   ", row)
+print(f"\nmax deviation from identity : {np.abs(R120 @ R120.T - np.eye(3)).max():.1e}")
+print(f"determinant                 : {np.linalg.det(R120):.6f}   <- +1, not -1")
+print(f"length of each column       : {np.round(np.linalg.norm(R120, axis=0), 6)}")
+```
+
+Columns of unit length, mutually perpendicular: $3 + 3 = 6$ constraints on $9$
+numbers, leaving $3$. A determinant of $-1$ would be a **reflection** — a mirrored
+robot, not a turned one.
+
+The quaternion does the same bookkeeping with one constraint on four numbers,
+$\|q\| = 1$ — which is exactly the `nq` versus `nv` gap from Week 1.
+
+---
+
+## Two ways a quaternion bites {.smaller}
+
+```{python}
+print("1. SIGN:  q and -q are the SAME rotation")
+print("   q  =", np.round(q120, 4), "  ->  -q =", np.round(-q120, 4))
+print(f"   max |R(q) - R(-q)| = {np.abs(quat2mat(q120) - quat2mat(-q120)).max():.1e}")
+print("   so you cannot compare orientations by comparing quaternion numbers.\n")
+
+print("2. ORDER:  MuJoCo is scalar-FIRST. SciPy, ROS and most engines are scalar-LAST.")
+dq = soc4180.keyframe_data(model, "stand")
+dq.qpos[idx] = [-0.30, 0.10, 0.05, 0.70, -0.35, 0.02]
+mujoco.mj_forward(model, dq)
+q_foot = np.zeros(4)
+mujoco.mju_mat2Quat(q_foot, dq.site_xmat[kin.foot_site_id(model, "left")])
+misread = np.r_[q_foot[3], q_foot[:3]]          # scalar taken from the wrong end
+
+def turn_angle(R):
+    return np.degrees(np.arccos(np.clip((np.trace(R) - 1) / 2, -1, 1)))
+
+print("   the foot's real orientation (w,x,y,z) :", np.round(q_foot, 4))
+print("   the same four numbers, read backwards :", np.round(misread, 4))
+print(f"   it is tilted {turn_angle(quat2mat(q_foot)):.1f} deg ... "
+      f"but read backwards, {turn_angle(quat2mat(misread)):.1f} deg")
+print(f"   the foot's down direction: true {np.round(quat2mat(q_foot) @ [0, 0, -1], 2)}"
+      f"   misread {np.round(quat2mat(misread) @ [0, 0, -1], 2)}")
+```
+
+The misread quaternion is still **unit length and a perfectly legal rotation** —
+nothing raises, nothing is out of range. It simply turns the foot upside down.
+
+---
+
+## Gimbal lock, measured {.smaller}
+
+Euler angles are readable, and they fail in a specific place. Set **pitch to 90°**
+and roll and yaw stop being independent — only their *sum* survives:
+
+```{python}
+def from_euler(roll, pitch, yaw):
+    q = np.zeros(4)
+    mujoco.mju_euler2Quat(q, np.radians([roll, pitch, yaw]).astype(float), "xyz")
+    return q
+
+print("pitch = 90 deg:")
+for roll, yaw in [(30, 0), (0, 30), (15, 15), (45, -15)]:
+    print(f"   roll {roll:+4d}, yaw {yaw:+4d}  (sum {roll + yaw:+4d})  ->  "
+          f"quat {np.round(from_euler(roll, 90, yaw), 4)}")
+
+print("\nand it is not a knife edge — the degeneracy fades slowly:")
+for pitch in (90, 89, 80, 60):
+    a, b = quat2mat(from_euler(30, pitch, 0)), quat2mat(from_euler(0, pitch, 30))
+    print(f"   pitch {pitch:3d} deg:  (roll 30, yaw 0) and (roll 0, yaw 30) "
+          f"differ by {turn_angle(a.T @ b):5.2f} deg")
+```
+
+Four different pairs of angles, **one identical rotation**. A control law that
+commands roll and yaw separately has, at that pitch, one knob doing nothing — and
+near it, one knob doing almost nothing.
+
+**This is why we compose matrices and store quaternions**, and never hand a
+controller three Euler angles.
 
 ---
 

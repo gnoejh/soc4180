@@ -53,8 +53,8 @@ model rather than drawn by hand, so a diagram cannot drift from the text:
 1. Say what a frame is, and why a position without one is meaningless.
 2. Compose rotations and translations, and say why order matters.
 3. Compute a two-link planar leg's foot position **by hand**, and check it.
-4. Choose a rotation representation and state its failure mode — including
-   MuJoCo's scalar-first `(w,x,y,z)` quaternions.
+4. Write one rotation in all four representations, and state each one's failure
+   mode — including MuJoCo's scalar-first `(w,x,y,z)` quaternions.
 5. Explain `nq > nv`, and why it means `qpos += qvel * dt` is not a valid step.
 6. **Implement forward kinematics from the model tree** and validate it against
    `mj_forward`.
@@ -77,6 +77,29 @@ The third textbook cause — a missing joint anchor — **cannot** produce an er
 here: all 30 of the G1's joints have `jnt_pos = 0` (so does every other humanoid
 in Menagerie). The slide demonstrates it on a nine-line MJCF instead, where
 dropping the term moves the tip 0.215 m.
+
+## The worked rotation
+
+One rotation carries the whole representations section: **120° about
+$(1,1,1)/\sqrt3$**, the axis out of a cube's corner. It is chosen because every
+form of it is memorable and hand-checkable:
+
+| Form | Value |
+| --- | --- |
+| axis-angle | 120° about `(0.5774, 0.5774, 0.5774)` |
+| quaternion | `(0.5, 0.5, 0.5, 0.5)` — all four components equal |
+| matrix | a permutation matrix of 0s and 1s; it sends x→y→z→x |
+| Euler | roll 90, pitch 90, yaw 0 (`xyz`) |
+
+The three failure modes are then measured, not asserted:
+
+- **sign** — `q` and `-q` give matrices differing by exactly `0.0`
+- **scalar-last** — the validated pose's foot quaternion is tilted 7.6°; read
+  backwards it becomes 174.8°, flipping the foot's down-vector from `-1.0` to
+  `+0.99`. It is still unit length and still a legal rotation, which is the point
+- **gimbal lock** — at pitch 90° four different (roll, yaw) pairs with the same
+  sum give a bit-identical quaternion, and the degeneracy fades slowly: 0.52° of
+  difference at pitch 89°, 5.17° at 80°, 15.36° at 60°
 
 ## The foot site is not the sole
 

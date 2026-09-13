@@ -666,6 +666,19 @@ law of cosines needs the **true 3D length 0.3409 m**. Using 0.3409 in the planar
 formula costs 4 mm. The shin is 0.3000 m either way, and the ankle-to-foot-site
 drop is 0.0176 m.
 
+**Week 2's rotation representations hang on one worked example**: 120° about
+`(1,1,1)/sqrt(3)`, chosen because every form is memorable and hand-checkable — the
+quaternion is `(0.5, 0.5, 0.5, 0.5)`, the matrix is a permutation sending
+x→y→z→x, and the Euler triple is roll 90 / pitch 90 / yaw 0 in `xyz`. All three
+failure modes are then measured: `q` vs `-q` differ by exactly `0.0`; the
+validated pose's foot quaternion is tilted 7.6° but reads as 174.8° scalar-last
+(the down-vector flips from -1.0 to +0.99, while staying unit length and legal);
+and at pitch 90° four different (roll, yaw) pairs sharing a sum give a
+bit-identical quaternion, with the degeneracy fading slowly — 0.52° apart at
+pitch 89°, 5.17° at 80°, 15.36° at 60°. MuJoCo supplies every conversion needed
+(`mju_axisAngle2Quat`, `mju_euler2Quat` with a `seq` string, `mju_mat2Quat`,
+`mju_quat2Vel`); do not hand-roll them.
+
 **The `left_foot` site is NOT the sole — do not label it one.** It is a site at
 the `left_ankle_roll_link` **origin** (`site_pos = [0,0,0]`), and it sits **3.5 cm
 above** the four contact spheres. At `stand` it reads `z = 0.0331` while the foot's

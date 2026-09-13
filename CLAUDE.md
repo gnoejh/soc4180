@@ -663,8 +663,24 @@ between a *model* of the leg and the leg, and the full chain then reaches 1e-16.
 planar model needs the **in-plane projection L1 = 0.3366 m**, because the
 hip->knee vector is `[0, +0.0541, -0.3366]` and splays 5.4 cm sideways. Week 3's
 law of cosines needs the **true 3D length 0.3409 m**. Using 0.3409 in the planar
-formula costs 4 mm. The shin is 0.3000 m either way, and the ankle-to-sole drop is
-0.0176 m.
+formula costs 4 mm. The shin is 0.3000 m either way, and the ankle-to-foot-site
+drop is 0.0176 m.
+
+**The `left_foot` site is NOT the sole — do not label it one.** It is a site at
+the `left_ankle_roll_link` **origin** (`site_pos = [0,0,0]`), and it sits **3.5 cm
+above** the four contact spheres. At `stand` it reads `z = 0.0331` while the foot's
+underside is at `z = -0.0019`, i.e. on the floor. Week 2 drew it as "sole" against
+a floor line at `z = 0` and the leg looked like it was floating for no reason;
+the fix was to draw the real foot underneath (measured from the group-3 geoms:
+heel at `x = -0.05`, toe at `+0.12`, so the foot is 0.170 m long and longer in
+front, which independently confirms `+x` is forward) and to say why there is a gap.
+
+**A kinematics figure that pins the pelvis will float.** In the week-2 crouch
+drawing the pelvis stays at standing height while the leg bends, so the foot rises
+**3.7 cm** off the floor. That is correct and is the point — kinematics places a
+pose, it does not settle a robot — but it must be *annotated*, or it reads as a
+bug. A real crouch lowers the pelvis instead, which is what week 4 does. Note the
+crouch's pitch angles sum to zero (-0.35 + 0.70 - 0.35), so the foot stays level.
 
 **The foot site sits exactly on the ankle-roll axis**, so that joint moves the
 foot 0.00 mm and the *position* Jacobian has a zero column there; it still changes

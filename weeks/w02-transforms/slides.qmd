@@ -360,7 +360,7 @@ print(f"  hip -> knee   : {np.round(K - H, 4)}   "
       f"true length {np.linalg.norm(K - H):.4f} m,  in-plane L1 = {L1:.4f} m")
 print(f"  knee -> ankle : {np.round(A - K, 4)}   "
       f"true length {np.linalg.norm(A - K):.4f} m,  in-plane L2 = {L2:.4f} m")
-print(f"  ankle -> sole : {foot_drop:.4f} m")
+print(f"  ankle -> foot site : {foot_drop:.4f} m   (the site is NOT the sole -- see below)")
 ```
 
 Look at the thigh: it is **not** straight down. It splays 5.4 cm sideways, so its
@@ -384,10 +384,29 @@ ax.plot([ax_, fx], [az, fz], lw=5, color="#555", solid_capstyle="round", zorder=
 ax.plot([H[0], H[0]], [H[2], H[2] - L1], ls="--", lw=1, color="#bbb")   # "straight down"
 ax.plot([kx, kx], [kz, kz - L2], ls="--", lw=1, color="#bbb")
 
-for (px, pz), lab, dx in [((H[0], H[2]), "hip", 10), ((kx, kz), "knee", 10),
-                          ((ax_, az), "ankle", 10), ((fx, fz), "sole", -38)]:
+for (px, pz), lab, off in [((H[0], H[2]), "hip", (10, 4)), ((kx, kz), "knee", (10, 4)),
+                           ((ax_, az), "ankle", (-52, 4)), ((fx, fz), "foot site", (-72, -4))]:
     ax.plot(px, pz, "o", ms=8, color="w", mec="k", mew=1.5, zorder=3)
-    ax.annotate(lab, (px, pz), textcoords="offset points", xytext=(dx, 4), fontsize=10)
+    ax.annotate(lab, (px, pz), textcoords="offset points", xytext=off, fontsize=10)
+
+# the foot site is NOT the sole: draw the real foot under it, measured from the model
+foot_sid = kin.foot_site_id(model, "left")
+pads = [g for g in range(model.ngeom)
+        if model.geom_bodyid[g] == model.site_bodyid[foot_sid] and model.geom_group[g] == 3]
+rel = np.array([data.geom_xpos[g] - data.site_xpos[foot_sid] for g in pads])
+heel, toe = rel[:, 0].min(), rel[:, 0].max()
+under = rel[:, 2].min() - model.geom_size[pads[0]][0]
+
+ax.plot([fx + heel, fx + toe], [fz + under, fz + under], lw=4, color="#555",
+        solid_capstyle="round", zorder=2)
+ax.plot([fx, fx], [fz, fz + under], lw=1.2, ls=":", color="#555")
+ax.annotate("underside of the foot", (fx + toe, fz + under), textcoords="offset points",
+            xytext=(12, 16), fontsize=9, color="#555",
+            arrowprops=dict(arrowstyle="->", color="#555", lw=1))
+ax.annotate("", xy=(fx + toe + 0.035, 0), xytext=(fx + toe + 0.035, fz + under),
+            arrowprops=dict(arrowstyle="<->", color="#c0392b", lw=1.3))
+ax.annotate(f"{(fz + under) * 100:.1f} cm of air", (fx + toe + 0.05, (fz + under) / 2),
+            fontsize=9, color="#c0392b", va="center")
 
 ax.annotate(f"$L_1$ = {L1:.4f} m", ((H[0] + kx) / 2, (H[2] + kz) / 2),
             textcoords="offset points", xytext=(14, 8), fontsize=10, color="#3b7dd8")
@@ -403,15 +422,38 @@ ax.annotate(r"$\theta_2$", (kx + 0.115, kz - 0.045), color="#e8743b", fontsize=1
 
 ax.axhline(0, color="#999", lw=1.5)
 ax.text(-0.22, 0.012, "floor", color="#999", fontsize=9)
-ax.set_xlim(-0.26, 0.30); ax.set_ylim(-0.03, 0.76); ax.set_aspect("equal")
+ax.set_xlim(-0.30, 0.46); ax.set_ylim(-0.05, 0.76); ax.set_aspect("equal")
 ax.set_xlabel("x forward (m)"); ax.set_ylabel("z up (m)")
-ax.set_title(r"the crouch:  $\theta_1 = -0.35$,  $\theta_2 = +0.70$", fontsize=11)
+ax.set_title(r"the crouch:  $\theta_1 = -0.35$,  $\theta_2 = +0.70$,  $\theta_3 = -0.35$",
+             fontsize=11)
 ax.grid(alpha=0.3); fig.tight_layout(); plt.show()
 ```
 
 Each dashed line is where the link **would** point at zero angle, so each arc is
 literally the joint's angle. The knee angle is measured **from the thigh**, not
 from vertical — which is why the two add in the formula.
+
+---
+
+## Two things that figure is telling you {.smaller}
+
+**The site we call "the foot" is not the bottom of the foot.** `left_foot` is a
+site at the ankle-roll link's *origin*, 3.5 cm above the four contact spheres.
+Forward kinematics reports where that *frame* is; touching the ground is a
+separate question.
+
+**And the foot is in the air.** The pelvis is pinned at standing height while the
+leg bends, so the foot rises 3.7 cm off the floor. That is not an error in the
+drawing — it is the point made three slides in: **kinematics places a pose; it
+does not settle a robot onto the ground.** A real crouch lowers the pelvis
+instead, which is exactly what the Week 4 walker does.
+
+Two details worth noticing while you are here:
+
+- The pitch angles sum to zero ($-0.35 + 0.70 - 0.35$), so the **foot stays
+  level**. That is deliberate: a foot that lands tilted trips.
+- The foot runs from $-0.05$ m (heel) to $+0.12$ m (toe) about the ankle. It is
+  longer in front, which is why $+x$ is forward.
 
 ---
 
@@ -528,7 +570,7 @@ for bid in kin.leg_chain(model, "left"):
 ```
 
 Each row is one link: *go here* (the offset), *then turn about this* (the axis).
-Six rows, hip to sole. The axes are Week 1's roll, pitch and yaw — $x$, $y$, $z$
+Six rows, hip to foot. The axes are Week 1's roll, pitch and yaw — $x$, $y$, $z$
 respectively — so the leg's whole design is readable straight off the table.
 
 ---
@@ -558,7 +600,7 @@ def my_fk(model, qpos, side="left"):
             pos = pos + rot @ (a - Rj @ a)          # rotate about the anchor, not the origin
             rot = rot @ Rj                          # ...and carry the turn onward
     s = kin.foot_site_id(model, side)
-    return pos + rot @ model.site_pos[s]            # finally, out to the sole
+    return pos + rot @ model.site_pos[s]            # finally, out to the foot site
 ```
 
 Twelve lines, and every one of them is $\mathbf{p} \mapsto R\mathbf{p} +
@@ -756,13 +798,13 @@ for bar, v in zip(bars, moved_mm):
     ax.annotate(f"{v:.2f} mm", (v, bar.get_y() + bar.get_height() / 2),
                 xytext=(5, 0), textcoords="offset points", va="center", fontsize=9)
 ax.invert_yaxis(); ax.set_xlim(0, 7.8)
-ax.set_xlabel("how far the sole moves (mm)")
+ax.set_xlabel("how far the foot site moves (mm)")
 ax.set_title("nudge one joint by 0.57°, measure the foot", fontsize=11)
 ax.grid(axis="x", alpha=0.3); fig.tight_layout(); plt.show()
 ```
 
 Six joints, six different sensitivities. The hip is the big lever; the ankle
-barely matters. And `ankle_roll` moves the foot **0.00 mm** — the sole sits
+barely matters. And `ankle_roll` moves the foot **0.00 mm** — the foot site sits
 exactly on that axis, so rolling it changes the foot's *orientation* and not its
 position at all.
 
@@ -832,7 +874,7 @@ smallest approaches zero, one direction has stopped responding — the leg is
    `stand` keyframe and at the crouch. Which is closer to singular, and by what
    factor? (The answer is larger than you will guess.)
 9. **Workspace volume.** Estimate the reachable volume by Monte Carlo. Then ask how
-   much of it survives the requirement that the sole stay **flat** — hint: look at
+   much of it survives the requirement that the foot stay **flat** — hint: look at
    `R[2,2]` of the foot's rotation matrix.
 
 ---

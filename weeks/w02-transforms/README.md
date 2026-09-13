@@ -43,10 +43,10 @@ model rather than drawn by hand, so a diagram cannot drift from the text:
 | Three arrows, one foot | world/pelvis/hip vectors to the same star |
 | One link, three angles | where $-L\sin\theta$ and $-L\cos\theta$ live |
 | The book, both ways | two turns in each order, blue cover and orange spine |
-| The leg as the formula sees it | $L_1$, $L_2$, and both angle arcs against dashed zero-angle lines |
+| The leg as the formula sees it | $L_1$, $L_2$, both angle arcs, the real foot, and the 3.7 cm air gap |
 | Workspace scatter | the reachable set, x–z and y–z |
 | Anchor vs body origin | why the missing term costs 0.215 m |
-| Jacobian bar chart | mm of sole travel per 0.57° of each joint |
+| Jacobian bar chart | mm of foot-site travel per 0.57° of each joint |
 
 ## Objectives
 
@@ -77,6 +77,18 @@ The third textbook cause — a missing joint anchor — **cannot** produce an er
 here: all 30 of the G1's joints have `jnt_pos = 0` (so does every other humanoid
 in Menagerie). The slide demonstrates it on a nine-line MJCF instead, where
 dropping the term moves the tip 0.215 m.
+
+## The foot site is not the sole
+
+`left_foot` is a site at the **ankle-roll link's origin**, 3.5 cm above the four
+contact spheres — at `stand` it reads `z = 0.0331` while the foot's underside is
+on the floor at `z = -0.0019`. Do not call it the sole; a student who does will
+not understand why the leg diagram shows the foot above the floor line.
+
+It shows the foot above the floor for a second reason too: the drawing pins the
+pelvis at standing height while the leg bends, so the foot rises **3.7 cm**. That
+is correct — kinematics places a pose, it does not settle a robot onto the ground
+— and the deck says so rather than hiding it.
 
 ## Two lengths for the same thigh
 

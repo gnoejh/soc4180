@@ -1084,7 +1084,8 @@ into a number.
 ## The Jacobian, in millimetres {.smaller}
 
 Forget the name for a moment and ask a concrete question: **if I nudge one joint
-by half a degree, how far does the foot move?** Measure it by simply doing it:
+by half a degree, how far does the foot move?** Measure it by simply doing it —
+this is a *derivative* being taken by hand, and the next slide names it:
 
 ```{python}
 d = soc4180.keyframe_data(model, "stand")
@@ -1119,34 +1120,161 @@ position at all.
 
 ---
 
-## ...and the Jacobian is that table {.smaller}
+## Divide by the nudge, and it is a derivative {.smaller}
 
-Stack those sensitivities into a matrix and you have $J$. MuJoCo computes it
-directly, and it predicts exactly what we just measured:
+Forward kinematics is a function $\mathbf{x} = f(\mathbf{q})$ — six angles in,
+three coordinates out. Its derivative is a $3\times 6$ matrix:
 
-$$\dot{\mathbf{x}} = J(q)\,\dot{q}$$
+$$J \;=\; \frac{\partial \mathbf{x}}{\partial \mathbf{q}},
+\qquad J_{ij} = \frac{\partial x_i}{\partial q_j}$$
+
+We already measured the numerator. **Dividing by the nudge** turns millimetres
+into a slope, and the $j$-th column is exactly what we computed:
+
+$$J\,\mathbf{e}_j \;\approx\; \frac{f(\mathbf{q} + \varepsilon\,\mathbf{e}_j) - f(\mathbf{q})}{\varepsilon}$$
+
+where $\mathbf{e}_j$ is 1 in slot $j$ and 0 elsewhere — "move only joint $j$".
 
 ```{python}
+def foot_at(angles):
+    scratch = soc4180.keyframe_data(model, "stand")
+    scratch.qpos[idx] = angles
+    mujoco.mj_forward(model, scratch)
+    return scratch.site_xpos[kin.foot_site_id(model, "left")].copy()
+
+def jacobian_fd(eps):
+    x0 = foot_at(crouch)
+    cols = []
+    for j in range(6):
+        q = list(crouch)
+        q[j] += eps                                  # q + eps * e_j
+        cols.append((foot_at(q) - x0) / eps)         # one column
+    return np.column_stack(cols)
+
+J_fd = jacobian_fd(1e-6)
+
 jac_p = np.zeros((3, model.nv))
 jac_r = np.zeros((3, model.nv))
 mujoco.mj_jacSite(model, d, jac_p, jac_r, kin.foot_site_id(model, "left"))
 dofs = kin.leg_dof_indices(model, "left")
+J_exact = jac_p[:, dofs]
 
-print("  jacobian's prediction for the same 0.57 deg nudges:")
-for k, name in enumerate(kin.LEG_JOINTS):
-    print(f"  {name:20s} {np.linalg.norm(jac_p[:, dofs[k]] * 0.01) * 1000:5.2f} mm")
-
-J = np.vstack([jac_p, jac_r])[:, dofs]
-sv = np.linalg.svd(J, compute_uv=False)
-print(f"\n  leg Jacobian shape : {J.shape}   (6 foot freedoms x 6 joints)")
-print(f"  singular values    : {np.round(sv, 4)}")
-print(f"  smallest           : {sv[-1]:.5f}")
+print("finite differences, eps = 1e-6   (units: metres per radian)")
+for row in np.round(J_fd, 4):
+    print("   ", row)
+print("\nMuJoCo's analytic mj_jacSite:")
+for row in np.round(J_exact, 4):
+    print("   ", row)
+print(f"\nmax difference: {np.abs(J_fd - J_exact).max():.2e}")
 ```
 
-A **square** Jacobian: six joints for six freedoms. The singular values say how
-strongly the foot responds in each of six independent directions. When the
-smallest approaches zero, one direction has stopped responding — the leg is
-**singular**. Remember that number; next week it is the whole story.
+Row = which coordinate of the foot. Column = which joint. Entry $J_{ij}$ = metres
+of $x_i$ per radian of $q_j$. **The whole matrix is six of our nudges, divided.**
+
+---
+
+## How small should the nudge be? {.smaller}
+
+Instinct says "as small as possible". Instinct is wrong, and this is worth seeing
+once:
+
+$$\text{error} \;\approx\; \underbrace{C\,\varepsilon}_{\text{truncation}} \;+\; \underbrace{u/\varepsilon}_{\text{round-off}}
+\qquad\Longrightarrow\qquad \varepsilon_{\text{best}} \approx \sqrt{u} \approx 1.5\times10^{-8}$$
+
+$u \approx 2.2\times10^{-16}$ is double precision. Too big and the straight line
+misses the curve; too small and $f(\mathbf{q}+\varepsilon) - f(\mathbf{q})$ is two
+nearly-equal numbers subtracted, so the digits that mattered cancel away.
+
+```{python}
+print(f"{'eps':>10}   {'max error vs analytic':>22}")
+for eps in (1e-1, 1e-2, 1e-3, 1e-4, 1e-6, 1e-8, 1e-10, 1e-12):
+    print(f"{eps:>10.0e}   {np.abs(jacobian_fd(eps) - J_exact).max():>22.3e}")
+print(f"\nsqrt(machine epsilon) = {np.sqrt(np.finfo(float).eps):.2e}")
+```
+
+Read the two halves. From $10^{-1}$ down to $10^{-8}$ the error falls by **exactly
+a factor of ten per decade** — that is the $C\varepsilon$ term, and it is proof
+the approximation is first-order. Past the minimum it climbs again: at
+$10^{-12}$ it is *worse than at* $10^{-4}$.
+
+The best answer is about $10^{-8}$, right where $\sqrt{u}$ predicted. And this is
+why we use `mj_jacSite` in real code: **MuJoCo differentiates the chain
+analytically**, so there is no $\varepsilon$ to choose and no error to trade.
+
+---
+
+## Each column is a direction the foot can move {.smaller}
+
+A column of $J$ is a **velocity**, not a place: turn joint $j$ at 1 rad/s and the
+foot sets off along that vector, at that speed. So draw the six columns from a
+common origin, to scale, seen from the side and from above:
+
+```{python}
+#| fig-align: center
+names = [n.replace("_joint", "") for n in kin.LEG_JOINTS]
+cols = ["#3b7dd8", "#e8743b", "#2a9d5c", "#c0392b", "#8e44ad", "#7f8c8d"]
+views = [((0, 2), "x forward", "z up", "seen from the side"),
+         ((0, 1), "x forward", "y left", "seen from above")]
+
+fig, axs = plt.subplots(1, 2, figsize=(9.6, 4.4))
+for ax, ((a, b), xlab, ylab, title) in zip(axs, views):
+    for j, (nm, c) in enumerate(zip(names, cols)):
+        v = J_exact[[a, b], j]
+        if np.linalg.norm(v) < 0.02:              # nothing to draw in this view
+            continue
+        ax.annotate("", xy=v, xytext=(0, 0),
+                    arrowprops=dict(arrowstyle="-|>", color=c, lw=2.2))
+        ax.annotate(f"{nm}  {np.linalg.norm(J_exact[:, j]):.2f}", v,
+                    textcoords="offset points", xytext=(5, 5), fontsize=8.5, color=c)
+    ax.plot(0, 0, "o", ms=7, color="k", zorder=5)
+    ax.axhline(0, color="#ddd", lw=1); ax.axvline(0, color="#ddd", lw=1)
+    ax.set_xlim(-0.78, 0.42); ax.set_ylim(-0.42, 0.62)
+    ax.set_aspect("equal"); ax.grid(alpha=0.3)
+    ax.set_xlabel(f"{xlab}  (m/s per rad/s)"); ax.set_ylabel(f"{ylab}  (m/s per rad/s)")
+    ax.set_title(title, fontsize=10)
+fig.suptitle("the six columns of $J$, drawn from a common origin", fontsize=11)
+fig.tight_layout(); plt.show()
+```
+
+`hip_pitch` is the long arrow — it drives the foot backwards hardest. `knee` points
+backwards *and up*. `hip_roll` and `hip_yaw` barely show from the side and dominate
+from above: they move the foot **sideways**.
+
+**Both ankle joints are missing**, for two different reasons. `ankle_pitch` is a
+0.02 m/rad stub, too short to draw at this scale — the 0.18 mm bar. `ankle_roll`
+is exactly zero: that column has nothing in it, so there is literally nothing to
+draw.
+
+Next week's question is this picture read backwards: given a direction you *want*
+the foot to go, **which combination of these six arrows produces it?**
+
+---
+
+## The other three rows, and what $J$ is for {.smaller}
+
+A foot pose is six numbers, not three, so the full Jacobian stacks **three more
+rows** for orientation — `mj_jacSite` fills both at once. Read as a rate, it says
+how fast the foot moves for a given joint speed:
+
+$$\dot{\mathbf{x}} = J(\mathbf{q})\,\dot{\mathbf{q}}$$
+
+```{python}
+J = np.vstack([jac_p, jac_r])[:, dofs]
+sv = np.linalg.svd(J, compute_uv=False)
+print(f"  full leg Jacobian  : {J.shape}   (3 position + 3 orientation) x 6 joints")
+print(f"  singular values    : {np.round(sv, 4)}")
+print(f"  largest / smallest : {sv[0]:.4f} / {sv[-1]:.5f}  =  condition number {sv[0]/sv[-1]:.1f}")
+```
+
+A **square** Jacobian: six joints for six freedoms, which is why the foot can be
+put anywhere in any orientation. The singular values say how strongly the foot
+responds along six independent directions — the largest is the easiest direction
+to move, the smallest the hardest.
+
+**When the smallest approaches zero, one direction has stopped responding.** That
+is a *singularity*, and next week it is the whole story: at the `stand` keyframe
+this number collapses to $9\times10^{-6}$, and inverting $J$ there is division by
+almost nothing.
 
 ---
 

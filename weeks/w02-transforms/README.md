@@ -29,7 +29,8 @@ simulator before the next is allowed to build on it:
    with a calculator.
 2. **Two links in 2D**, chained — the real G1 thigh and shin, still on paper.
 3. **The full 6-joint 3D chain**, composed body by body in twelve lines.
-4. **The Jacobian**, introduced as measured millimetres before it is named.
+4. **The Jacobian**, measured in millimetres, then divided by the nudge and named
+   as the derivative it is.
 
 Rotations are shown not to commute with a book on the desk *and* with two 3x3
 matrices, because students will not believe the algebra until they have felt it.
@@ -47,6 +48,7 @@ model rather than drawn by hand, so a diagram cannot drift from the text:
 | Workspace scatter | the reachable set, x–z and y–z |
 | Anchor vs body origin | why the missing term costs 0.215 m |
 | Jacobian bar chart | mm of foot-site travel per 0.57° of each joint |
+| Columns of J as vectors | the six columns from a common origin, side and top view |
 
 ## Objectives
 
@@ -142,6 +144,37 @@ The three failure modes are then measured, not asserted:
 - **gimbal lock** — at pitch 90° four different (roll, yaw) pairs with the same
   sum give a bit-identical quaternion, and the degeneracy fades slowly: 0.52° of
   difference at pitch 89°, 5.17° at 80°, 15.36° at 60°
+
+## The Jacobian is taught as a derivative, not a black box
+
+The deck measures first (nudge 0.01 rad, read millimetres), then **divides by the
+nudge** and writes the mathematics:
+
+$$J = \partial x / \partial q, \qquad J e_j \approx [f(q + \epsilon e_j) - f(q)] / \epsilon$$
+
+The full 3x6 finite-difference matrix at `eps = 1e-6` matches `mj_jacSite` to
+**3.1e-07**, and then a sweep shows why "as small as possible" is wrong:
+
+| eps | max error vs analytic |
+| --- | --- |
+| 1e-1 | 3.077e-02 |
+| 1e-2 | 3.078e-03 |
+| 1e-4 | 3.078e-05 |
+| 1e-6 | 3.078e-07 |
+| **1e-8** | **1.111e-08** (best; sqrt of machine epsilon is 1.49e-08) |
+| 1e-10 | 1.564e-06 |
+| 1e-12 | 6.612e-05 |
+
+Exactly ten-fold per decade down to the minimum — visible proof the approximation
+is first-order — then round-off takes over and `1e-12` is worse than `1e-4`. That
+is the argument for `mj_jacSite`: MuJoCo differentiates analytically, so there is
+no epsilon to choose.
+
+A final figure draws the six columns as **velocity vectors from a common origin**,
+side view and top view. Do not draw them on the leg: positions and velocities are
+different spaces, and hip_pitch and ankle_pitch are nearly parallel so their
+labels collide. Both ankle joints are absent from the drawing for different
+reasons — ankle_pitch is a 0.02 m/rad stub, ankle_roll is exactly zero.
 
 ## The foot site is not the sole
 

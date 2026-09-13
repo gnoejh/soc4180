@@ -676,6 +676,27 @@ law of cosines needs the **true 3D length 0.3409 m**. Using 0.3409 in the planar
 formula costs 4 mm. The shin is 0.3000 m either way, and the ankle-to-foot-site
 drop is 0.0176 m.
 
+**The Jacobian is taught as a derivative, not a black box.** Week 2 measures first
+(nudge 0.01 rad, read millimetres), then divides by the nudge and writes
+`J = ∂x/∂q` with `J e_j ≈ [f(q + ε e_j) − f(q)] / ε`. The 3×6 finite-difference
+matrix at `ε = 1e-6` matches `mj_jacSite` to **3.1e-07**. An ε sweep then shows
+that smaller is not better: error falls exactly ten-fold per decade from 1e-1 to
+**1e-8 (1.1e-08, the minimum — √machine-ε is 1.49e-08)**, then round-off takes
+over and 1e-12 (6.6e-05) is worse than 1e-4 (3.1e-05). The ten-fold-per-decade
+stretch is visible proof the approximation is first-order, and the whole curve is
+the argument for `mj_jacSite`: MuJoCo differentiates analytically, so there is no
+ε to trade.
+
+**Draw Jacobian columns as vectors from a common origin, never on the leg.**
+Positions and velocities are different spaces, and on the leg the labels collide
+because `hip_pitch` and `ankle_pitch` are nearly parallel. Side view plus top view
+works: `hip_roll`/`hip_yaw` are invisible from the side and dominant from above.
+Note that **both** ankle joints are missing from the drawing, for different
+reasons — `ankle_pitch` is a 0.02 m/rad stub below the draw threshold,
+`ankle_roll` is exactly zero. `matplotlib`'s `annotate` does **not** extend the
+axis limits, so arrows drawn that way are silently clipped unless the limits are
+set from the tips by hand; that cost two renders.
+
 **Say why three compact representations exist before comparing them.** The reason
 is the constraint count, not the number count: matrix 9 numbers / 6 constraints,
 quaternion 4 / 1, axis-angle and Euler 3 / 0. A matrix you keep multiplying drifts

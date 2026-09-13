@@ -217,9 +217,15 @@ The pipeline is proven; follow it rather than improvising.
    compile("".join(cell["source"]), "cell", "exec")   # over every code cell
    ```
 6. Add `weeks/wNN-slug/README.md` and a row in the top-level README table.
-7. **Test it on Colab.** Every environment bug this project hit was invisible on
-   Windows: the GL ordering bug, the dependency upgrades that broke the runtime,
-   the unguarded renderer. Ask for `soc4180.gl_report()` when rendering fails.
+7. **Push, then test it on Colab.** Every environment bug this project hit was
+   invisible on Windows: the GL ordering bug, the dependency upgrades that broke
+   the runtime, the unguarded renderer. Ask for `soc4180.gl_report()` when
+   rendering fails.
+
+   **The badge loads `lab.ipynb` from GitHub, not from the working copy.** So a
+   Colab test run before pushing silently exercises the *previous* version of the
+   week — it passes, and the change you meant to test was never there. Check
+   `git status -sb` for "ahead of origin/main" before trusting a Colab result.
 
 ## Authoring model: one source, two outputs
 
@@ -675,6 +681,13 @@ hip->knee vector is `[0, +0.0541, -0.3366]` and splays 5.4 cm sideways. Week 3's
 law of cosines needs the **true 3D length 0.3409 m**. Using 0.3409 in the planar
 formula costs 4 mm. The shin is 0.3000 m either way, and the ankle-to-foot-site
 drop is 0.0176 m.
+
+**Week 2 has one knob worth knowing about**: `crouch` in the first cell feeds the
+three rendered poses, the leg diagram, the Jacobian bar chart, the column-vector
+diagram and the singular values — change those six numbers and five figures
+redraw. Useful for a live demonstration, and a trap when editing: a change there
+is never local. Worth copying as an authoring pattern — one named pose near the
+top that the whole second half of a week refers back to.
 
 **Introduce a MuJoCo array before the slide that uses it.** Week 2 reached for
 `mj_forward` in its first cell and `site_xmat` 400 lines later, both unexplained,

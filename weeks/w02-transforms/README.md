@@ -228,3 +228,48 @@ vector splays 5.4 cm sideways. Substituting one for the other costs 4 mm.
 ```bash
 quarto render weeks/w02-transforms/slides.qmd
 ```
+
+Roughly 25 s. Produces `slides.html` (the deck, gitignored) and `lab.ipynb` (the
+student notebook, committed).
+
+## How to try it
+
+**Locally.** Render as above, open `slides.html` in a browser for the deck, and
+`lab.ipynb` to see exactly what students get. To verify without Quarto, execute
+the generated notebook with `nbclient` — that runs *every* cell, including any
+marked `eval: false`, which is how a broken cell gets caught before a student
+finds it.
+
+**On Colab.** Open the badge at the top of this file, set **Runtime → Change
+runtime type → T4**, then Run All. The whole notebook is about 9 s of compute.
+
+> **Push first.** The badge loads `lab.ipynb` **from GitHub**, not from your
+> working copy. Testing on Colab before pushing silently checks the *previous*
+> version of the week, and everything looks fine while the change you wanted to
+> test is not there. Confirm with `git status -sb` that you are not ahead of
+> `origin/main`.
+
+**With the interactive viewer** (desktop only, never in a lab):
+
+```bash
+uv run scripts/view.py --keyframe stand     # orbit the leg geometry
+uv run scripts/view.py --limp               # motors off, watch it collapse
+```
+
+Double-click a body, then ctrl-drag to push the robot. This is the fastest way to
+sanity-check a geometric claim before committing it to a slide.
+
+## The knob worth turning in class
+
+```python
+crouch = [-0.35, 0.0, 0.0, 0.70, -0.35, 0.0]     # first cell of the notebook
+```
+
+Those six numbers feed **five figures**: the three rendered poses, the leg
+diagram, the Jacobian bar chart, the column-vector diagram, and the singular
+values. Change them and the whole second half of the lab redraws around the new
+pose — the cheapest live demonstration in the week.
+
+Two other useful knobs: the validated test pose in *Check it against MuJoCo*
+(`[-0.30, 0.10, 0.05, 0.70, -0.35, 0.02]`, deliberately has nothing at zero), and
+`eps` in the finite-difference sweep.

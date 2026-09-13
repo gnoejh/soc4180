@@ -640,6 +640,17 @@ exactly that and the answer was an error of 0.0000. Week 2 now demonstrates the
 anchor on a nine-line MJCF with `<joint pos="0.3 0 0">`, where dropping the term
 moves the site 0.215 m while MuJoCo holds it exactly still.
 
+**Week 2 carries eight generated figures**, all computed from the measured model
+rather than drawn, so a diagram cannot drift from the prose. Two mechanics worth
+keeping: `render_poses` is capped at **height 480** by the G1 scene's offscreen
+framebuffer (ask for more and it raises before touching GL — and `_new_renderer`
+then reports it as "could not create a renderer / check that a GL backend is
+available", which mis-describes a pure size error); and the robot shots are
+**cropped to `frame[185:445, 105:295]`** because the default free camera is too
+far and too frontal to show a bent knee. Only the left leg is posed, leaving the
+right leg in shot as a ruler. This makes week 2 the **first week that needs a GL
+backend** — it used to run on a CPU Colab runtime and no longer does.
+
 **Week 2 builds up from a planar two-link leg before the 3D chain**, because the
 audience is undergraduates with no robotics background. The paper model —
 `foot = f(hip_pitch, knee, ankle_pitch)` from sines and cosines, roll and yaw held

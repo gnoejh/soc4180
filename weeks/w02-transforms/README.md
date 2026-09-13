@@ -4,10 +4,20 @@
 
 | | |
 | --- | --- |
-| **Runtime** | Local: CPU. **Colab: pick a GPU runtime** (Runtime > Change runtime type > T4). |
+| **Runtime** | Local: CPU. **Colab: the T4 is now required, not advisory** — the deck renders the robot (see below). |
 | **Wall clock** | ~1 min |
 | **Convergence risk** | None. No learning. |
 | **Feeds** | Week 3 (IK), Week 4 (walking) |
+
+## This week now needs a GL backend
+
+Week 2 used to be pure arithmetic and would run fine on a CPU runtime despite the
+header's advice. It no longer does: the third slide calls `render_poses` to show
+the robot in three poses, so a CPU Colab runtime will fail there with the
+`GL_UNAVAILABLE` message. Ask for `soc4180.gl_report()` if a student hits it.
+
+`render_poses` is capped at **480 px high** by the G1 scene's offscreen
+framebuffer; asking for more raises before any GL work happens.
 
 ## Shape of the session
 
@@ -23,6 +33,20 @@ simulator before the next is allowed to build on it:
 
 Rotations are shown not to commute with a book on the desk *and* with two 3x3
 matrices, because students will not believe the algebra until they have felt it.
+
+**Eight figures carry the explanation**, every one generated from the measured
+model rather than drawn by hand, so a diagram cannot drift from the text:
+
+| Figure | What it shows |
+| --- | --- |
+| Three rendered poses | what six angles do; the right leg is left alone as a ruler |
+| Three arrows, one foot | world/pelvis/hip vectors to the same star |
+| One link, three angles | where $-L\sin\theta$ and $-L\cos\theta$ live |
+| The book, both ways | two turns in each order, blue cover and orange spine |
+| The leg as the formula sees it | $L_1$, $L_2$, and both angle arcs against dashed zero-angle lines |
+| Workspace scatter | the reachable set, x–z and y–z |
+| Anchor vs body origin | why the missing term costs 0.215 m |
+| Jacobian bar chart | mm of sole travel per 0.57° of each joint |
 
 ## Objectives
 

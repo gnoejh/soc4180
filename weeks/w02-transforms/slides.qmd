@@ -70,6 +70,42 @@ function that turns those six angles into "the foot is here."**
 
 ---
 
+## What those six numbers do {.smaller}
+
+Only the **left** leg's six angles change below. The right leg is untouched, so
+you can use it as a ruler:
+
+```{python}
+import matplotlib.pyplot as plt
+
+shots = [("stand keyframe\nall six angles zero",  [0, 0, 0, 0, 0, 0]),
+         ("the crouch\nhip -0.35, knee +0.70",    crouch),
+         ("roll and yaw on\nthe pose we validate", [-0.30, 0.10, 0.05, 0.70, -0.35, 0.02])]
+
+poses = []
+for _, angles in shots:
+    q = model.key_qpos[0].copy()
+    q[idx] = angles
+    poses.append(q)
+
+frames = soc4180.render_poses(model, poses, width=380, height=480)
+
+fig, axs = plt.subplots(1, 3, figsize=(9.6, 4.6))
+for ax, (label, _), frame in zip(axs, shots, frames):
+    ax.imshow(frame[185:445, 105:295])       # crop to the legs
+    ax.set_title(label, fontsize=9.5)
+    ax.axis("off")
+fig.suptitle("forward kinematics only — no physics is ever stepped", fontsize=11, y=0.99)
+fig.tight_layout(rect=(0, 0, 1, 0.90))
+plt.show()
+```
+
+Nothing here is *simulated*. Each pose is placed and drawn. Kinematics is a
+statement about **geometry**, not about balance — a pose can be perfectly valid
+and still be one the robot could never hold.
+
+---
+
 ## Frames: a position needs a "relative to what" {.smaller}
 
 Ask where your phone is. *On the desk* — but the desk is in a room, in a moving
@@ -115,6 +151,42 @@ label.
 
 ---
 
+## Three arrows, one foot {.smaller}
+
+```{python}
+#| fig-align: center
+hip_body = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "left_hip_pitch_link")
+#                name,      origin,               colour,    name offset, vector offset
+origins = [("world",  np.zeros(3),          "#3b7dd8", (-46, -20), (-6, -34)),
+           ("pelvis", data.qpos[:3],        "#e8743b", (-54,   4), (10,   6)),
+           ("hip",    data.xpos[hip_body],  "#2a9d5c", ( 12,   4), (14, -14))]
+
+fig, ax = plt.subplots(figsize=(6.4, 4.8))
+ax.axhline(0, color="#bbb", lw=2)
+ax.text(0.36, -0.055, "floor", color="#999", fontsize=9)
+for name, o, colour, name_off, vec_off in origins:
+    ax.plot(o[1], o[2], "o", ms=9, color=colour, zorder=4)
+    ax.annotate(name, (o[1], o[2]), textcoords="offset points", xytext=name_off,
+                color=colour, fontsize=10, weight="bold")
+    ax.annotate("", xy=(foot_world[1], foot_world[2]), xytext=(o[1], o[2]),
+                arrowprops=dict(arrowstyle="->", color=colour, lw=1.6, alpha=0.85))
+    v = foot_world - o
+    ax.annotate(f"({v[0]:.2f}, {v[1]:.2f}, {v[2]:.2f})",
+                ((o[1] + foot_world[1]) / 2, (o[2] + foot_world[2]) / 2),
+                textcoords="offset points", xytext=vec_off, color=colour, fontsize=9)
+ax.plot(foot_world[1], foot_world[2], "*", ms=18, color="k", zorder=5)
+ax.annotate("the foot", (foot_world[1], foot_world[2]), textcoords="offset points",
+            xytext=(16, 10), fontsize=10, weight="bold")
+ax.set_xlim(-0.30, 0.52); ax.set_ylim(-0.16, 0.98); ax.set_aspect("equal")
+ax.set_xlabel("y left (m)"); ax.set_ylabel("z up (m)")
+ax.set_title("one point, three frames, three correct answers", fontsize=11)
+ax.grid(alpha=0.25); fig.tight_layout(); plt.show()
+```
+
+The arrows differ; the star does not move. **A frame is a question, not a place.**
+
+---
+
 ## A transform is a rotation and a translation {.smaller}
 
 To move a point from a child frame into its parent, do two things — turn it, then
@@ -151,10 +223,41 @@ for deg in (0, 30, 90):
     print(f"  theta = {deg:2d} deg -> tip at x = {-L*np.sin(t):+.4f},  z = {-L*np.cos(t):+.4f}")
 ```
 
-Read the signs. At $0°$ the tip hangs at $z = -0.34$, directly below. At $90°$ it
+---
+
+## The same three angles, drawn {.smaller}
+
+```{python}
+#| fig-align: center
+fig, ax = plt.subplots(figsize=(6.0, 4.6))
+for deg, colour in zip((0, 30, 90), ("#3b7dd8", "#e8743b", "#2a9d5c")):
+    t = np.radians(deg)
+    x, z = -L * np.sin(t), -L * np.cos(t)
+    ax.plot([0, x], [0, z], lw=3.5, color=colour, solid_capstyle="round", zorder=3,
+            label=fr"$\theta={deg}°$:  $({x:+.3f},\ {z:+.3f})$")
+    ax.plot(x, z, "o", ms=8, color="w", mec=colour, mew=2, zorder=4)
+    if deg == 30:                                  # show where the two terms live
+        ax.plot([x, x], [z, 0], ls=":", lw=1.2, color=colour)
+        ax.plot([0, x], [z, z], ls=":", lw=1.2, color=colour)
+        ax.annotate(r"$-L\sin\theta$", (x / 2, 0.015), color=colour, fontsize=10, ha="center")
+        ax.annotate(r"$-L\cos\theta$", (0.015, z / 2), color=colour, fontsize=10)
+
+arc = np.linspace(-np.pi / 2, -np.pi / 2 - np.radians(30), 40)
+ax.plot(0.12 * np.cos(arc), 0.12 * np.sin(arc), color="#e8743b", lw=1.4)
+ax.annotate(r"$\theta$", (0.05, -0.14), color="#e8743b", fontsize=12)
+ax.plot(0, 0, "s", ms=10, color="#444", zorder=5)
+ax.annotate("pivot", (0, 0), textcoords="offset points", xytext=(7, 6), fontsize=10)
+ax.set_xlim(-0.42, 0.20); ax.set_ylim(-0.42, 0.10); ax.set_aspect("equal")
+ax.set_xlabel("x forward (m)"); ax.set_ylabel("z up (m)")
+ax.set_title(r"one link, pivoted, turned by $\theta$ about $y$", fontsize=11)
+ax.legend(fontsize=9, loc="lower right"); ax.grid(alpha=0.25)
+fig.tight_layout(); plt.show()
+```
+
+Read the signs off the picture. At $0°$ the tip hangs directly below. At $90°$ it
 has swung to horizontal at $x = -0.34$ — **backwards**. So a *positive* pitch
-angle swings the leg **back**, and that is why the Week 4 crouch commands a hip
-pitch of $-0.35$: negative means knee forward.
+angle swings the leg **back**, which is why the Week 4 crouch commands a hip pitch
+of $-0.35$: negative means knee forward.
 
 ---
 
@@ -180,6 +283,46 @@ print(f"  the answers are {np.linalg.norm(Rx(h) @ Rz(h) @ p - Rz(h) @ Rx(h) @ p)
 
 Same point, same two rotations, **a different axis entirely**. Matrix
 multiplication does not commute, and neither does turning things in space.
+
+---
+
+## The book, both ways {.smaller}
+
+```{python}
+#| fig-align: center
+from mpl_toolkits.mplot3d.art3d import Poly3DCollection
+
+def book(R):
+    """Corners of a book-shaped box, turned by R. Cover blue, spine orange."""
+    w, d, t = 0.9, 0.65, 0.1
+    c = np.array([[x, y, z] for x in (-w/2, w/2) for y in (-d/2, d/2) for z in (0, t)]) @ R.T
+    faces = [[0, 1, 3, 2], [4, 5, 7, 6], [0, 1, 5, 4], [2, 3, 7, 6], [0, 2, 6, 4], [1, 3, 7, 5]]
+    colours = ["#d9d9d9", "#d9d9d9", "#e8743b", "#d9d9d9", "#d9d9d9", "#3b7dd8"]
+    return [c[f] for f in faces], colours
+
+fig = plt.figure(figsize=(9.4, 4.6))
+rows = [("turn about z, THEN tip about x", [np.eye(3), Rz(h), Rx(h) @ Rz(h)]),
+        ("tip about x, THEN turn about z", [np.eye(3), Rx(h), Rz(h) @ Rx(h)])]
+for r, (label, mats) in enumerate(rows):
+    for c_, R in enumerate(mats):
+        ax = fig.add_subplot(2, 3, r * 3 + c_ + 1, projection="3d")
+        faces, colours = book(R)
+        ax.add_collection3d(Poly3DCollection(faces, facecolors=colours,
+                                             edgecolors="k", linewidths=0.6, alpha=0.95))
+        for vec, name in [((0.8, 0, 0), "x"), ((0, 0.8, 0), "y"), ((0, 0, 0.8), "z")]:
+            ax.quiver(0, 0, 0, *vec, color="#999", lw=1)
+            ax.text(*np.array(vec) * 1.15, name, color="#999", fontsize=8)
+        for lim in (ax.set_xlim, ax.set_ylim, ax.set_zlim):
+            lim(-0.62, 0.62)
+        ax.set_box_aspect((1, 1, 1)); ax.set_axis_off(); ax.view_init(elev=22, azim=35)
+        ax.set_title(["start", "after the 1st turn", "after the 2nd turn"][c_], fontsize=9)
+    fig.text(0.015, 0.73 - r * 0.46, label, rotation=90, va="center", fontsize=9)
+fig.suptitle("same book, same two turns, opposite order", fontsize=11)
+fig.tight_layout(rect=(0.04, 0, 1, 0.95)); plt.show()
+```
+
+Follow the **blue cover** and the **orange spine**. Both rows start identically
+and end differently.
 
 **Consequence:** "roll 10°, pitch 20°, yaw 5°" is meaningless until you say in
 which order. That is why we compose matrices down the chain instead.
@@ -222,6 +365,53 @@ print(f"  ankle -> sole : {foot_drop:.4f} m")
 
 Look at the thigh: it is **not** straight down. It splays 5.4 cm sideways, so its
 true length 0.3409 m is not the number a flat picture needs — 0.3366 m is.
+
+---
+
+## The leg, as the formula sees it {.smaller}
+
+```{python}
+#| fig-align: center
+th1, th2, th3 = crouch[0], crouch[3], crouch[4]
+kx, kz = H[0] - L1 * np.sin(th1), H[2] - L1 * np.cos(th1)
+ax_, az = kx - L2 * np.sin(th1 + th2), kz - L2 * np.cos(th1 + th2)
+fx, fz = ax_ - foot_drop * np.sin(th1+th2+th3), az - foot_drop * np.cos(th1+th2+th3)
+
+fig, ax = plt.subplots(figsize=(6.0, 5.4))
+ax.plot([H[0], kx], [H[2], kz], lw=5, color="#3b7dd8", solid_capstyle="round", zorder=2)
+ax.plot([kx, ax_], [kz, az], lw=5, color="#e8743b", solid_capstyle="round", zorder=2)
+ax.plot([ax_, fx], [az, fz], lw=5, color="#555", solid_capstyle="round", zorder=2)
+ax.plot([H[0], H[0]], [H[2], H[2] - L1], ls="--", lw=1, color="#bbb")   # "straight down"
+ax.plot([kx, kx], [kz, kz - L2], ls="--", lw=1, color="#bbb")
+
+for (px, pz), lab, dx in [((H[0], H[2]), "hip", 10), ((kx, kz), "knee", 10),
+                          ((ax_, az), "ankle", 10), ((fx, fz), "sole", -38)]:
+    ax.plot(px, pz, "o", ms=8, color="w", mec="k", mew=1.5, zorder=3)
+    ax.annotate(lab, (px, pz), textcoords="offset points", xytext=(dx, 4), fontsize=10)
+
+ax.annotate(f"$L_1$ = {L1:.4f} m", ((H[0] + kx) / 2, (H[2] + kz) / 2),
+            textcoords="offset points", xytext=(14, 8), fontsize=10, color="#3b7dd8")
+ax.annotate(f"$L_2$ = {L2:.4f} m", ((kx + ax_) / 2, (kz + az) / 2),
+            textcoords="offset points", xytext=(14, 8), fontsize=10, color="#e8743b")
+
+arc = np.linspace(-np.pi/2, -np.pi/2 - th1, 40)
+ax.plot(H[0] + 0.10*np.cos(arc), H[2] + 0.10*np.sin(arc), color="#3b7dd8", lw=1.5)
+ax.annotate(r"$\theta_1$", (H[0] - 0.075, H[2] - 0.085), color="#3b7dd8", fontsize=12)
+arc = np.linspace(-np.pi/2 - th1, -np.pi/2 - th1 - th2, 40)
+ax.plot(kx + 0.09*np.cos(arc), kz + 0.09*np.sin(arc), color="#e8743b", lw=1.5)
+ax.annotate(r"$\theta_2$", (kx + 0.115, kz - 0.045), color="#e8743b", fontsize=12)
+
+ax.axhline(0, color="#999", lw=1.5)
+ax.text(-0.22, 0.012, "floor", color="#999", fontsize=9)
+ax.set_xlim(-0.26, 0.30); ax.set_ylim(-0.03, 0.76); ax.set_aspect("equal")
+ax.set_xlabel("x forward (m)"); ax.set_ylabel("z up (m)")
+ax.set_title(r"the crouch:  $\theta_1 = -0.35$,  $\theta_2 = +0.70$", fontsize=11)
+ax.grid(alpha=0.3); fig.tight_layout(); plt.show()
+```
+
+Each dashed line is where the link **would** point at zero angle, so each arc is
+literally the joint's angle. The knee angle is measured **from the thigh**, not
+from vertical — which is why the two add in the formula.
 
 ---
 
@@ -446,9 +636,43 @@ print(f"without anchor : {np.round(without_anchor, 6)}   <- off by "
       f"{np.abs(without_anchor - d2.site_xpos[0]).max():.3f} m")
 ```
 
+---
+
+## Why 21 cm {.smaller}
+
+```{python}
+#| fig-align: center
+def R2(t):
+    return np.array([[np.cos(t), np.sin(t)], [-np.sin(t), np.cos(t)]])
+
+pivot, tip, theta = np.array([0.3, 0.0]), np.array([0.3, 0.0]), 0.8
+fig, axs = plt.subplots(1, 2, figsize=(9.0, 3.8), sharex=True, sharey=True)
+for ax, use_anchor in zip(axs, (True, False)):
+    ax.plot([0, 0.3], [0, 0], lw=4, color="#ddd", solid_capstyle="round")   # before
+    R = R2(theta)
+    shift = (pivot - R @ pivot) if use_anchor else np.zeros(2)
+    p0, p1 = shift, shift + R @ tip
+    ax.plot([p0[0], p1[0]], [p0[1], p1[1]], lw=4, color="#3b7dd8", solid_capstyle="round")
+    ax.plot(*pivot, "s", ms=11, color="#e8743b", mec="k", zorder=4)
+    ax.plot(*p1, "o", ms=9, color="w", mec="#3b7dd8", mew=2.5, zorder=6)
+    ax.set_title("rotate about the ANCHOR\ntip stays put" if use_anchor
+                 else "rotate about the BODY ORIGIN\nthe whole link swings", fontsize=10)
+    ax.set_aspect("equal"); ax.grid(alpha=0.25)
+    ax.annotate("hinge", pivot, textcoords="offset points",
+                xytext=(-34, -26) if use_anchor else (-8, 16),
+                fontsize=9, color="#e8743b")
+axs[1].annotate(f"{np.abs(without_anchor - d2.site_xpos[0]).max():.3f} m from the hinge",
+                p1, textcoords="offset points", xytext=(-128, -14),
+                fontsize=9, color="#3b7dd8")
+axs[0].set_xlim(-0.10, 0.46); axs[0].set_ylim(-0.34, 0.34)
+fig.suptitle("grey = before the joint moved", fontsize=10)
+fig.tight_layout(); plt.show()
+```
+
 The site sits **on** the axis, so turning the joint must not move it at all. Drop
-the anchor and it swings 21 cm. Keep the term: it costs nothing on the G1, and it
-is the difference between right and wrong on a robot you write yourself.
+the anchor and the link pivots about the wrong point, carrying the tip 21 cm away.
+Keep the term: it costs nothing on the G1, and it is the difference between right
+and wrong on a robot you write yourself.
 
 ---
 
@@ -458,8 +682,6 @@ You now have a function from angles to position. Call it three thousand times wi
 random *legal* angles and you get the set of places the foot **can** be:
 
 ```{python}
-import matplotlib.pyplot as plt
-
 soc4180.set_seed(4180)
 jids = [mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, f"left_{j}") for j in kin.LEG_JOINTS]
 lo, hi = model.jnt_range[jids, 0], model.jnt_range[jids, 1]
@@ -519,13 +741,24 @@ d.qpos[idx] = crouch                      # hip -0.35, knee 0.70, ankle -0.35
 mujoco.mj_forward(model, d)
 p0 = d.site_xpos[kin.foot_site_id(model, "left")].copy()
 
+moved_mm = []
 for k, name in enumerate(kin.LEG_JOINTS):
-    d2 = soc4180.keyframe_data(model, "stand")
-    d2.qpos[idx] = crouch
-    d2.qpos[idx[k]] += 0.01               # 0.01 rad = 0.57 degrees
-    mujoco.mj_forward(model, d2)
-    moved = np.linalg.norm(d2.site_xpos[kin.foot_site_id(model, "left")] - p0)
-    print(f"  {name:20s} +0.57 deg  ->  foot moves {moved * 1000:5.2f} mm")
+    nudged = soc4180.keyframe_data(model, "stand")
+    nudged.qpos[idx] = crouch
+    nudged.qpos[idx[k]] += 0.01           # 0.01 rad = 0.57 degrees
+    mujoco.mj_forward(model, nudged)
+    moved_mm.append(np.linalg.norm(nudged.site_xpos[kin.foot_site_id(model, "left")] - p0) * 1000)
+
+fig, ax = plt.subplots(figsize=(7.4, 3.0))
+bars = ax.barh([n.replace("_joint", "") for n in kin.LEG_JOINTS], moved_mm,
+               color=["#3b7dd8"] * 3 + ["#e8743b"] + ["#2a9d5c"] * 2)
+for bar, v in zip(bars, moved_mm):
+    ax.annotate(f"{v:.2f} mm", (v, bar.get_y() + bar.get_height() / 2),
+                xytext=(5, 0), textcoords="offset points", va="center", fontsize=9)
+ax.invert_yaxis(); ax.set_xlim(0, 7.8)
+ax.set_xlabel("how far the sole moves (mm)")
+ax.set_title("nudge one joint by 0.57°, measure the foot", fontsize=11)
+ax.grid(axis="x", alpha=0.3); fig.tight_layout(); plt.show()
 ```
 
 Six joints, six different sensitivities. The hip is the big lever; the ankle

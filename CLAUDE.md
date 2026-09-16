@@ -11,6 +11,16 @@ labs, taught through MuJoCo simulation. The spine is a **walking humanoid**
 **Simulation only. No hardware exists.** Never propose a lab that needs a
 physical robot.
 
+**Each week is two classes: a lecture from the deck, then a lab on student
+laptops.** Students bring laptops with the repo installed (`uv sync`), change
+code, watch the G1 respond in the interactive viewer, and demonstrate the result
+to the instructor. **Every laptop runs the same environment**: `uv.lock` pins
+it and `uv sync` reproduces it, so a lab may only depend on what the lock file
+installs (plus `--extra rl` from week 7). Colab is the no-install fallback for
+the notebook, not the primary lab environment. A week is not finished until it has a lab-class
+artifact students can edit and run locally — week 2's `lab_viewer.py` is the
+pattern; weeks 0–1 and 3–10 still lack one.
+
 **Week 0 is the day-one stack/vocabulary lecture, taught before Week 1.** Every
 week names which of its five layers it belongs to.
 
@@ -26,7 +36,7 @@ agentic content returns only where it attaches to the robot, in weeks 14–15.
 | Wk | Topic | Deck | Status |
 | --- | --- | --- | --- |
 | 1 | The five-layer robot stack; MuJoCo and MJCF | `w00`, `w01` | built; w01's MJCF section **not yet Colab-tested** |
-| 2 | Transforms and forward kinematics | `w02` | built, Colab-verified |
+| 2 | Transforms and forward kinematics | `w02` | built, Colab-verified; **has a lab-class script** (`lab_viewer.py`) |
 | 3 | Inverse kinematics | `w03` | built, Colab-verified |
 | 4 | Contact, balance, analytic walking (LIPM/ZMP) | `w04` | built, Colab-verified |
 | 5 | Actuation, PD control, and CPG gaits | `w05` | built, Colab-verified |
@@ -177,7 +187,7 @@ uv sync                                        # lean env: mujoco + rendering on
 uv sync --extra rl                             # + gymnasium, SB3, torch (CUDA on Windows)
 uv sync --extra gpu                            # + JAX/MJX/playground (Linux/WSL2)
 uv run python -c "import soc4180"              # smoke test
-uv run scripts/view.py --walk                  # interactive viewer (desktop only)
+uv run scripts/view.py --walk                  # interactive viewer (laptop/desktop)
 quarto render weeks/w01-intro/slides.qmd       # -> slides.html + lab.ipynb
 uv run python scripts/build_site.py            # rendered decks -> _site/ for Pages
 ```
@@ -185,17 +195,36 @@ uv run python scripts/build_site.py            # rendered decks -> _site/ for Pa
 There is no test suite or linter configured. Add the tooling before inventing
 commands for it.
 
-### Instructor tooling
+### The interactive viewer: lab tool, never a notebook cell
 
 `scripts/view.py` opens MuJoCo's interactive viewer — orbit, pan, zoom, and
 ctrl-drag to push the robot. `--walk` runs the week 4 controller live, `--limp`
 disables actuation, `--robot`/`--keyframe` reach the other Menagerie humanoids,
-`--list` prints what is available.
+`--list` prints what is available, `--static` draws without stepping physics,
+and `--pose=A,B,C,D,E,F` places one leg's six angles on `stand`, frozen, and
+prints the foot site in world and pelvis frames. **Write `--pose=` with the
+equals sign** — a value starting with `-` is otherwise read as an option.
 
-**It is desktop-only and must never appear in a lab**: Colab has no window to
-draw into, which is the whole reason the weeks render video. Use it for building
-and debugging weeks — pushing the robot to see whether a controller survives a
-disturbance takes seconds here and is invisible in a rendered video.
+Students use it in lab classes; it is the point of the laptop requirement.
+Pushing the robot to see whether a controller survives a disturbance takes
+seconds here and is invisible in a rendered video.
+
+**It must never appear as a cell in `lab.ipynb`.** The notebook has to render
+headless under Quarto and on the Pages runner, and run on Colab, where there is
+no window and `launch_viewer` raises. Viewer work lives in `.py` files under the
+week (`weeks/w02-transforms/lab_viewer.py`) and in the README's lab section;
+the notebook carries the exercises and rendered video. `launch_viewer` takes a
+`key_callback` for passive mode; the lab script uses SPACE/arrows to step
+through poses and draws its markers through `viewer.user_scn` under
+`viewer.lock()`.
+
+**In static mode the Control sliders must be wired onto `qpos` by hand.** The
+sliders write `ctrl`, and `ctrl` reaches the joints only through `mj_step`; a
+kinematic script that just calls `mj_forward` leaves them dead, which is the
+first thing a student drags. Both `view.py --static` and the week 2 lab copy
+`ctrl` into `qpos[jnt_qposadr[actuator_trnid[:, 0]]]` every tick (every G1
+actuator drives one hinge; `ctrlrange == jnt_range`), and copy `qpos` back into
+`ctrl` whenever the script sets a pose so the sliders show it.
 
 ## Adding a week
 
@@ -217,7 +246,15 @@ The pipeline is proven; follow it rather than improvising.
    compile("".join(cell["source"]), "cell", "exec")   # over every code cell
    ```
 6. Add `weeks/wNN-slug/README.md` and a row in the top-level README table.
-7. **Push, then test it on Colab.** Every environment bug this project hit was
+   The README needs a **lab class** section: what students change, and what
+   they should see on screen when it is right.
+7. Add the lab-class artifact: a `.py` under the week that students edit and run
+   on their laptops (`uv run weeks/wNN-slug/<name>.py`), using only what
+   `uv.lock` installs. It may open the viewer; `lab.ipynb` may not. Follow
+   `weeks/w02-transforms/lab_viewer.py`: a list at the top students extend, a
+   function they fill in, and a visible on-screen difference between right and
+   wrong.
+8. **Push, then test it on Colab.** Every environment bug this project hit was
    invisible on Windows: the GL ordering bug, the dependency upgrades that broke
    the runtime, the unguarded renderer. Ask for `soc4180.gl_report()` when
    rendering fails.

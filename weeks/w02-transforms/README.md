@@ -4,9 +4,11 @@
 
 | | |
 | --- | --- |
-| **Runtime** | Local: CPU. **Colab: the T4 is now required, not advisory** — the deck renders the robot (see below). |
+| **Runtime** | Laptop: CPU, plus a window for the viewer. Colab fallback: **T4 required** — the deck renders the robot (see below). |
 | **Wall clock** | ~1 min |
 | **Convergence risk** | None. No learning. |
+| **Lecture class** | `slides.qmd` → `slides.html` |
+| **Lab class** | `lab_viewer.py` on the laptop, then the exercises in `lab.ipynb` |
 | **Feeds** | Week 3 (IK), Week 4 (walking) |
 
 ## This week now needs a GL backend
@@ -249,15 +251,60 @@ runtime type → T4**, then Run All. The whole notebook is about 9 s of compute.
 > test is not there. Confirm with `git status -sb` that you are not ahead of
 > `origin/main`.
 
-**With the interactive viewer** (desktop only, never in a lab):
+**With the interactive viewer** (any laptop with the repo installed):
 
 ```bash
-uv run scripts/view.py --keyframe stand     # orbit the leg geometry
-uv run scripts/view.py --limp               # motors off, watch it collapse
+uv run scripts/view.py --static --keyframe stand         # orbit the leg geometry
+uv run scripts/view.py --pose=-0.35,0,0,0.70,-0.35,0     # place the left leg, frozen
+uv run scripts/view.py --limp                            # motors off, watch it collapse
 ```
 
-Double-click a body, then ctrl-drag to push the robot. This is the fastest way to
-sanity-check a geometric claim before committing it to a slide.
+`--pose` takes the six leg angles in the week 2 order, freezes physics, and prints
+the foot site in world and pelvis frames — the number a student's FK must
+reproduce. Write it with the `=`: argparse reads a value starting with `-` as an
+option otherwise. Double-click a body, then ctrl-drag to push the robot. This is
+the fastest way to sanity-check a geometric claim before committing it to a slide.
+
+## The lab class
+
+The week has two classes: the deck is the lecture, and the second class is
+hands-on on student laptops. Students edit [`lab_viewer.py`](lab_viewer.py) and
+show the result.
+
+```bash
+uv run weeks/w02-transforms/lab_viewer.py
+```
+
+It holds the G1 in each pose of `POSES` (SPACE / arrows to move between them),
+never steps physics, and draws two spheres at the left foot: **green** at
+MuJoCo's `site_xpos`, **red** at whatever the student's `predict_foot` returns.
+Until they write it there is no red sphere. Each pose prints the truth, the
+prediction and the max error; ENTER prints them for whatever the sliders say.
+
+**The Control sliders move joints directly here.** In a normal viewer session
+they set actuator targets, which only move the robot through `mj_step`, and this
+lab never steps — so the first thing a student tries, dragging a slider, would do
+nothing. The script therefore copies `ctrl` into each actuator's joint angle on
+every tick (every G1 actuator drives exactly one hinge, and `ctrlrange` equals
+`jnt_range`, so the slider limits are the joint limits). Drag `left_knee_joint` and the
+leg bends, with the red sphere following the student's FK live. `view.py
+--static` does the same.
+
+The five steps students demonstrate, each visible on screen:
+
+| Step | Change | What they should see |
+| --- | --- | --- |
+| 1 | add three poses to `POSES` | the leg goes where they predicted, or not |
+| 2 | paste `paper_fk` into `predict_foot` | red inside green, error ~2e-06, roll and yaw zero |
+| 3 | turn roll or yaw on | the red sphere leaves the foot: the planar model is a model |
+| 4 | replace with the full `my_fk` chain | error 1e-16 on every pose |
+| 5 | put the foot 10 cm forward of `stand`, still flat | pitch angles summing to zero; measured: hip −0.30, knee +0.30, ankle 0.00 works, so does hip −0.45, knee +0.60, ankle −0.15 (`R[2,2] = 1.000000` for both) |
+
+Then exercises 4, 5 and 8 from the deck's exercise slide, in the notebook.
+
+**The script is deliberately not a notebook cell.** `lab.ipynb` must render
+headless and run on Colab, and a viewer call blocks and has no window there. The
+viewer lives in `.py` files students run; the notebook keeps the exercises.
 
 ## The knob worth turning in class
 

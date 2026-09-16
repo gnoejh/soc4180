@@ -5,8 +5,11 @@ simulation. The through-line is a **walking humanoid**: students make the
 [Unitree G1](https://github.com/google-deepmind/mujoco_menagerie) walk with
 classical control first, then learn a policy that does it instead.
 
-Every lab runs in **Google Colab with zero installation**, and every deck is
-readable in a browser at **<https://gnoejh.github.io/soc4180/>**.
+Each week is two classes: a **lecture** from the deck, and a **lab** where
+students change code on their own laptops, watch the G1 respond, and show the
+result. Every deck is readable in a browser at
+**<https://gnoejh.github.io/soc4180/>**, and every notebook also runs in
+**Google Colab with zero installation** as the fallback when a laptop cannot.
 
 ## Weeks
 
@@ -30,10 +33,33 @@ Week 00 is the day-one lecture, taught before Week 01.
 
 ## For students
 
-Click the Colab badge for the week. Nothing to install.
+**Lab classes run on your laptop.** Install once, before the first lab:
 
-**Set the runtime to GPU first** — *Runtime > Change runtime type > T4 GPU*.
-The GPU is not for training; MuJoCo renders video through EGL on Colab, and that
+```bash
+# 1. uv (a Python package manager that also fetches Python itself)
+#    Windows:  winget install astral-sh.uv
+#    macOS:    brew install uv
+#    Linux:    curl -LsSf https://astral.sh/uv/install.sh | sh
+# 2. the course
+git clone https://github.com/gnoejh/soc4180.git
+cd soc4180
+uv sync                                   # ~2 min; downloads MuJoCo and the G1
+uv run scripts/view.py --keyframe stand   # a window with the robot = it works
+```
+
+This is **the same environment on every laptop and on the instructor's
+machine**: `uv.lock` is committed and pins every package version, and `uv sync`
+reproduces it exactly, fetching Python 3.12 itself if the laptop lacks it. Do not
+`pip install` into it; if something is missing, the fix is `git pull` and
+`uv sync` again. From week 7 on the labs train policies, which needs
+`uv sync --extra rl` (adds gymnasium, stable-baselines3 and torch).
+
+`git pull` at the start of each week picks up the new lab. The interactive
+viewer (below) needs a real window, so the lab scripts do not run on Colab.
+
+**Colab is the fallback** for the notebooks only. Click the week's badge, then
+**set the runtime to GPU first** — *Runtime > Change runtime type > T4 GPU*. The
+GPU is not for training; MuJoCo renders video through EGL on Colab, and that
 needs the GPU runtime.
 
 ## For the instructor — local setup
@@ -97,6 +123,8 @@ when a controller is misbehaving:
 uv run scripts/view.py                    # the G1, standing
 uv run scripts/view.py --walk             # the week 4 walker, live
 uv run scripts/view.py --limp             # motors off; watch it collapse
+uv run scripts/view.py --static --keyframe stand           # orbit, physics off
+uv run scripts/view.py --pose=-0.35,0,0,0.70,-0.35,0       # place the left leg (week 2)
 uv run scripts/view.py --robot robotis_op3 --keyframe home
 uv run scripts/view.py --list             # every humanoid available
 ```
@@ -105,8 +133,9 @@ Double-click a body to select it, then **ctrl-drag to push the robot** — the
 quickest way to find out whether a controller survives a disturbance, and much
 more informative than a rendered video.
 
-`soc4180.launch_viewer(model, data, passive=True)` is the underlying helper if
-you want to drive the loop yourself.
+`soc4180.launch_viewer(model, data, passive=True, key_callback=...)` is the
+underlying helper if you want to drive the loop yourself; the week 2 lab script
+uses it to step through poses on SPACE.
 
 **On Colab there is no interactive viewer** — a notebook has no window to draw
 into, which is why every lab renders video with `mediapy` instead. For an

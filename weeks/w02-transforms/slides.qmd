@@ -1382,6 +1382,35 @@ almost nothing.
 
 ---
 
+## Lab class: on your laptop {.smaller}
+
+The second class this week is hands-on. Bring your laptop with the repo installed
+(see the README), then:
+
+```bash
+uv run scripts/view.py --pose=-0.35,0,0,0.70,-0.35,0     # the crouch, frozen
+uv run weeks/w02-transforms/lab_viewer.py                 # the lab script
+```
+
+`lab_viewer.py` holds the G1 in each pose of `POSES` (SPACE for the next one) and
+draws two spheres at the left foot: **green** where MuJoCo puts the site, **red**
+where *your* `predict_foot` puts it. Physics is never stepped, so the Control
+sliders (F3) are wired to move joints directly; drag one and the red sphere
+follows your FK live.
+
+Change the file, in this order, and show each step:
+
+1. Add three poses. Predict the foot's direction before pressing SPACE.
+2. Paste your `paper_fk` into `predict_foot`. Red inside green, error ~2e-06,
+   for every pose with roll and yaw at zero.
+3. Turn roll or yaw on and watch the red sphere leave the foot. Say why.
+4. Replace it with your `my_fk` chain. Error 1e-16, for every pose.
+5. Find a pose with the foot 10 cm forward of `stand` and still flat.
+
+Then exercises 4, 5 and 8 from the previous slide, in the notebook.
+
+---
+
 ## What you built today, in order {.smaller}
 
 Two things, and **one depends on the other**. Keep the arrow pointing the right

@@ -70,7 +70,7 @@ def hold(model: mujoco.MjModel, key: int | str = 0):
     return ctrl_fn
 
 
-def launch_viewer(model=None, data=None, *, passive: bool = False):
+def launch_viewer(model=None, data=None, *, passive: bool = False, key_callback=None):
     """Open MuJoCo's interactive 3-D viewer. **Desktop only.**
 
     Orbit with the left mouse, pan with the right, zoom with the wheel; double
@@ -79,7 +79,8 @@ def launch_viewer(model=None, data=None, *, passive: bool = False):
     controller misbehaves.
 
     ``passive=True`` returns a handle instead of blocking, so you can step the
-    simulation yourself and watch it live.
+    simulation yourself and watch it live. ``key_callback(keycode)`` is called
+    for every key press in the window (passive mode only).
 
     There is no equivalent in Colab: a notebook has no window to draw into, which
     is why every lab renders video instead.
@@ -104,5 +105,5 @@ def launch_viewer(model=None, data=None, *, passive: bool = False):
         mujoco.mj_forward(model, data)
 
     if passive:
-        return mujoco.viewer.launch_passive(model, data)
+        return mujoco.viewer.launch_passive(model, data, key_callback=key_callback)
     return mujoco.viewer.launch(model, data)

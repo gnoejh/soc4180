@@ -18,6 +18,7 @@ result. Every deck is readable in a browser at
 | [00](weeks/w00-robot-stack/) | What a Robot Is — the five-layer stack | [![Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gnoejh/soc4180/blob/main/weeks/w00-robot-stack/lab.ipynb) | CPU |
 | [01](weeks/w01-intro/) | Robots, simulation, MuJoCo and MJCF | [![Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gnoejh/soc4180/blob/main/weeks/w01-intro/lab.ipynb) | CPU |
 | [02](weeks/w02-transforms/) | Transforms and forward kinematics | [![Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gnoejh/soc4180/blob/main/weeks/w02-transforms/lab.ipynb) | GPU (render) |
+| [02b](weeks/w02b-robot-as-code/) | The robot as code — body parts, qpos, the package | [![Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gnoejh/soc4180/blob/main/weeks/w02b-robot-as-code/lab.ipynb) | GPU (render) |
 | [03](weeks/w03-inverse-kinematics/) | Inverse kinematics | [![Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gnoejh/soc4180/blob/main/weeks/w03-inverse-kinematics/lab.ipynb) | GPU (render) |
 | [04](weeks/w04-walking/) | Making a humanoid walk — LIPM & ZMP | [![Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gnoejh/soc4180/blob/main/weeks/w04-walking/lab.ipynb) | GPU (render) |
 | [05](weeks/w05-actuation/) | Actuation, PD control, and rhythm | [![Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gnoejh/soc4180/blob/main/weeks/w05-actuation/lab.ipynb) | GPU (render) |
@@ -27,9 +28,10 @@ result. Every deck is readable in a browser at
 | [09](weeks/w09-reward/) | Reward shaping | [![Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gnoejh/soc4180/blob/main/weeks/w09-reward/lab.ipynb) | GPU (render) |
 | [10](weeks/w10-scaling/) | Scaling: GPU-parallel training | [![Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gnoejh/soc4180/blob/main/weeks/w10-scaling/lab.ipynb) | **GPU (training)** |
 
-Week 00 is the day-one lecture, taught before Week 01.
+Week 00 is the day-one lecture, taught before Week 01. Week 02b is week 2's
+**lab class** — the same robot read as code — not a separate week.
 
-*Weeks 2–15 are planned; see the syllabus in `CLAUDE.md`.*
+*Weeks 11–15 are planned; see the syllabus in `CLAUDE.md`.*
 
 ## For students
 

@@ -8,7 +8,7 @@
 | **Wall clock** | ~1 min |
 | **Convergence risk** | None. No learning. |
 | **Lecture class** | `slides.qmd` → `slides.html` |
-| **Lab class** | `lab_viewer.py` on the laptop, then the exercises in `lab.ipynb` |
+| **Lab class** | [`w02b-robot-as-code`](../w02b-robot-as-code/) — the same robot read as code, then `lab_viewer.py` and `lab_body.py` on the laptop |
 | **Feeds** | Week 3 (IK), Week 4 (walking) |
 
 ## This week now needs a GL backend

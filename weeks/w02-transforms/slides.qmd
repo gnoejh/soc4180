@@ -1409,6 +1409,11 @@ Change the file, in this order, and show each step:
 
 Then exercises 4, 5 and 8 from the previous slide, in the notebook.
 
+**The lab class has its own deck: `w02b-robot-as-code`.** It takes the same robot
+and reads it as a data structure — which of the thirty-six numbers are the leg,
+what the other twenty-three joints do, and how to pose any part of the body by
+name. Start there, then run `lab_body.py` alongside `lab_viewer.py`.
+
 ---
 
 ## What you built today, in order {.smaller}

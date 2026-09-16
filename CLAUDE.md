@@ -18,8 +18,8 @@ to the instructor. **Every laptop runs the same environment**: `uv.lock` pins
 it and `uv sync` reproduces it, so a lab may only depend on what the lock file
 installs (plus `--extra rl` from week 7). Colab is the no-install fallback for
 the notebook, not the primary lab environment. A week is not finished until it has a lab-class
-artifact students can edit and run locally — week 2's `lab_viewer.py` is the
-pattern; weeks 0–1 and 3–10 still lack one.
+artifact students can edit and run locally — week 2's `lab_viewer.py` and week
+2b's `lab_body.py` are the pattern; weeks 0–1 and 3–10 still lack one.
 
 **Week 0 is the day-one stack/vocabulary lecture, taught before Week 1.** Every
 week names which of its five layers it belongs to.
@@ -36,7 +36,8 @@ agentic content returns only where it attaches to the robot, in weeks 14–15.
 | Wk | Topic | Deck | Status |
 | --- | --- | --- | --- |
 | 1 | The five-layer robot stack; MuJoCo and MJCF | `w00`, `w01` | built; w01's MJCF section **not yet Colab-tested** |
-| 2 | Transforms and forward kinematics | `w02` | built, Colab-verified; **has a lab-class script** (`lab_viewer.py`) |
+| 2 | Transforms and forward kinematics | `w02` | built, Colab-verified; **has a lab-class script** (`lab_viewer.py`); lecture class only — the lab class is `w02b` |
+| 2b | The robot as code: body tree, `qpos` map, the package | `w02b` | built; **not yet Colab-tested**; **has a lab-class script** (`lab_body.py`) |
 | 3 | Inverse kinematics | `w03` | built, Colab-verified |
 | 4 | Contact, balance, analytic walking (LIPM/ZMP) | `w04` | built, Colab-verified |
 | 5 | Actuation, PD control, and CPG gaits | `w05` | built, Colab-verified |
@@ -60,7 +61,9 @@ preparation.
 **Current state.** Weeks 1–9 are built and confirmed working on Colab, except
 week 1's new material (MJCF, conventions, the simulation loop): it renders
 cleanly here — 27 cells, 38 slides, `lab.ipynb` regenerated — but has **not been
-run on Colab**. Week 10 is built and its GPU training path now runs on a Colab
+run on Colab**. Week 2b is new and in the same position: it renders cleanly here
+— 14 cells, 21 slides, six generated figures, `lab.ipynb` executed end to end
+under `nbclient` — but has **not been run on Colab**. Week 10 is built and its GPU training path now runs on a Colab
 A100, after a long series of dependency failures documented below —
 but **no run has been timed**, so `num_timesteps = 5M` is a reduction from a
 known-too-slow figure rather than a measured one. Weeks 11–15 are designed and
@@ -339,6 +342,13 @@ Upgrade **before** importing: pip rewrites files on disk and cannot replace a
 module the interpreter has already loaded. Weeks 0–9 still use the conditional
 form; they are stable, but any week that gains new package features should be
 switched.
+
+**Prefer the Colab-guarded variant** (introduced in week 2b, see *The whole body
+(week 2b)*): the bare form above also installs during a local `quarto render`,
+putting the last *committed* package over the editable venv — so a week that uses
+package code written in the same commit cannot render. Wrapping it in
+`if importlib.util.find_spec("google.colab") is not None:` keeps the unconditional
+upgrade on Colab and makes it a no-op locally.
 
 ### Standing pattern: every week starts with a notebook-only header
 
@@ -853,6 +863,77 @@ function was written wrong and unused until someone asked for a viewer path.
 
 `render_poses` draws a sequence of `qpos` without stepping physics — use it for
 anything demonstrating kinematics, so the robot does not fall over mid-lesson.
+
+### The whole body (week 2b)
+
+Week 2 teaches one leg and never says which six of the thirty-six numbers it is.
+**`w02b-robot-as-code` is week 2's lab class**: the same robot read as a data
+structure, then `lab_body.py` on the laptop. Week 2's deck stays the lecture and
+is unchanged at 46 slides — **do not merge them**, 67 slides is not one session.
+
+`src/soc4180/bodies.py` carries the anatomy: `CHAINS`, `set_pose`,
+`joint_index`/`dof_index`, `group_indices`, `chain_bodies`, `mirror`, `describe`.
+
+Measured against the pinned G1, and used on slides:
+
+- **Five chains off one pelvis**: left leg 6, right leg 6, waist 3, left arm 7,
+  right arm 7 = **29 = `nu`**. Each is **contiguous in `qpos`** in root-to-tip
+  order, and together they cover slots 7..35 exactly. The arms hang off
+  `torso_link`, three waist joints above the pelvis; the legs hang off the pelvis.
+- **`qpos` index − `qvel` index = 1 for all 29 joints.** Both indices are valid
+  on either array, so confusing them silently addresses the neighbouring joint.
+  The strip diagram exists to make that shift visible rather than a footnote.
+- **The effect heat map is the best figure in the week.** Nudge one joint 0.1 rad
+  from `stand` and measure five landmarks: a leg joint moves one foot and nothing
+  else, a waist joint moves **both hands and neither foot**. The blank cells are
+  the tree. Within a limb the effect falls root to tip — hip pitch 65 mm, hip roll
+  61, knee 32, hip yaw 13, ankle pitch 2. Waist: roll 25, yaw 22, pitch 11 at the
+  hands. Shoulder pitch 38, shoulder roll 36, elbow 18, shoulder yaw 6,
+  wrist pitch 5.
+- **Three joints move their landmark by exactly zero** — `ankle_roll`,
+  `wrist_roll`, `wrist_yaw` — because the landmark sits on the joint's own axis.
+  They still rotate it (28.6° per 0.5 rad). **Threshold the heat map at 1e-9 mm**:
+  `left_wrist_roll` returns 7e-15 mm where `right_wrist_roll` returns exactly 0,
+  so an untresholded `> 0` test colours one and not the other and looks like an
+  asymmetry that is not there.
+- **There are no hand sites.** `nsite = 4` is two feet and two IMUs, so anything
+  about a hand must read `xpos` of `left_wrist_yaw_link`. Use `imu_in_torso` for
+  the torso, not `torso_link`: that body's origin is on the waist axes and barely
+  moves (0.4 mm under `waist_yaw`, 0.0 under roll and pitch), while the IMU site
+  moves 4/15/15 mm.
+- **Mirroring negates roll and yaw, not pitch.** The MJCF's own `stand` keyframe
+  proves it: left arm `[0.2, 0.2, 0, 1.28, ...]`, right arm `[0.2, -0.2, 0, 1.28,
+  ...]`. `soc4180.mirror` flips any joint whose name contains `roll` or `yaw`.
+- **The G1 is mirror-symmetric to 10 µm, not to machine precision.**
+  `left_shoulder_pitch_link` sits at `y = +0.100220` and its twin at
+  `y = −0.100210`. That is the *only* asymmetric `body_pos` in the model. Mirrored
+  hand positions therefore agree to 1e-5 m, not 1e-16 — do not "fix" the mirror
+  code chasing it, and do not assert 1e-16 anywhere near it.
+- **`set_pose` pins the pelvis**, so a symmetric squat lifts the feet **0.111 m**
+  off the floor. That is week 2's floating-crouch lesson for the whole body, and
+  it is annotated, not hidden.
+
+`lab_body.py` follows `lab_viewer.py`'s shape but drives all five chains: keys
+`1`–`5` highlight a chain (yellow spheres along `chain_bodies`, white at the
+landmark), `M` mirrors, `ENTER` prints the pose back as a pasteable `set_pose`
+call. Same `ctrl → qpos` slider wiring as week 2 — in a kinematic script the
+sliders are dead otherwise.
+
+**Week 2b introduced a third setup-cell form, and it is the right one from now
+on.** The `try/except` form never updates; the bare unconditional upgrade would
+install the *committed* package over the editable venv during a local
+`quarto render`, which is why week 1 could not use it. Guard it on Colab:
+
+```python
+import importlib.util
+if importlib.util.find_spec("google.colab") is not None:
+    %pip install -q --upgrade "soc4180 @ git+https://github.com/gnoejh/soc4180.git"
+import soc4180
+```
+
+Always upgrades on Colab, before the first import; installs nothing locally. Use
+this for any future week that adds package code. (`%pip` inside an `if` is fine —
+IPython transforms magics at any indentation.)
 
 ## Walking (week 4)
 

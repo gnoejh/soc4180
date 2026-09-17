@@ -232,3 +232,7 @@ weeks/**/slides_files/
 # GitHub Pages build output (scripts/build_site.py); published as an
 # Actions artifact, never committed.
 _site/
+
+# Students' own working copies of a lab notebook (File > Save Notebook As...).
+# lab.ipynb itself is generated and committed; a personal copy is not.
+weeks/**/lab_*work*.ipynb

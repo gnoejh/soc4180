@@ -17,6 +17,9 @@ stepped, so the robot holds poses it could never balance in.
     R             back to `stand`
     Control sliders (F3)             drag any of the 29 joints directly
     left-drag / right-drag / wheel   orbit / pan / zoom
+    Keys go to the MuJoCo window, not the terminal -- click the window first.
+    On a Korean keyboard, letters do nothing while the IME is in Hangul mode;
+    press the Han/Eng key to switch it back to English.
 
 The highlighted chain is drawn as a string of yellow spheres, one per joint,
 from the root of the limb to its tip. The white sphere is the landmark at the

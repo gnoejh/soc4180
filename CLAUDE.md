@@ -221,6 +221,33 @@ the notebook carries the exercises and rendered video. `launch_viewer` takes a
 through poses and draws its markers through `viewer.user_scn` under
 `viewer.lock()`.
 
+**Viewer keys: the callback path is verified, the live failure is not yet
+explained.** Reported 2026-09-17: in `lab_body.py` on this machine the mouse
+works (orbit, Control sliders) but **no key does anything**. Injecting real
+`WM_KEYDOWN` messages into the live GLFW window shows the code is fine --
+32/49/77/262/257 all reach `on_key`, and the script steps poses, highlights
+chains, mirrors and prints exactly as documented. Ruled out the same way: mouse
+position (keys arrive with the cursor over either UI panel, the 3-D view or the
+title strip), clicking a widget first (options panel, a Control slider, the
+view), and `uv run` (same interpreter, mujoco 3.12.0, glfw 2.10.2). The viewer
+window also takes foreground by itself at launch.
+
+Two things are known to swallow a key and are worth excluding first, but neither
+matches "nothing at all responds":
+
+- **Focus** -- keys typed at the terminal never reach the viewer.
+- **The Korean IME.** While it is composing, Windows sends
+  `wParam = VK_PROCESSKEY (229)`, GLFW cannot translate it, and the callback is
+  **never called** -- measured: the same `M` arrives as keycode 77 in English
+  mode and as nothing in Hangul mode. This kills letters only; digits and arrows
+  survive.
+
+`scripts/keyprobe.py` is the diagnostic. It opens the viewer and, per key press,
+prints whether Windows saw the key at all (`GetAsyncKeyState`, focus-independent),
+which window was foreground, and whether `key_callback` fired -- which separates
+focus, an interceptor between Windows and GLFW, and the keyboard itself. Run it
+before theorising.
+
 **In static mode the Control sliders must be wired onto `qpos` by hand.** The
 sliders write `ctrl`, and `ctrl` reaches the joints only through `mj_step`; a
 kinematic script that just calls `mj_forward` leaves them dead, which is the

@@ -10,6 +10,9 @@ stepped: this is kinematics, so the robot holds poses it could never balance in.
     ENTER                  print the current angles and foot position
     Control sliders        (right panel, or press F3) drag any joint directly
     left-drag / right-drag / wheel   orbit / pan / zoom
+    Keys go to the MuJoCo window, not the terminal -- click the window first.
+    On a Korean keyboard, letters do nothing while the IME is in Hangul mode;
+    press the Han/Eng key to switch it back to English.
 
 The Control sliders normally set actuator *targets*, which only move the robot
 through physics. Nothing here is simulated, so this script wires each slider
@@ -131,7 +134,7 @@ def main() -> int:
                 sphere(scn.geoms[1], mine, (0.9, 0.1, 0.1, 0.9), 0.02)
                 scn.ngeom = 2
 
-    print(__doc__.split("\n\n")[1])
+    print("\n\n".join(__doc__.split("\n\n")[2:4]))      # the window + key help
     last = None
     with soc4180.launch_viewer(model, data, passive=True, key_callback=on_key) as viewer:
         while viewer.is_running():

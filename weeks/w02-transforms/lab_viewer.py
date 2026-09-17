@@ -136,6 +136,12 @@ def main() -> int:
 
     print("\n\n".join(__doc__.split("\n\n")[2:4]))      # the window + key help
     last = None
+    # Second route for every command: type it in this terminal and press enter.
+    # The viewer's own keys go through GLFW, which an IME or a stray keyboard
+    # focus can swallow; typing needs no window focus at all.
+    soc4180.terminal_keys(on_key)
+    print("  [terminal] keys dead in the window? press them here instead "
+          "-- single keys, no enter, arrows included; 'q' stops.", flush=True)
     with soc4180.launch_viewer(model, data, passive=True, key_callback=on_key) as viewer:
         while viewer.is_running():
             if state["pose"]:

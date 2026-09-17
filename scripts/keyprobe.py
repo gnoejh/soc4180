@@ -38,6 +38,23 @@ def title(h):
     u32.GetWindowTextW(h, b, n + 1)
     return b.value
 
+class GUITHREADINFO(ctypes.Structure):
+    _fields_ = [("cbSize", w.DWORD), ("flags", w.DWORD), ("hwndActive", w.HWND),
+                ("hwndFocus", w.HWND), ("hwndCapture", w.HWND),
+                ("hwndMenuOwner", w.HWND), ("hwndMoveSize", w.HWND),
+                ("hwndCaret", w.HWND), ("rcCaret", w.RECT)]
+
+
+def focus_window():
+    """The window that actually receives WM_KEYDOWN, which is NOT the foreground
+    window: a window can be foreground while keyboard focus sits elsewhere."""
+    g = GUITHREADINFO()
+    g.cbSize = ctypes.sizeof(g)
+    if u32.GetGUIThreadInfo(0, ctypes.byref(g)):
+        return g.hwndFocus
+    return None
+
+
 WATCH = {0x20: "SPACE", 0x0D: "ENTER", 0x25: "LEFT", 0x27: "RIGHT",
          **{0x30 + d: str(d) for d in range(10)},
          0x4D: "M", 0x52: "R", 0x41: "A"}
@@ -65,7 +82,9 @@ with soc4180.launch_viewer(model, data, passive=True, key_callback=on_key) as v:
                 n_before = len(hits)
                 time.sleep(0.15)                       # let the event land
                 fired = len(hits) > n_before
-                print(f"  PHYSICAL  {name:6s} focus={'MuJoCo' if fg == hwnd else repr(title(fg))}"
+                fw = focus_window()
+                print(f"  PHYSICAL  {name:6s} fg={'MuJoCo' if fg == hwnd else repr(title(fg))}"
+                      f"  keyfocus={'MuJoCo' if fw == hwnd else ('none' if not fw else repr(title(fw)))}"
                       f"  callback={'YES' if fired else 'NO  <-- swallowed'}", flush=True)
             elif not pressed:
                 down.discard(vk)
@@ -83,7 +102,9 @@ with soc4180.launch_viewer(model, data, passive=True, key_callback=on_key) as v:
                 if imm.ImmGetConversionStatus(himc, ctypes.byref(c), ctypes.byref(s)):
                     conv = hex(c.value)      # 0x0 = alphanumeric, 0x1 = Hangul
                 imm.ImmReleaseContext(fg, himc)
+            fw = focus_window()
             print(f"  [state] foreground={'MuJoCo' if fg == hwnd else repr(title(fg))}"
+                  f"  keyfocus={'MuJoCo' if fw == hwnd else ('none' if not fw else repr(title(fw)))}"
                   f"  layout={hex(layout & 0xFFFF)}  IME_open={ime_open}  conversion={conv}"
                   f"  keys_seen={len(hits)}", flush=True)
         time.sleep(0.02)

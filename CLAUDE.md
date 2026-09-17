@@ -242,6 +242,26 @@ matches "nothing at all responds":
   mode and as nothing in Hangul mode. This kills letters only; digits and arrows
   survive.
 
+**The fix that does not depend on the diagnosis: `soc4180.terminal_keys`.**
+A lab class on thirty unknown laptops cannot depend on GLFW receiving a
+keystroke, so both lab scripts now start a daemon thread that reads the console
+and feeds the *same* `key_callback`. Single keys, no enter, arrows included --
+`msvcrt.getwch()` on Windows, `tty.setcbreak` on POSIX, and a whole-line
+fallback when stdin is a pipe (which is what makes it testable without a
+keyboard). Ctrl-C is forwarded with `interrupt_main()` so the reader cannot
+swallow the way out. Two traps, both hit: a space `strip()`s to an empty token
+and arrives as ENTER unless handled as a character, and writing `" "`
+through a heredoc can halve the backslash and put a real NUL in the source --
+hence `chr(0)`/`chr(0xE0)`/`chr(3)`/`chr(27)`.
+
+**Measured on this machine, keys dead in `lab_body.py`:** `keyfocus=MuJoCo`
+(so not a focus bug) and `IME_open=False conversion=0x0` (so not the IME) --
+both documented suspects are excluded. `keyprobe.py` now reports keyboard focus
+via `GetGUIThreadInfo`, which is *not* the foreground window; a window can be
+foreground while focus sits elsewhere. Still unexplained: `lab_viewer.py`
+(09-16) worked and `lab_body.py` (09-17) does not, with `sim.py` and `uv.lock`
+unchanged between them -- run the older script as the control before theorising.
+
 `scripts/keyprobe.py` is the diagnostic. It opens the viewer and, per key press,
 prints whether Windows saw the key at all (`GetAsyncKeyState`, focus-independent),
 which window was foreground, and whether `key_callback` fired -- which separates

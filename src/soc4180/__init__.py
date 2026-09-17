@@ -10,6 +10,7 @@ from .bodies import CHAINS, chain_bodies, chain_of, group_indices, joint_index, 
 from .estimation import ComplementaryFilter, gravity_body, read_imu, tilt_from_accel
 from . import jax_compat
 from ._gl import GL_BACKEND, gl_report, is_colab
+from .keys import terminal_keys
 from .kinematics import fk_foot, ik_legs, leg_chain, leg_qpos_indices
 from .models import (
     MENAGERIE_COMMIT,
@@ -70,6 +71,7 @@ __all__ = [
     "keyframe_data",
     "keyframe_names",
     "launch_viewer",
+    "terminal_keys",
     "set_seed",
     "CPG",
     "GaitParams",

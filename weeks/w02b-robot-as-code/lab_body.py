@@ -21,6 +21,10 @@ stepped, so the robot holds poses it could never balance in.
     On a Korean keyboard, letters do nothing while the IME is in Hangul mode;
     press the Han/Eng key to switch it back to English.
 
+    If no key does anything in the window, press the same key in this terminal
+    instead -- single keys, no enter, arrows included. That route needs no
+    window focus, so it works when GLFW never sees the key. `q` stops it.
+
 The highlighted chain is drawn as a string of yellow spheres, one per joint,
 from the root of the limb to its tip. The white sphere is the landmark at the
 end of that chain -- the foot site, or the wrist body -- and the printout tells
@@ -171,6 +175,12 @@ def main() -> int:
 
     print("\n\n".join(__doc__.split("\n\n")[3:5]))      # the window + key help
     previous = None
+    # Second route for every command: type it in this terminal and press enter.
+    # The viewer's own keys go through GLFW, which an IME or a stray keyboard
+    # focus can swallow; typing needs no window focus at all.
+    soc4180.terminal_keys(on_key)
+    print("  [terminal] keys dead in the window? press them here instead "
+          "-- single keys, no enter, arrows included; 'q' stops.", flush=True)
     with soc4180.launch_viewer(model, data, passive=True, key_callback=on_key) as viewer:
         while viewer.is_running():
             if state["pose"] or state["mirror"]:

@@ -199,33 +199,78 @@ uv run python scripts/build_site.py            # rendered decks -> _site/ for Pa
 There is no test suite or linter configured. Add the tooling before inventing
 commands for it.
 
-### Lab scripts, weeks 0–10 (added 2026-09-20)
+### Lab scripts, weeks 0–10: the standard (set 2026-09-20)
 
-| Week | Script | Fill-in (returns `None` until written) | What changes on screen when it is right |
+**Every week ships two complete, explained scripts, and nothing is left
+blank.** The instructor asked for labs that are hands-on with complete, fully
+explained code — "teaching code is weak in this course" — so the earlier
+one-fill-in-returning-`None` convention is gone. What replaced it:
+
+| Week | Interactive lab | Pipeline script (linear, prints, then shows) | What it measures |
 | --- | --- | --- | --- |
-| 00 | `lab_stack.py` | `my_controller` (29 servo targets) | keys `1/0/2/3/4/G` switch layers on and off; contact-force arrows on the floor |
-| 01 | `lab_mjcf.py` | the MJCF string and `TARGET` | the compiler's own errors; droop, `BADQACC` count on ENTER |
-| 03 | `lab_ik.py`, `reach.py` | **none — complete**: `dls_step`, `inverse_step`, `transpose_step` all shipped and explained; `M` swaps them. `reach.py --target dx dy dz` is the same pipeline as a linear script that prints and then animates | the green foot chases the red target inside a translucent reach sphere; the inverse folds the straight leg |
-| 04 | `lab_walk.py` | `predict_com` (LIPM closed form) | blue dots inside the white commanded-CoM dots; yellow ZMP sphere |
-| 05 | `lab_servo.py` | `torque_from_pd` | joints colour by torque; `H` makes the student's law *the* servo |
-| 06 | `lab_imu.py` | `my_filter` (complementary) | three "down" arrows; the green one vertical |
-| 07 | `lab_env.py` | `my_policy(obs, t)` | gravity arrow, reward bar, yellow airborne feet, episode lines |
-| 08 | `lab_train.py` | `choose_action(mean, std, rng)` | `D` flips deterministic/stochastic; `T` trains in a thread |
-| 09 | `lab_reward.py` | `extra_reward` (a wrapper term) | variants trained in a thread; feet-up shown |
-| 10 | `lab_many.py` | `predict_rate(n, single)` | N robots in one scene; `P` benchmarks processes |
+| 00 | `lab_stack.py` (`my_controller` waves the arm as shipped) | `stack.py --layer limp\|zero\|hold\|walk\|wave --gravity` | torso height, contacts, ΣF vs weight, steps/s per layer |
+| 01 | `lab_mjcf.py` (XML annotated tag by tag) | `mjcf_run.py --kp --timestep --servos --xml` | droop vs kp (−0.080 … −0.858), `BADQACC` at dt 0.02 |
+| 02 | `lab_viewer.py` (`chain_fk` 1.8e-16, `paper_fk` 2.2e-6, `F` switches) | `fk.py --angles` | the chain printed body by body vs `site_xpos` |
+| 02b | `lab_body.py` | `anatomy.py --nudge CHAIN --pose --mirror` | the qpos/qvel map; one heat-map row live |
+| 03 | `lab_ik.py` (dls, inverse, transpose; `M` swaps) | `reach.py --target --solver --seed --trace --jacobian` | residual per iteration; the singularity |
+| 04 | `lab_walk.py` (`predict_com` complete) | `walk.py --step-time --double-support --gravity --friction` | one row per step: x, pelvis z, ZMP range, IK error |
+| 05 | `lab_servo.py` (`torque_from_pd` complete, `H` hands over) | `servo.py --joint --kp-scale --kv-scale --limit --walk` | ζ from `mj_fullM`, rise time, overshoot, peak torque; sag and falls |
+| 06 | `lab_imu.py` (`my_filter` complete) | `imu.py --walk --noise --alpha --sweep` | three estimators' error per second; the α sweep |
+| 07 | `lab_env.py` (`my_policy` = the ankle strategy) | `env_run.py --policy --push --weights --hz --action-scale` | reward per second by term; pushes survived |
+| 08 | `lab_train.py` (`choose_action` complete) | `train.py --log-std --steps` | deterministic vs stochastic, before and after |
+| 09 | `lab_reward.py` (`extra_reward` complete, `EXTRA` picks) | `shape.py --variant --extra` | scored on its reward AND the original |
+| 10 | `lab_many.py` (`predict_rate` complete, `COST_EXPONENT`) | `many.py --robots --procs --randomise` | physics-only vs walking robot-steps/s; processes |
 
-Conventions, all followed: a list at the top to extend; one fill-in; keys in
-the docstring; **except week 3, which since 2026-09-20 ships every solver
-complete and explained** — the instructor asked for labs to be hands-on with
-complete, fully explained code, so `lab_ik.py` is five numbered sections with
-the explanation in the comments and eight measured experiments instead of a
-blank. Apply the same to the other weeks when asked; their fill-ins still
-return `None`. `soc4180.terminal_keys` as the second route; **restarts reuse
-the same `MjData`** (`mj_resetData` + copy `qpos`), because the passive viewer
-is bound to one data object — only `lab_many.py` reopens the viewer, since its
-model changes; and **`SOC4180_AUTOCLOSE=<seconds>` closes the window by
-itself**, so `SOC4180_AUTOCLOSE=6 uv run weeks/NN/lab_x.py < /dev/null` is the
-smoke test. Every script passed it on 2026-09-20.
+Conventions, all followed: numbered sections with the explanation in the
+comments at the point of the call; every experiment in the docstring carries
+the number it should produce, **measured with the pipeline script before it
+was written**; a list at the top to extend; keys in the docstring;
+`soc4180.terminal_keys` as the second route; restarts reuse the same `MjData`
+(only `lab_many.py` reopens the viewer); `SOC4180_AUTOCLOSE=<seconds>` closes
+any window, and **`uv run scripts/check_labs.py` runs every script briefly and
+reports** — the pipelines headless with `--no-viewer`, the labs with the
+auto-close. Run it after touching the package. `docs/mujoco-calls.md` maps
+each idea to its call and its script; keep it current when a script changes
+which call it uses. Pipeline scripts follow one shape: compute, print, then
+replay the recorded `qpos` in the passive viewer (`mj_forward` + `sync`, no
+physics re-run) — and none of them is a notebook cell.
+
+Measured while building the pipeline scripts (2026-09-20), beyond the
+per-week READMEs:
+
+- **Week 7's push experiment was an unmeasured claim and is now measured.**
+  Holding the crouch survives a 65 N sideways push on the torso for 0.2 s and
+  falls at 70; driving both ankles against `obs[0:3]` (gains 2, 2) survives 75
+  and falls at 80; hip roll instead, either sign, changes nothing; ankle pitch
+  with the sign flipped falls with no push at all. `env_run.py --push` is the
+  instrument (`xfrc_applied` on `torso_link`).
+- **Week 9: the velocity bonus with no upright term does not lunge at 40k
+  steps** — the policy still stands (529 on its own reward, 779 on the
+  original). A moved optimum is not a found one; the lab says so instead of
+  promising lunging. The `+both` ablation reproduces bit-identically from
+  `shape.py` (224 steps, −0.524 m, 0.08 feet up).
+- **Week 8 reproduces from `train.py`**: untrained 774.5 deterministic / 42
+  steps stochastic; trained on std 1.0 the deterministic robot scores 94 and
+  survives 47 steps; log_std −2 gives 208 steps stochastic and 777 trained.
+- **Week 10, quiet machine, physics only**: 16,164 / 14,835 / 14,686 / 12,544
+  / 13,064 robot-steps/s for 1 / 2 / 4 / 8 / 16 robots in one process (p ≈
+  1.09: flat, as the slide argues). Walking climbs 1,544 → 8,656 only because
+  the one IK call (0.5 ms, eight times the physics) is shared. Processes:
+  16,822 / 33,382 / 62,410 / 130,429 / 199,062 for 1 / 2 / 4 / 8 / 16. The
+  old "2,459 for four robots" was four *overlapping* robots and is retired.
+- **Week 4 from `walk.py`**: 0.989 m in 8.8 s, ZMP y over [−0.233, +0.105]
+  against feet at ±0.119; rushed / no-double-support / Moon fall at 3.2 / 2.0
+  / 5.3 s; ice (friction 0.2) changes nothing for this gait.
+- **Week 5 from `servo.py`** (knee, 0.5 rad step, gravity off): ζ = 1.00,
+  1 % at 0.132 s, 250 N·m; kp × 4: ζ 0.50, 0.036 s, 2.1 % overshoot,
+  1000 N·m; kv / 4: ζ 0.25, 4.6 % overshoot; kv × 4: ζ 4, 0.600 s. Walking:
+  limit 50 falls, 55 walks; half and double stiffness both fall.
+- **Week 6 from `imu.py`** (noisy walk, 6 s): accelerometer 7.8°, gyro 3.4°,
+  filter 1.8° at α = 0.995; sweep minimum 1.15° at α = 0.998. The pelvis IMU's
+  accelerometer is worse (8.2°) and its gyro better (0.9°).
+- **Week 2b from `anatomy.py`**: elbow 205 mm at the wrist, shoulder pitch 38,
+  wrist roll 0.0 (on its own axis); waist yaw 22 mm at both wrists, 4.4 at
+  the torso IMU, 0 at the feet.
 
 Facts these scripts and the new figures established, each measured:
 
@@ -338,7 +383,7 @@ and feeds the *same* `key_callback`. Single keys, no enter, arrows included --
 fallback when stdin is a pipe (which is what makes it testable without a
 keyboard). Ctrl-C is forwarded with `interrupt_main()` so the reader cannot
 swallow the way out. Two traps, both hit: a space `strip()`s to an empty token
-and arrives as ENTER unless handled as a character, and writing `" "`
+and arrives as ENTER unless handled as a character, and writing `"\0"`
 through a heredoc can halve the backslash and put a real NUL in the source --
 hence `chr(0)`/`chr(0xE0)`/`chr(3)`/`chr(27)`.
 

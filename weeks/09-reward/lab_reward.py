@@ -22,12 +22,16 @@ the tracking term is being earned, orange when it is only staying alive) and
 YELLOW feet when the env counts a foot as airborne -- the `air_time` term.
 Every episode ends with a line: return, steps, distance, feet-up fraction.
 
-`extra_reward` below is your own term, added on top of the variant's weights
-through a wrapper. It is empty. Potential-based shaping, F = gamma * Phi(s') -
-Phi(s), is the one kind that provably cannot change what is optimal; anything
-else can, and the deck says why.
+`extra_reward` below is an extra term, added on top of the variant's weights
+through a wrapper. As shipped it is potential-based shaping with Phi(s) = x,
+F = gamma * Phi(s') - Phi(s): the one kind that provably cannot change what
+is optimal; anything else can, and the deck says why. `shape.py` in this
+folder trains any variant headless and scores it on the ORIGINAL reward too.
 
-What to change, in order, and show the instructor:
+Everything here is complete: section 1 is the term, section 2 the loop with
+the wrapper, the training thread, and the calls named.
+
+Experiments, in order, and show the instructor:
 
 1. Press 1 and watch the untrained robot. Press T. While it trains, say what
    return you expect from the deck's ranking (standing 776, walking 1250).
@@ -36,11 +40,11 @@ What to change, in order, and show the instructor:
 3. Press 4 (+ stand_still and + air_time) and T. Watch the trained result and
    read the distance sign. Then 2 and 3 (each term alone). Say which of the
    four leaves the standing optimum.
-4. Write `extra_reward` as a potential-based term with Phi(s) = x position.
-   Train variant 1 again. Compare the episode lines: what changed, and what
-   did the theorem promise would not?
-5. Now make `extra_reward` pay for torso x-velocity with no upright term (set
-   the variant's upright to 0). Train. Watch the video before writing a word.
+4. Set EXTRA = "potential" (as shipped) and train variant 1 again. Compare the
+   episode lines: what changed, and what did the theorem promise would not?
+5. Set EXTRA = "velocity" -- a plain bonus for moving forward, NOT potential-
+   based -- with no upright term (add a variant with upright 0). Train. Watch
+   the robot before writing a word.
 """
 
 from __future__ import annotations
@@ -68,19 +72,37 @@ GAMMA = 0.99
 SEED = 0
 
 
+EXTRA = "none"          # "none", "potential" or "velocity": see extra_reward
+
+
+# --- 1. the extra term -----------------------------------------------------------------
+
 def extra_reward(env, info: dict, x_before: float, x_after: float) -> float:
-    """Your own reward term for one step. Return 0.0 until written.
+    """An extra reward term for one step, added to the variant's reward by the wrapper.
 
     `info` carries every built-in term for this step (tracking, upright,
     effort, smooth, alive, stand_still, air_time, forward_velocity).
-    `x_before` and `x_after` are the pelvis x position before and after the
-    step -- enough for a potential Phi(s) = x, i.e. return
-    GAMMA * x_after - x_before.
+    `x_before` and `x_after` are the pelvis x position before and after.
+
+    "potential":  F = GAMMA * Phi(s') - Phi(s) with Phi(s) = x. Ng, Harada and
+                  Russell (1999): along any trajectory these telescope into a
+                  constant, so the optimal policies are unchanged -- it steers
+                  the search, never the answer.
+    "velocity":   5 * (x_after - x_before). Looks similar, is not potential-
+                  based (the sum does not telescope), and CAN move the optimum.
+                  Measured at 40k steps with no upright term it has not yet:
+                  the policy still stands (529 on its own reward, 779 on the
+                  original). Shaping changes where the optimum is; it does not
+                  buy the search that reaches it.
     """
+    if EXTRA == "potential":
+        return GAMMA * x_after - x_before
+    if EXTRA == "velocity":
+        return 5.0 * (x_after - x_before)
     return 0.0
 
 
-# --- nothing below needs editing ------------------------------------------
+# --- 2. the loop ----------------------------------------------------------------------------
 
 def box(geom, pos, half, rgba):
     mujoco.mjv_initGeom(geom, mujoco.mjtGeom.mjGEOM_BOX,
@@ -111,7 +133,7 @@ def main() -> int:
     torch.set_num_threads(max(1, (os.cpu_count() or 2) // 2))
 
     class Shaped(gym.Wrapper):
-        """The variant's reward plus the student's extra term."""
+        """The variant's reward plus the extra term: a wrapper changes the reward without touching the env."""
         def step(self, action):
             x0 = float(self.unwrapped.data.qpos[0])
             obs, r, term, trunc, info = self.env.step(action)
@@ -127,6 +149,7 @@ def main() -> int:
     feet = [mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_SITE, f"{s}_foot") for s in ("left", "right")]
 
     def fresh_agent(e):
+        # the same PPO as week 8, with the quiet start (std 0.135) that week found necessary
         return PPO("MlpPolicy", e, verbose=0, seed=SEED, device="cpu", gamma=GAMMA,
                    policy_kwargs=dict(log_std_init=-2.0))        # week 8's fix
 

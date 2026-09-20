@@ -22,17 +22,21 @@ takes over. Then the lesson of the week is one key:
 Every episode prints return, steps, and TERMINATED (fell) or TRUNCATED. The
 number to watch is *steps survived* -- deterministic against stochastic.
 
-Pressing D does nothing until you write `choose_action` below: sampling is
-the exercise. PPO learns from the sampled actions and is judged on the mean
-ones, and those are two different robots.
+`choose_action` below is the sampling PPO does, complete and explained: PPO
+learns from the sampled actions and is judged on the mean ones, and those are
+two different robots. `train.py` in this folder trains headless and prints
+both robots' scores before and after.
 
-What to change, in order, and show the instructor:
+Everything here is complete: section 1 is the sampling, section 2 the loop
+with the training thread and the calls named.
+
+Experiments, in order, and what to show the instructor:
 
 1. Press ENTER: the untrained policy's action std is 1.0 on a [-1, 1] range.
-   Watch the deterministic robot stand for 500 steps.
-2. Write `choose_action`: sample from N(mean, std) and clip to [-1, 1]. Press D.
-   Count how many steps the stochastic robot survives. This is the data PPO
-   will learn from.
+   Watch the deterministic robot stand for 500 steps (return ~774).
+2. Press D. Count how many steps the stochastic robot survives (about 38).
+   This is the data PPO will learn from. Break `choose_action`: return the
+   mean and D changes nothing; multiply std by 3 and it falls at once.
 3. Press T. Wait for training. Press D a few times: has the trained policy
    learned anything the untrained one could not do? What did it learn *from*?
 4. Press 2 (log_std_init = -2.0, std 0.135), then D. Compare the stochastic
@@ -63,18 +67,25 @@ CONFIGS = [
 SEED = 0
 
 
-def choose_action(mean: np.ndarray, std: np.ndarray, rng: np.random.Generator) -> np.ndarray | None:
-    """A stochastic action: sample around the policy's mean. Return None until written.
+# --- 1. the sampling: what the environment sees during training ------------------------
+
+def choose_action(mean: np.ndarray, std: np.ndarray, rng: np.random.Generator) -> np.ndarray:
+    """A stochastic action: one sample from N(mean, std), clipped to the action space.
 
     PPO's Gaussian policy has a mean (what `predict(deterministic=True)` gives
-    you) and a per-joint standard deviation. Draw one sample,
-    `mean + std * rng.standard_normal(mean.shape)`, and clip it to [-1, 1], the
-    action space. That sample is what the environment sees during training.
+    you: the network's output) and a per-joint standard deviation exp(log_std),
+    a learned vector that starts at exp(log_std_init). During training every
+    action the environment sees is a sample; the "deterministic" robot you show
+    off never acts during training at all. With std 1.0 on a [-1, 1] range,
+    most samples are clipped to the limits -- the stochastic robot survives ~38
+    steps where the mean robot survives 500, so over 90 % of the experience is
+    a fall. log_std_init = -2 (std 0.135) raises that to ~180.
     """
-    return None
+    noise = rng.standard_normal(mean.shape)                  # one draw per joint
+    return np.clip(mean + std * noise, -1.0, 1.0)            # the action space is [-1, 1]
 
 
-# --- nothing below needs editing ------------------------------------------
+# --- 2. the loop ------------------------------------------------------------------------
 
 def box(geom, pos, half, rgba):
     mujoco.mjv_initGeom(geom, mujoco.mjtGeom.mjGEOM_BOX,
@@ -101,6 +112,8 @@ def main() -> int:
     rng = np.random.default_rng(SEED)
 
     def fresh_agent(cfg):
+        # PPO("MlpPolicy"): a policy network (mean action + log_std) and a value
+        # network on the 42-number observation; seed fixes weights and sampling
         return PPO("MlpPolicy", G1WalkEnv(), verbose=0, seed=SEED, device="cpu",
                    policy_kwargs=dict(log_std_init=cfg["log_std_init"]))
 
@@ -123,6 +136,7 @@ def main() -> int:
         agent = fresh_agent(cfg)
         t0 = time.time()
         print(f"\n  T: training [{name}] for {cfg['total_timesteps']:,} steps in the background")
+        # learn(): collect 2048 sampled steps, update the networks, repeat
         agent.learn(total_timesteps=cfg["total_timesteps"], callback=Progress(cfg["total_timesteps"]))
         agents[i] = agent
         print(f"  T: done in {time.time() - t0:.0f} s -- the trained policy is now driving config {i + 1}")
@@ -167,16 +181,13 @@ def main() -> int:
         mean, _ = agent.predict(obs, deterministic=True)
         if state["det"]:
             return mean
-        std = np.exp(agent.policy.log_std.detach().cpu().numpy())
+        std = np.exp(agent.policy.log_std.detach().cpu().numpy())    # the learned per-joint std
         a = choose_action(np.asarray(mean, np.float32), std.astype(np.float32), rng)
-        if a is None:
-            return mean
         return np.clip(np.asarray(a, np.float32), -1.0, 1.0)
 
     def report():
         std = np.exp(state["agent"].policy.log_std.detach().cpu().numpy())
-        print(f"  step {state['steps']}  return so far {state['ret']:.1f}  action std {std.mean():.3f}"
-              f"  (choose_action {'written' if choose_action(np.zeros(12), np.ones(12), rng) is not None else 'NOT written: D does nothing'})")
+        print(f"  step {state['steps']}  return so far {state['ret']:.1f}  action std {std.mean():.3f}")
 
     print("\n\n".join(__doc__.split("\n\n")[2:4]))
     soc4180.terminal_keys(on_key)

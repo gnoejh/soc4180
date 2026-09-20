@@ -71,48 +71,63 @@ locomotion run. That is Week 10's problem.
 ## Lab class: on your laptop
 
 ```bash
-uv run weeks/08-ppo/lab_train.py          # torch + SB3: uv sync --extra rl
+uv run weeks/08-ppo/lab_train.py          # needs torch + SB3: uv sync --extra rl
+uv run weeks/08-ppo/train.py --log-std -2
 ```
 
-The G1 in `G1WalkEnv`, driven live by a PPO policy. `CONFIGS` at the top lists
-PPO settings (`log_std_init`, `total_timesteps`); keys `1`–`9` select one.
-**`T` trains the selected configuration in a background thread** — about a
-minute for 30k steps on a laptop CPU, with progress every 5k steps in the
-terminal — while the window keeps playing the untrained policy; when training
-finishes, the trained policy takes over. `D` switches between the mean action
-and a sampled one.
+`G1WalkEnv` in the viewer under a PPO policy from `CONFIGS`. `T` trains the
+selected configuration in a background thread (about 70 s for 30k steps here)
+while the window keeps playing; when it finishes the trained policy takes
+over. `D` switches between the deterministic robot (the mean action) and the
+stochastic one (a sample), `1`–`3` select a config, `ENTER` prints the return
+so far and the action std. Every episode prints return, steps survived, and
+terminated or truncated.
 
-```
-T       train the selected config (background)      D   deterministic <-> stochastic
-1..9    select a config (trained if you trained it, else fresh)
-R       reset      SPACE   pause      ENTER   return, steps, action std
-```
+**The code is complete and explained**: `choose_action` is PPO's own sampling
+(`mean + std · N(0, 1)`, clipped to the action space) with the reason it
+matters in its docstring, and the loop names `PPO("MlpPolicy")`, `learn`,
+`predict(deterministic=True)` and `policy.log_std`.
 
-`choose_action(mean, std, rng)` returns `None` as shipped, and until it is
-written `D` has no effect: **sampling is the exercise**. One line — a normal
-draw around the mean, clipped to the action space — and the student has written
-the thing that decides whether PPO's first batch of data is a robot standing or
-a robot on the floor. A bar above the head counts steps survived (green
-deterministic, orange stochastic).
-
-| Step | Change | Right looks like |
+| Step | Do | Right looks like (measured with `train.py`) |
 | --- | --- | --- |
-| 1 | `ENTER` | std 1.0 on a ±1 range; the deterministic untrained robot survives 500 steps |
-| 2 | write `choose_action`, press `D` | the stochastic robot falls within tens of steps |
-| 3 | `T`, wait, then `D` a few times | a trained policy no better than the untrained one; the student explains what it learned from |
-| 4 | `2` (log_std_init −2), `D`; then `T` | stochastic survival in the hundreds; a trained policy that stands, ~776 |
-| 5 | a `log_std_init = -4` config, prediction first | still not walking; the deck's 0.02% quoted back |
+| 1 | `ENTER` | std 1.0; the deterministic robot stands 500 steps, return 774 |
+| 2 | `D`; then break `choose_action` | the stochastic robot survives ~42 steps; returning the mean makes `D` do nothing; std × 3 falls at once |
+| 3 | `T`, wait, `D` a few times | trained on std 1.0 the deterministic robot is *worse*: 94, 47 steps — it learned from falls |
+| 4 | `2` (log_std_init −2), `D`, `T` | stochastic survival ~208 steps; trained deterministic 777, 500 steps: it learned not to fall, not to walk |
+| 5 | a config with log_std_init −4 | a prediction first; it will not walk either — the deck has the number |
 
-`SOC4180_AUTOCLOSE=8 uv run weeks/08-ppo/lab_train.py` closes the window by
-itself, which is how the script is smoke-tested (training is not triggered).
+### `train.py`: two robots, measured before and after
 
-## A note on REINFORCE's batch size
+```bash
+uv run weeks/08-ppo/train.py
+uv run weeks/08-ppo/train.py --log-std -2
+uv run weeks/08-ppo/train.py --log-std -2 --steps 100000
+uv run weeks/08-ppo/train.py --steps 0 --no-viewer
+```
 
-Updates use a **batch of 8 episodes**. With one episode per update the variance
-is so large that training frequently goes nowhere: two runs of identical code
-reached 260 and 88 respectively. The batched version is reliable across seeds
-(~30 → ~485 for seeds 0, 1, 2). The slides make that variance the lesson rather
-than hiding it.
+Builds the agent, evaluates the untrained policy both ways, trains with a
+progress line every 5000 steps (mean episode length and return from PPO's own
+buffer), evaluates both ways again, and replays the trained deterministic
+robot.
+
+| Step | Does | Calls |
+| --- | --- | --- |
+| 1 | the env and the agent (14,681 parameters, initial std) | `G1WalkEnv`, `PPO("MlpPolicy", …, policy_kwargs=dict(log_std_init=…))` |
+| 2 | evaluate: mean action vs `sample_action` | `predict(deterministic=True)`, `policy.log_std` |
+| 3 | train, with progress | `learn(callback=…)`, `ep_info_buffer` |
+| 4 | evaluate again | |
+| 6 | replay | `launch_viewer(passive=True)` |
+
+Measured, 30k steps, 70 s on this machine:
+
+| log_std_init | untrained det. | untrained stoch. | trained det. | trained stoch. |
+| --- | --- | --- | --- | --- |
+| 0 (std 1.0) | 774, 500 steps | 51, 42 steps | **94, 47 steps** | 37, 35 steps |
+| −2 (std 0.135) | 774, 500 steps | 301, 208 steps | **777, 500 steps** | 240, 169 steps |
+
+The first row is the week's lesson: PPO made the robot worse, because over
+90 % of what it learned from was a fall. The second row fixes the noise and
+learns not to fall — and only that.
 
 ## Rebuild
 

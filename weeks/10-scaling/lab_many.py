@@ -20,16 +20,22 @@ thing that matters: robot-steps per second.
     If no key does anything in the window, press the same key in this terminal
     instead -- single keys, no enter. `q` stops it.
 
-`predict_rate` below is your model of the throughput of one process with n
+`predict_rate` below is a model of the throughput of one process with n
 robots in it, given the single-robot rate the script measures at start-up.
-It returns None until written; ENTER then prints measured against predicted.
+As shipped it assumes a step costs linearly in the number of bodies, so the
+throughput is flat; ENTER prints measured against predicted, and the gap is
+the exercise. `many.py` in this folder measures the whole curve headless.
 
-What to change, in order, and show the instructor:
+Everything here is complete: section 1 is the model, section 2 builds the
+multi-robot scene with MjSpec (explained), section 3 is the loop.
+
+Experiments, in order, and show the instructor:
 
 1. Press ENTER with the default N. Write down robot-steps/s and "x real time".
    Press + three times, ENTER each time. Does the total throughput of one
-   process grow with N, stay flat, or shrink? Write `predict_rate` to match
-   what you think, then check.
+   process grow with N, stay flat, or shrink? Correct COST_EXPONENT in
+   `predict_rate` until the prediction matches, and say what grows faster
+   than the body count.
 2. Press P. Read the four numbers. At how many processes does it stop
    scaling, and how many cores does this laptop have (`os.cpu_count()`)?
 3. Take your best rate from step 2. How many hours is 150 million steps?
@@ -59,18 +65,37 @@ SPACING = 0.7          # metres between robots, sideways
 SEED = 0
 
 
-def predict_rate(n: int, single: float) -> float | None:
+COST_EXPONENT = 1.0    # one step of n robots costs n ** COST_EXPONENT single steps; correct it
+
+
+# --- 1. the model of throughput ---------------------------------------------------------
+
+def predict_rate(n: int, single: float) -> float:
     """Predicted robot-steps per second for one process stepping n robots at once.
 
-    `single` is the measured rate for one robot alone. Return None until written.
+    `single` is the measured rate for one robot alone. If a step of the
+    n-robot scene costs n ** p single steps, the scene runs at single / n ** p
+    steps/s and each step is n robot-steps: single * n ** (1 - p). With p = 1
+    the throughput is flat -- more robots, same robot-steps/s. Contacts and
+    the mass matrix grow faster than the body count, so the measured p is
+    above 1; find it. The window walks its robots from ONE controller (an IK
+    solve per step, about ten physics steps' worth, shared by all n), so the
+    measured number mixes physics and control: `many.py` separates them.
     """
-    return None
+    return single * n ** (1 - COST_EXPONENT)
 
 
-# --- nothing below needs editing ------------------------------------------
+# --- 2. the scene: n robots, one model, one mj_step ----------------------------------------
 
 def build(n, randomise):
-    """One scene with n G1s side by side, and the index arrays to drive them."""
+    """One scene with n G1s side by side, and the index arrays to drive them.
+
+    MjSpec is MuJoCo's editable model: attach a copy of the G1's own spec
+    under a new frame per robot (names get the prefix r{k}_; qpos and ctrl
+    are contiguous per robot in attach order), then compile() once. A
+    free-joint robot's position goes in qpos, not in the frame -- Scene.reset
+    spreads them sideways there.
+    """
     robot = str(soc4180.robot_path("unitree_g1", "g1"))
     base = mujoco.MjSpec.from_string("""
 <mujoco>
@@ -108,7 +133,10 @@ def build(n, randomise):
     return model, one
 
 
+# --- 3. the loop -------------------------------------------------------------------------------
+
 class Scene:
+    """n robots walking from one controller: one ctrl vector tiled n times, one mj_step."""
     def __init__(self, n, randomise):
         self.n = n
         self.model, self.one = build(n, randomise)
@@ -191,8 +219,8 @@ def main() -> int:
         pred = predict_rate(scene.n, single)
         sim_per_wall = scene.steps * scene.model.opt.timestep / max(time.time() - scene.t0, 1e-6)
         print(f"  {scene.n} robots in one process: {measured:8,.0f} robot-steps/s measured"
-              + ("   (predict_rate not written)" if pred is None else f"   vs {pred:8,.0f} predicted")
-              + f"   window at {sim_per_wall:.2f}x real time")
+              f"   vs {pred:8,.0f} predicted (COST_EXPONENT {COST_EXPONENT})"
+              f"   window at {sim_per_wall:.2f}x real time")
         print(f"  150M steps at this rate: {150e6 / measured / 3600:6.1f} hours"
               f"   nq = {scene.model.nq}, nbody = {scene.model.nbody}, contacts now {scene.data.ncon}")
 

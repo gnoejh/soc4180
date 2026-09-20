@@ -356,24 +356,46 @@ why they are tuned so carefully.
 ## Lab class: on your laptop {.smaller}
 
 ```bash
-uv run weeks/09-reward/lab_reward.py       # torch + SB3: uv sync --extra rl
+uv run weeks/09-reward/lab_reward.py      # torch + SB3: uv sync --extra rl
 ```
 
-`VARIANTS` at the top of the file is the list of reward weightings from this
-lecture. Pick one with a number key, press `T`, and it trains for 40k steps
-in the background while the window keeps playing; then the trained policy
-takes over. Yellow feet mark the `air_time` term firing.
-
-`extra_reward(env, info, x_before, x_after)` is the student's own term, added
-through a wrapper. Potential-based shaping is one line with $\Phi(s) = x$.
+`VARIANTS` lists reward weightings; a number key selects one, `T` trains it in
+the background (95 s), the trained policy then drives the window; `ENTER`
+prints every term. **The code is complete**: `extra_reward` is potential-based
+shaping with the theorem in its docstring, and a velocity bonus for contrast.
 
 | Step | Do | Right looks like |
 | --- | --- | --- |
-| 1 | `1`, `T` | a prediction from the ranking while it trains |
-| 2 | watch the trained robot | it stands; `ENTER` shows it living on alive + upright |
-| 3 | `4`, `T`; then `2` and `3` | only "+ both" leaves the standing pose — backwards |
-| 4 | potential-based `extra_reward`, `1`, `T` | same behaviour; the theorem kept its promise |
-| 5 | pay for torso velocity, upright 0, `T` | watched **before** described |
+| 1 | `1`, `T` | a prediction from the ranking first |
+| 2 | watch, `ENTER` | it stands: 778, 500 steps, living on alive and upright |
+| 3 | `4` (+ both), `T`; then `2`, `3` | 224 steps, −0.524 m, feet up 0.08; each term alone changes nothing |
+| 4 | `EXTRA = "potential"`, `1`, `T` | 778 again: the theorem kept its promise |
+| 5 | `EXTRA = "velocity"`, `upright: 0`, `T` | still standing at 40k: a moved optimum is not a found one |
+
+---
+
+## Lab class: `shape.py`, scored twice {.smaller}
+
+```bash
+uv run weeks/09-reward/shape.py --variant both
+uv run weeks/09-reward/shape.py --variant no_upright --extra velocity --no-viewer
+```
+
+Trains PPO on a variant, then scores the policy on the reward it was trained
+on *and* on the original — the honest number — and replays it.
+
+| variant | extra | on its reward | on the original | steps | distance | feet up |
+| --- | --- | --- | --- | --- | --- | --- |
+| unchanged | none | 778.1 | 778.1 | 500 | +0.018 | 0.00 |
+| both | none | 260.4 | 324.7 | 224 | −0.524 | 0.08 |
+| unchanged | potential | 778.4 | 778.5 | 500 | +0.022 | 0.00 |
+| no_upright | velocity | 529.4 | 779.0 | 500 | +0.026 | 0.00 |
+
+| Step | Does | Calls |
+| --- | --- | --- |
+| 2 | the env, wrapped with the extra term | `gym.Wrapper`, `G1WalkEnv(reward_weights)` |
+| 3 | train | `PPO(…, gamma, log_std_init=-2)`, `learn` |
+| 4 | evaluate on both rewards | `predict(deterministic=True)` |
 
 ---
 

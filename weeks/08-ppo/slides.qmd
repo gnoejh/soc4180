@@ -483,19 +483,42 @@ Thirty thousand steps is **0.02%** of a real locomotion run; the literature uses
 uv run weeks/08-ppo/lab_train.py          # torch + SB3: uv sync --extra rl
 ```
 
-The G1 in `G1WalkEnv` under a PPO policy, in the viewer. `T` trains the
-selected entry of `CONFIGS` **in the background** (about a minute for 30k
-steps) while the window keeps playing; when it finishes the trained policy
-takes over. `D` flips between the mean action and a sampled one — and does
-nothing until you write `choose_action`, because sampling is the exercise.
+`G1WalkEnv` under a PPO policy from `CONFIGS`; `T` trains it in the background
+(70 s for 30k steps) while the window keeps playing; `D` switches the mean
+action for a sampled one; `ENTER` prints the action std. **The code is
+complete**: `choose_action` is PPO's own sampling, explained.
 
 | Step | Do | Right looks like |
 | --- | --- | --- |
-| 1 | `ENTER` | std 1.0 on a ±1 range; the deterministic robot stands 500 steps |
-| 2 | write `choose_action`, `D` | the sampled robot lasts tens of steps: this is PPO's training data |
-| 3 | `T`, wait, `D` a few times | trained on wreckage: what it learned, and from what |
-| 4 | `2`, `D`; then `T` | stochastic survival in the hundreds; a trained policy that stands |
-| 5 | add `log_std_init = -4`, predict, `T` | it still does not walk; the student quotes the 0.02% |
+| 1 | `ENTER` | std 1.0; the deterministic robot stands 500 steps, return 774 |
+| 2 | `D`; break `choose_action` | ~42 steps survived; the mean makes `D` do nothing; std × 3 falls at once |
+| 3 | `T`, then `D` | trained on std 1.0 the deterministic robot is *worse*: 94, 47 steps |
+| 4 | `2` (log_std_init −2), `D`, `T` | ~208 steps stochastic; trained 777 and 500 steps: not falling, not walking |
+| 5 | log_std_init −4 | a prediction first; it will not walk either |
+
+---
+
+## Lab class: `train.py`, two robots measured {.smaller}
+
+```bash
+uv run weeks/08-ppo/train.py --log-std -2
+uv run weeks/08-ppo/train.py --steps 0 --no-viewer
+```
+
+Evaluates the untrained policy both ways, trains with a progress line every
+5000 steps, evaluates both ways again, replays the trained mean robot.
+
+| log_std_init | untrained det. | untrained stoch. | trained det. | trained stoch. |
+| --- | --- | --- | --- | --- |
+| 0 (std 1.0) | 774, 500 steps | 51, 42 steps | **94, 47 steps** | 37, 35 steps |
+| −2 (std 0.135) | 774, 500 steps | 301, 208 steps | **777, 500 steps** | 240, 169 steps |
+
+| Step | Does | Calls |
+| --- | --- | --- |
+| 1 | env and agent | `G1WalkEnv`, `PPO("MlpPolicy", …, log_std_init)` |
+| 2 | evaluate: mean vs `sample_action` | `predict(deterministic=True)`, `policy.log_std` |
+| 3 | train with progress | `learn(callback)`, `ep_info_buffer` |
+| 6 | replay | `launch_viewer(passive=True)` |
 
 ---
 

@@ -537,19 +537,41 @@ uv run weeks/10-scaling/lab_many.py
 ```
 
 `N_ROBOTS` copies of the G1 in **one** scene — one model, one `mj_step`, one
-controller driving all of them — walking side by side in the viewer. `+`/`-`
-add and remove robots, `F` randomises each one's friction and mass (they
-drift apart within steps: week 11 in one key), `P` benchmarks 1, 2, 4 and 8
-processes, and `ENTER` prints robot-steps per second against the student's
-`predict_rate`.
+controller driving all of them. `+`/`-` add and remove robots, `F` randomises
+friction and mass, `P` benchmarks processes, `ENTER` prints robot-steps/s
+against `predict_rate` (complete; `COST_EXPONENT` is what you correct).
 
 | Step | Do | Right looks like |
 | --- | --- | --- |
-| 1 | `ENTER`, then `+` `+` `+` | a prediction for one process, written into `predict_rate`, then checked |
-| 2 | `P` | four numbers, and the core count that explains where they stop |
-| 3 | hours for 150 M at the best rate | the arithmetic of the first slide, done on their own machine |
+| 1 | `ENTER`, `+` `+` `+`, correct `COST_EXPONENT` | physics-only throughput nearly flat (p ≈ 1.09); walking climbs because one IK call is shared |
+| 2 | `P` | 16,822 / 33,382 / 62,410 / 130,429 robot-steps/s for 1/2/4/8 processes here |
+| 3 | hours for 150 M | 2.5 h in one process, 0.2 h at 16 processes, on 36 cores |
 | 4 | `F` | robots that diverge; what a policy trained on all of them would have to learn |
-| 5 | `+` until 0.25× real time | the cost of one environment, in milliseconds |
+| 5 | `+` until 0.25× real time | ~62 µs of physics per robot-step; 0.5 ms for the controller |
+
+---
+
+## Lab class: `many.py`, two ways to more robot-steps {.smaller}
+
+```bash
+uv run weeks/10-scaling/many.py --robots 1 2 4 8 16 --procs 1 2 4 8 16
+```
+
+Per scene size, two rates — held (physics only) and walking (one shared
+controller call per step) — then processes with one robot each, the 150 M
+budget, and the largest scene walking.
+
+| n robots | nbody | physics only, robot-steps/s | walking, robot-steps/s |
+| --- | --- | --- | --- |
+| 1 | 31 | 16,164 | 1,544 |
+| 4 | 121 | 14,686 | 4,448 |
+| 16 | 481 | 13,064 | 8,656 |
+
+Processes: 16,822 → 33,382 → 62,410 → 130,429 → 199,062 for 1, 2, 4, 8, 16.
+One process gets no more physics out of more robots; processes scale until
+the cores run out; a GPU is the same idea with thousands of lanes. Calls:
+`MjSpec.from_file`, `add_frame`, `attach_body`, `compile`, `np.tile(ctrl, n)`;
+`multiprocessing.get_context("spawn").Pool`; `launch_viewer(passive=True)`.
 
 ---
 

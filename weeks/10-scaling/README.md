@@ -144,6 +144,7 @@ will be substantially faster than the T4 the current figure assumes.
 
 ```bash
 uv run weeks/10-scaling/lab_many.py
+uv run weeks/10-scaling/many.py --robots 1 2 4 8 16 --procs 1 2 4 8 16
 ```
 
 The GPU section is Colab-only, so the laptop lab measures the thing the GPU
@@ -159,22 +160,56 @@ P       benchmark 1, 2, 4, 8 processes with one robot each, two seconds
 R       restart      ENTER   robot-steps/s measured vs predicted, x real time, hours for 150 M
 ```
 
-`predict_rate(n, single)` is the student's model of one process's throughput
-with `n` robots, given the single-robot rate the script measures at start-up;
-it returns `None` as shipped.
+**The code is complete and explained**: `predict_rate(n, single)` models one
+process's throughput as `single · n^(1 − p)` with `COST_EXPONENT = 1` as
+shipped (flat), `build` explains the `MjSpec` attach-and-compile, and the
+loop names the tiled `ctrl` and the single `mj_step`.
 
-| Step | Change | Right looks like |
+| Step | Change | Right looks like (measured with `many.py`) |
 | --- | --- | --- |
-| 1 | `ENTER`; `+` three times with `ENTER` each | a written prediction (flat, growing, or shrinking), then measured |
-| 2 | `P` | robot-steps/s for 1/2/4/8 processes, and the core count that explains the ceiling |
-| 3 | arithmetic | hours for 150 M steps at the best rate on this laptop |
+| 1 | `ENTER`; `+` three times with `ENTER` each; correct `COST_EXPONENT` | physics-only throughput is nearly flat (16,164 → 13,064 robot-steps/s from 1 to 16 robots, p ≈ 1.09); the walking number climbs because the one IK call is shared |
+| 2 | `P` | 16,822 / 33,382 / 62,410 / 130,429 robot-steps/s for 1/2/4/8 processes here; 199,062 at 16 on 36 cores |
+| 3 | arithmetic | 150 M steps: 2.5 h in one process, 0.2 h at 16 processes on this machine |
 | 4 | `F` | robots that drift apart within a few steps; what a policy trained on all of them at once would have to learn |
-| 5 | `+` until the window drops below 0.25× real time | the cost of one environment in milliseconds |
+| 5 | `+` until the window drops below 0.25× real time | the cost of one environment: ~62 µs of physics per robot-step here, 0.5 ms for the controller |
 
-Measured while writing it: four *overlapping* robots (before the sideways
-offset was applied) ran at 2,459 robot-steps/s in one process against ~13,000
-for one robot alone — contacts between robots are not free, which is itself a
-point about batching.
+### `many.py`: robot-steps per second, two ways
+
+```bash
+uv run weeks/10-scaling/many.py
+uv run weeks/10-scaling/many.py --robots 1 2 4 8 16 --seconds 3 --no-viewer
+uv run weeks/10-scaling/many.py --robots 6 --randomise
+```
+
+For each scene size it measures two rates — holding the crouch (physics only,
+what `predict_rate` models) and walking (physics plus one controller call per
+step, shared by every robot) — fits the cost exponent, then benchmarks
+processes with one robot each, turns the best rate into hours for 150 million
+steps, and shows the largest scene walking. Run it on a quiet machine: it is a
+timing measurement.
+
+| Step | Does | Calls |
+| --- | --- | --- |
+| 1 | one robot alone | `load_g1`, `mj_step` in a loop |
+| 2 | scenes of n robots, held and walking | `MjSpec.from_string/from_file`, `add_frame`, `attach_body`, `compile`, `np.tile(ctrl, n)` |
+| 3 | processes, one robot each | `multiprocessing.get_context("spawn").Pool` |
+| 4 | the 150 M budget | |
+| 6 | the largest scene, walking live | `launch_viewer(passive=True)` |
+
+Measured here (36 cores, quiet):
+
+| n robots | nbody | physics only, robot-steps/s | walking, robot-steps/s |
+| --- | --- | --- | --- |
+| 1 | 31 | 16,164 | 1,544 |
+| 2 | 61 | 14,835 | 2,542 |
+| 4 | 121 | 14,686 | 4,448 |
+| 8 | 241 | 12,544 | 6,844 |
+| 16 | 481 | 13,064 | 8,656 |
+
+The physics column is the point of the week: one process gets no more
+physics out of more robots (p ≈ 1.09). The walking column rises only because
+the controller — 0.5 ms of IK per step, eight times the physics — is computed
+once and tiled. Processes scale until the cores run out.
 
 `SOC4180_AUTOCLOSE=8 uv run weeks/10-scaling/lab_many.py` closes the window by
 itself, which is how the script is smoke-tested.

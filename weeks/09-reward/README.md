@@ -59,42 +59,62 @@ Exercise 6 has students re-run with three seeds.
 ## Lab class: on your laptop
 
 ```bash
-uv run weeks/09-reward/lab_reward.py       # torch + SB3: uv sync --extra rl
+uv run weeks/09-reward/lab_reward.py      # torch + SB3: uv sync --extra rl
+uv run weeks/09-reward/shape.py --variant both
 ```
 
-`G1WalkEnv` in the viewer under a PPO policy, with `VARIANTS` — the reward
-weightings from the lecture, as `reward_weights` overrides — selectable with
-keys `1`–`9`. **`T` trains the selected variant in a background thread** (40k
-steps, `log_std_init = -2`, roughly two minutes on a laptop CPU) while the
-window keeps playing; the trained policy takes over when it finishes.
+`G1WalkEnv` in the viewer. `VARIANTS` lists reward weightings; a number key
+selects one and `T` trains it in a background thread (40k steps, about 95 s
+here); the trained policy then drives the window. `ENTER` prints every reward
+term for the current step, including the extra one. On the robot: the reward
+bar and yellow airborne feet. Every episode line: return, steps, distance,
+feet-up fraction.
 
-```
-1..9    select a variant (trained if trained)     T   train it (background)
-R       reset      SPACE   pause      ENTER   every reward term this step, weighted
-```
+**The code is complete and explained**: `extra_reward` is potential-based
+shaping (F = γΦ(s′) − Φ(s), Φ = x) with the theorem in its docstring and a
+plain velocity bonus for contrast (`EXTRA` picks); the `Shaped` wrapper shows
+how a reward is changed without touching the environment.
 
-Drawn on the robot: a reward bar above the head (green while tracking is being
-earned, orange when only alive) and **yellow feet** whenever the env counts a
-foot airborne — the `air_time` term made visible. Each episode ends with
-return, steps, distance and the feet-up fraction, the three columns of the
-lecture's table.
-
-`extra_reward(env, info, x_before, x_after)` is the student's own term, added
-through a `gym.Wrapper` on top of the variant, and returns 0 as shipped.
-
-| Step | Change | Right looks like |
+| Step | Do | Right looks like (measured with `shape.py`) |
 | --- | --- | --- |
-| 1 | `1`, `T` | a return predicted from the hand ranking before training ends |
-| 2 | watch a full trained episode | standing; `ENTER` shows alive + upright carrying the score |
-| 3 | `4`, `T`; then `2`, `3` | only "+ both" leaves the standing pose, and it goes backwards |
-| 4 | potential-based term with $\Phi(s) = x$, `1`, `T` | behaviour unchanged; the telescoping identity quoted |
-| 5 | pay for torso $x$-velocity with `upright` at 0, `T` | the student watches the whole episode before describing it |
+| 1 | `1`, `T` | a prediction from the ranking (standing 776, walking 1250) before it finishes |
+| 2 | watch the trained robot, `ENTER` | it stands: 778, 500 steps; alive and upright are what it lives on |
+| 3 | `4` (+ stand_still and + air_time), `T`; then `2`, `3` | 224 steps, −0.524 m, feet up 0.08: it falls over backwards; each term alone changes nothing |
+| 4 | `EXTRA = "potential"`, `1`, `T` | 778 again: the theorem kept its promise |
+| 5 | `EXTRA = "velocity"`, a variant with `upright: 0`, `T` | still standing at 40k steps (529 on its reward, 779 on the original): a moved optimum is not a found one |
 
-Training runs are single-seed and short, exactly like the lecture's: the
-direction of each result is the lesson, the exact numbers are not.
+### `shape.py`: a variant trained, scored twice
 
-`SOC4180_AUTOCLOSE=8 uv run weeks/09-reward/lab_reward.py` closes the window
-by itself, which is how the script is smoke-tested (training is not triggered).
+```bash
+uv run weeks/09-reward/shape.py --variant unchanged
+uv run weeks/09-reward/shape.py --variant both
+uv run weeks/09-reward/shape.py --variant unchanged --extra potential
+uv run weeks/09-reward/shape.py --variant no_upright --extra velocity --no-viewer
+```
+
+Prints the reward as a formula, trains PPO on the variant (with the quiet
+start from week 8), then evaluates the policy on the reward it was trained on
+*and* on the original — the second number is the honest one — and replays it.
+
+| Step | Does | Calls |
+| --- | --- | --- |
+| 1 | the reward written down | `DEFAULT_REWARD`, the variant's overrides |
+| 2 | the env, wrapped with the extra term | `gym.Wrapper`, `G1WalkEnv(reward_weights=…)` |
+| 3 | train with progress | `PPO(…, gamma, log_std_init=-2)`, `learn` |
+| 4 | evaluate on both rewards | `predict(deterministic=True)`, `info["air_time"]` |
+| 6 | replay | `launch_viewer(passive=True)` |
+
+Measured, 40k steps, 95 s each:
+
+| variant | extra | on its reward | on the original | steps | distance | feet up |
+| --- | --- | --- | --- | --- | --- | --- |
+| unchanged | none | 778.1 | 778.1 | 500 | +0.018 | 0.00 |
+| both | none | 260.4 | 324.7 | 224 | −0.524 | 0.08 |
+| unchanged | potential | 778.4 | 778.5 | 500 | +0.022 | 0.00 |
+| no_upright | velocity | 529.4 | 779.0 | 500 | +0.026 | 0.00 |
+
+The `both` row reproduces the deck's ablation exactly; the potential row is
+the theorem; the velocity row is the caution.
 
 ## Rebuild
 

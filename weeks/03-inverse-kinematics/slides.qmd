@@ -609,26 +609,55 @@ zero, and no amount of iteration helps — the information simply is not there.
 
 ```{python}
 #| fig-align: center
-fig, ax = plt.subplots(figsize=(8.4, 3.4))
+U, sig_c, Vt = np.linalg.svd(J_crouch)                  # crouch: U foot directions, Vt joint directions
+foot = ["x fwd", "y side", "z up", "roll", "pitch", "yaw"]
+joints = [mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_JOINT, model.dof_jntid[d])
+          .replace("left_", "").replace("_joint", "") for d in kin.leg_dof_indices(model, "left")]
+fig, (ax0, ax1) = plt.subplots(1, 2, figsize=(9.6, 3.6), gridspec_kw={"width_ratios": [1.15, 1]})
+
 x = np.arange(6)
-ax.bar(x - 0.2, sv, 0.4, color="#e8743b", label="stand (straight leg)")
-ax.bar(x + 0.2, sv_crouch, 0.4, color="#3b7dd8", label="crouch (bent knee)")
-ax.set_yscale("log"); ax.set_xticks(x, [f"$\\sigma_{i + 1}$" for i in x])
-ax.set_ylabel("singular value of $J$ (log)"); ax.legend(fontsize=8, loc="lower left")
-for xi, (a, b) in enumerate(zip(sv, sv_crouch)):
-    ax.annotate(f"{a:.1e}", (xi - 0.2, a), xytext=(0, 3), textcoords="offset points",
-                ha="center", fontsize=7)
-    ax.annotate(f"{b:.2f}", (xi + 0.2, b), xytext=(0, 3), textcoords="offset points",
-                ha="center", fontsize=7)
-ax.set_title(f"the sixth direction: {sv[-1]:.1e} straight, {sv_crouch[-1]:.3f} crouched "
-             f"— a factor of {sv_crouch[-1] / sv[-1]:,.0f}", fontsize=10)
-ax.grid(axis="y", alpha=0.3); fig.tight_layout(); plt.show()
+ax0.bar(x - 0.2, sv, 0.4, color="#e8743b", label="stand (straight leg)")
+ax0.bar(x + 0.2, sv_crouch, 0.4, color="#3b7dd8", label="crouch (bent knee)")
+ax0.set_yscale("log"); ax0.set_xticks(x, [f"$\\sigma_{i + 1}$" for i in x])
+ax0.set_xlabel("singular direction, largest first — a joint combination, NOT a joint")
+ax0.set_ylabel("gain $\\sigma_i$ (m of foot per rad of joints, log)")
+ax0.legend(fontsize=8, loc="lower left")
+for xi, (a_, b_) in enumerate(zip(sv, sv_crouch)):   # the first five pairs agree; label them once
+    ax0.annotate(f"{b_:.2f}", (xi + (0.2 if xi == 5 else 0), b_), xytext=(0, 3),
+                 textcoords="offset points", ha="center", fontsize=7, color="#3b7dd8")
+ax0.annotate(f"{sv[-1]:.1e}", (5 - 0.2, sv[-1]), xytext=(0, 3), textcoords="offset points", ha="center",
+             fontsize=7, color="#e8743b", bbox=dict(fc="w", ec="none", pad=0.3), zorder=5)
+ax0.set_title(f"the sixth gain: {sv[-1]:.1e} straight, {sv_crouch[-1]:.3f} crouched "
+              f"(x {sv_crouch[-1] / sv[-1]:,.0f})", fontsize=10)
+ax0.grid(axis="y", alpha=0.3)
+
+# what each singular direction is made of: its joint combination v_i (a column),
+# and the single foot direction u_i it moves (written under the column)
+ax1.imshow(Vt.T, cmap="RdBu_r", vmin=-1, vmax=1, aspect="auto")
+ax1.set_yticks(range(6), joints, fontsize=8)
+ax1.set_xticks(range(6), [f"$\\sigma_{i + 1}$\n" + r"$\rightarrow$ " + foot[int(np.argmax(np.abs(U[:, i])))]
+                          for i in range(6)], fontsize=7)
+for i in range(6):                                       # direction i, joint j
+    for j in range(6):
+        v = Vt[i, j]
+        if abs(v) > 0.05:
+            ax1.text(i, j, f"{v:+.2f}", ha="center", va="center", fontsize=7, color="w" if abs(v) > 0.6 else "k")
+ax1.set_title("each column: the joint mix $v_i$ behind $\\sigma_i$ (crouch)", fontsize=10)
+fig.tight_layout(); plt.show()
 ```
 
-Five of the six singular values barely change between the poses. The sixth is
-the direction that *shortens the leg*, and bending the knee restores it by a
-factor of about a hundred thousand. That one number is why every gait in the
-course starts from a crouch.
+**The x-axis is not a list of joints.** Each bar is one *singular direction*: a
+joint combination $v_i$ — a column on the right, signs relative within the
+column — that $J$ turns into one foot-space direction $u_i$ (written under the
+column) with gain $\sigma_i$. Directions are ordered by gain, largest first.
+
+The sixth column is $-0.38\,$hip pitch $+\,0.81\,$knee $-\,0.44\,$ankle pitch:
+bend the knee and pitch hip and ankle back so the foot stays level — the one
+motion that *shortens the leg* — and it moves the foot straight up or down
+($u_6$ is pure $z$). The mix is the same in both poses; only the gain changes.
+Crouched, that combination buys 0.089 m per radian; straight, $9 \times 10^{-7}$
+— a factor of a hundred thousand, restored by bending the knee. That one number
+is why every gait in the course starts from a crouch.
 
 ---
 

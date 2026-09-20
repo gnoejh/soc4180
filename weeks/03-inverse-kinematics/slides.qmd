@@ -864,17 +864,31 @@ The G1 in the crouch, a **red** target you move with the arrow keys, a **green**
 sphere at the foot, and a translucent sphere showing the leg's reach. Nothing is
 simulated; the pelvis never moves.
 
-The solver is yours. Until you write `dls_step` the foot does not follow the
-target, because the package's solver is not called — the script only measures
-the error, fetches the Jacobian and clamps to the joint limits.
+**The code is complete and explained.** Section 2 of the script is this
+lecture in three functions — `dls_step`, `inverse_step`, `transpose_step` —
+each commented against the slide it comes from; `M` swaps them live. Section 4
+explains what the script does around a solver: `qpos` vs `qvel` indices,
+`mj_jacSite`, `pose_error`, the clip to joint limits, `mj_forward`.
 
-| Step | Do | Right looks like |
+---
+
+## Lab class: the experiments {.smaller}
+
+Eight experiments in the docstring, each with the numbers it should produce,
+all measured with the script's own functions before they were written:
+
+| # | Do | Right looks like |
 | --- | --- | --- |
-| 1 | write `dls_step` | the green sphere chases the red one; residual < 1e-4 |
-| 2 | `[` to $\lambda = 10^{-6}$, `S` for the straight leg, arrow down | huge $\|\Delta q\|$, foot stays; `S` again and it drops |
-| 3 | push the target out of the translucent sphere | residual freezes at one value; hip distance > reach |
-| 4 | `]` to $\lambda = 1$ | the foot creeps: find the largest $\lambda$ that still tracks |
-| 5 | add two entries to `TARGETS`, one unreachable | your prediction is right before you press SPACE |
+| 1 | dls, up arrow ×5 | residual 4e-6 after one frame |
+| 2 | `M` inverse, `S` straight leg, arrow down | $\|\Delta q\| = 10^4$ rad; the leg folds onto its joint limits |
+| 3 | dls, straight leg, `]` to $\lambda = 0.1$ | $\|\Delta q\| = 10^{-4}$ and the foot never moves: no $\lambda$ helps |
+| 4 | `M` transpose | creeps, never explodes |
+| 5 | right arrow ×30 | hip distance > reach; residual stops shrinking |
+| 6 | `]` to $\lambda = 1$ | 3 cm of 5 left after a second: find the largest $\lambda$ that still tracks |
+| 7 | `O`, `.` ×15 | the foot tilts 16° with 3 rows, levels with 6 |
+
+Then break a solver on purpose (`-dq`; the transpose without its step length)
+and explain what you see.
 
 ---
 

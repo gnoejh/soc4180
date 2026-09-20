@@ -205,7 +205,7 @@ commands for it.
 | --- | --- | --- | --- |
 | 00 | `lab_stack.py` | `my_controller` (29 servo targets) | keys `1/0/2/3/4/G` switch layers on and off; contact-force arrows on the floor |
 | 01 | `lab_mjcf.py` | the MJCF string and `TARGET` | the compiler's own errors; droop, `BADQACC` count on ENTER |
-| 03 | `lab_ik.py` | `dls_step(J, err, lam)` | the green foot chases the red target inside a translucent reach sphere |
+| 03 | `lab_ik.py` | **none — complete**: `dls_step`, `inverse_step`, `transpose_step` all shipped and explained; `M` swaps them | the green foot chases the red target inside a translucent reach sphere; the inverse folds the straight leg |
 | 04 | `lab_walk.py` | `predict_com` (LIPM closed form) | blue dots inside the white commanded-CoM dots; yellow ZMP sphere |
 | 05 | `lab_servo.py` | `torque_from_pd` | joints colour by torque; `H` makes the student's law *the* servo |
 | 06 | `lab_imu.py` | `my_filter` (complementary) | three "down" arrows; the green one vertical |
@@ -215,7 +215,12 @@ commands for it.
 | 10 | `lab_many.py` | `predict_rate(n, single)` | N robots in one scene; `P` benchmarks processes |
 
 Conventions, all followed: a list at the top to extend; one fill-in; keys in
-the docstring; `soc4180.terminal_keys` as the second route; **restarts reuse
+the docstring; **except week 3, which since 2026-09-20 ships every solver
+complete and explained** — the instructor asked for labs to be hands-on with
+complete, fully explained code, so `lab_ik.py` is five numbered sections with
+the explanation in the comments and eight measured experiments instead of a
+blank. Apply the same to the other weeks when asked; their fill-ins still
+return `None`. `soc4180.terminal_keys` as the second route; **restarts reuse
 the same `MjData`** (`mj_resetData` + copy `qpos`), because the passive viewer
 is bound to one data object — only `lab_many.py` reopens the viewer, since its
 model changes; and **`SOC4180_AUTOCLOSE=<seconds>` closes the window by
@@ -252,6 +257,16 @@ Facts these scripts and the new figures established, each measured:
   and knee sinusoids, amplitude 0 → 1) scores *less* than standing at every
   amplitude — first effort, then falling. The reward's optimum is real and no
   route in that family climbs to it.
+- Week 3's lab, measured with its own functions: the plain inverse at the
+  straight leg asks for 1.1e4 rad for a 1 cm request and the joint-limit clamp
+  is all that stops it (hip and knee pitch to +2.88, ankle −0.87, foot 0.7 m
+  off); DLS there at $\lambda \le 10^{-6}$ does the same, at $10^{-2}$ jitters
+  a millimetre, at $\ge 3 \times 10^{-2}$ never moves the foot at all — no
+  $\lambda$ brings a straight leg down. Out of reach with six rows the residual
+  *hovers* (5–6 cm for a 0.3 m request) with the knee and ankle on their
+  limits; position-only at 0.25 m pins at exactly 6.8e-3. Position-only lets a
+  15 cm sideways target tilt the foot 16°. The transpose method leaves 8 mm of
+  50 after 100 iterations and cannot blow up.
 - **Multi-robot scenes work through `MjSpec`**: `frame = spec.worldbody.add_frame();
   frame.attach_body(child.worldbody.first_body(), "r0_", "")` per robot, then
   `compile()`. Names get the prefix; actuators and `qpos` are contiguous per

@@ -268,43 +268,72 @@ the fastest way to sanity-check a geometric claim before committing it to a slid
 ## The lab class
 
 The week has two classes: the deck is the lecture, and the second class is
-hands-on on student laptops. Students edit [`lab_viewer.py`](lab_viewer.py) and
-show the result.
+hands-on on student laptops. Students run and change
+[`lab_viewer.py`](lab_viewer.py) and read [`fk.py`](fk.py).
 
 ```bash
 uv run weeks/02-transforms/lab_viewer.py
+uv run weeks/02-transforms/fk.py --angles -0.35 0 0 0.70 -0.35 0
 ```
 
-It holds the G1 in each pose of `POSES` (SPACE / arrows to move between them),
-never steps physics, and draws two spheres at the left foot: **green** at
-MuJoCo's `site_xpos`, **red** at whatever the student's `predict_foot` returns.
-Until they write it there is no red sphere. Each pose prints the truth, the
-prediction and the max error; ENTER prints them for whatever the sliders say.
+`lab_viewer.py` holds the G1 in each pose of `POSES` (SPACE / arrows to move
+between them), never steps physics, and draws two spheres at the left foot:
+**green** at MuJoCo's `site_xpos`, **red** at the student's forward kinematics.
+**Both versions of that FK are complete and explained in the file**: `chain_fk`
+composes the six bodies exactly as the slides derive it (1.8e-16 against
+MuJoCo), `paper_fk` is the planar three-angle formula (2.2e-06 with roll and
+yaw at zero, 1.2 mm with them on), and `F` switches which one draws the red
+sphere. Each pose prints the truth, the prediction and the max error; ENTER
+prints them for whatever the sliders say.
 
 **The Control sliders move joints directly here.** In a normal viewer session
 they set actuator targets, which only move the robot through `mj_step`, and this
 lab never steps — so the first thing a student tries, dragging a slider, would do
 nothing. The script therefore copies `ctrl` into each actuator's joint angle on
 every tick (every G1 actuator drives exactly one hinge, and `ctrlrange` equals
-`jnt_range`, so the slider limits are the joint limits). Drag `left_knee_joint` and the
-leg bends, with the red sphere following the student's FK live. `view.py
+`jnt_range`, so the slider limits are the joint limits). Drag `left_knee_joint`
+and the leg bends, with the red sphere following the FK live. `view.py
 --static` does the same.
 
 The five steps students demonstrate, each visible on screen:
 
-| Step | Change | What they should see |
+| Step | Do | What they should see |
 | --- | --- | --- |
-| 1 | add three poses to `POSES` | the leg goes where they predicted, or not |
-| 2 | paste `paper_fk` into `predict_foot` | red inside green, error ~2e-06, roll and yaw zero |
-| 3 | turn roll or yaw on | the red sphere leaves the foot: the planar model is a model |
-| 4 | replace with the full `my_fk` chain | error 1e-16 on every pose |
+| 1 | add three poses to `POSES` | the leg goes where they predicted, or not; one pose explained from `fk.py`'s printed chain |
+| 2 | ENTER on the crouch, then `F` | chain error 1.8e-16; paper error 2.2e-06, both inside the green sphere; the 2e-6 explained as the model's constant offset |
+| 3 | third pose, roll and yaw on, `F` | the red sphere leaves the foot by 1.2 mm: the planar model is a model |
+| 4 | break `chain_fk` on purpose | swapping offset and rotation moves the sphere; dropping `(a − Rj a)` changes nothing on the G1 because every joint sits at its body origin |
 | 5 | put the foot 10 cm forward of `stand`, still flat | pitch angles summing to zero; measured: hip −0.30, knee +0.30, ankle 0.00 works, so does hip −0.45, knee +0.60, ankle −0.15 (`R[2,2] = 1.000000` for both) |
+
+### `fk.py`: the chain, one body at a time
+
+```bash
+uv run weeks/02-transforms/fk.py
+uv run weeks/02-transforms/fk.py --angles -0.30 0.10 0.05 0.70 -0.35 0.02 --side right
+uv run weeks/02-transforms/fk.py --angles 0 0 0 0 0 0 --no-viewer
+```
+
+Places the leg (`mj_forward`, no physics), then walks pelvis → six bodies →
+foot site by hand, printing for every body the offset it adds from its parent
+(`body_pos`), the joint it turns about and by how much, and the world position
+that leaves us at — so the composition can be read line by line — and compares
+the result with `site_xpos`. The planar paper model is evaluated beside it.
+Then the simulator shows the pose with green (MuJoCo) and red (the chain)
+spheres at the foot.
+
+| Step | Does | Calls |
+| --- | --- | --- |
+| 1 | place the six angles | `keyframe_data`, `leg_qpos_indices`, `mj_forward`, `site_xpos` |
+| 2 | the chain by hand, printed body by body | `leg_chain`, `body_pos`, `body_quat`, `jnt_pos`, `jnt_axis`, `mju_quat2Mat`, `mju_axisAngle2Quat` |
+| 3 | the paper model from measured `L1`, `L2`, the site drop | `xpos` of the hip, knee and ankle links |
+| 4 | the verdict: 1e-16 vs 2e-6 vs "the plane is broken" | |
+| 5 | show it | `launch_viewer(passive=True)`, `user_scn` |
 
 Then exercises 4, 5 and 8 from the deck's exercise slide, in the notebook.
 
-**The script is deliberately not a notebook cell.** `lab.ipynb` must render
-headless and run on Colab, and a viewer call blocks and has no window there. The
-viewer lives in `.py` files students run; the notebook keeps the exercises.
+**The scripts are deliberately not notebook cells.** `lab.ipynb` must render
+headless and run on Colab, and a viewer call blocks and has no window there.
+The viewer lives in `.py` files students run; the notebook keeps the exercises.
 
 ## The knob worth turning in class
 

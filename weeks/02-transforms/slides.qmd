@@ -1384,35 +1384,51 @@ almost nothing.
 
 ## Lab class: on your laptop {.smaller}
 
-The second class this week is hands-on. Bring your laptop with the repo installed
-(see the README), then:
-
 ```bash
-uv run scripts/view.py --pose=-0.35,0,0,0.70,-0.35,0     # the crouch, frozen
-uv run weeks/02-transforms/lab_viewer.py                 # the lab script
+uv run weeks/02-transforms/lab_viewer.py
 ```
 
-`lab_viewer.py` holds the G1 in each pose of `POSES` (SPACE for the next one) and
-draws two spheres at the left foot: **green** where MuJoCo puts the site, **red**
-where *your* `predict_foot` puts it. Physics is never stepped, so the Control
-sliders (F3) are wired to move joints directly; drag one and the red sphere
-follows your FK live.
+Each pose of `POSES` (SPACE for the next); **green** sphere at MuJoCo's foot
+site, **red** at the file's own forward kinematics. **Both FKs are complete and
+explained** — `chain_fk` (six bodies, 1.8e-16) and `paper_fk` (three angles,
+2.2e-06) — and `F` switches them. Nothing is simulated.
 
-Change the file, in this order, and show each step:
+| Step | Do | Right looks like |
+| --- | --- | --- |
+| 1 | add three poses | the foot goes where you predicted; one pose explained from `fk.py` |
+| 2 | ENTER on the crouch, then `F` | 1.8e-16, then 2.2e-06, both inside the green sphere |
+| 3 | third pose, `F` | the red sphere leaves the foot by 1.2 mm: a planar model cannot know |
+| 4 | break `chain_fk` | swap offset and rotation: it moves; drop `(a − Rj a)`: nothing, and why |
+| 5 | foot 10 cm forward, still flat | pitch angles summing to zero; then deck `02b`, the lab class's own |
 
-1. Add three poses. Predict the foot's direction before pressing SPACE.
-2. Paste your `paper_fk` into `predict_foot`. Red inside green, error ~2e-06,
-   for every pose with roll and yaw at zero.
-3. Turn roll or yaw on and watch the red sphere leave the foot. Say why.
-4. Replace it with your `my_fk` chain. Error 1e-16, for every pose.
-5. Find a pose with the foot 10 cm forward of `stand` and still flat.
+---
 
-Then exercises 4, 5 and 8 from the previous slide, in the notebook.
+## Lab class: `fk.py`, the chain one body at a time {.smaller}
 
-**The lab class has its own deck: `02b-robot-as-code`.** It takes the same robot
-and reads it as a data structure — which of the thirty-six numbers are the leg,
-what the other twenty-three joints do, and how to pose any part of the body by
-name. Start there, then run `lab_body.py` alongside `lab_viewer.py`.
+```bash
+uv run weeks/02-transforms/fk.py --angles -0.35 0 0 0.70 -0.35 0
+```
+
+Places the leg, walks pelvis → six bodies → foot site by hand, and prints a
+line per body: the offset from its parent, the joint, the angle, and where
+that leaves us. Then the paper model beside it, then the pose in the simulator.
+
+```
+body                      offset from parent (m)  joint          angle   world position after
+pelvis                                                                   [0.     0.     0.79 ]
+left_hip_pitch_link        [0.0, 0.0645, -0.1027] hip_pitch_joint -0.350  [0.     0.0645 0.6873]
+left_hip_roll_link          [0.0, 0.052, -0.0305] hip_roll_joint   0.000  [0.0104 0.1165 0.6587]
+left_hip_yaw_link           [0.025, 0.0, -0.1241] hip_yaw_joint    0.000  [0.0943 0.1165 0.5638]
+left_knee_link         [-0.0783, 0.0021, -0.1773] knee_joint       0.700  [0.1154 0.1186 0.3711]
+left_ankle_pitch_link        [0.0, -0.0001, -0.3] ankle_pitch_joint -0.350 [0.0125 0.1185 0.0893]
+left_ankle_roll_link          [0.0, 0.0, -0.0176] ankle_roll_joint  0.000  [0.0125 0.1185 0.0717]
+chain by hand : [0.012543 0.118506 0.071731]   max error vs MuJoCo 1.8e-16 m
+paper (x, z)  : [0.012545 0.118506 0.071732]   max error vs MuJoCo 2.2e-06 m
+```
+
+Calls, in order: `leg_qpos_indices`, `mj_forward`, `leg_chain`, `body_pos`,
+`body_quat`, `jnt_axis`, `mju_quat2Mat`, `mju_axisAngle2Quat`, `site_pos`,
+`site_xpos`; then `launch_viewer(passive=True)` with two `user_scn` spheres.
 
 ---
 

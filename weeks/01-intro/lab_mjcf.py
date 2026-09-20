@@ -19,21 +19,29 @@ physics running, and keeps the servos on TARGET. Edit the XML, run again.
     If no key does anything in the window, press the same key in this terminal
     instead -- single keys, no enter. `q` stops it.
 
+Everything here is complete and explained: section 1 is the robot as text,
+section 2 compiles it and prints the arrays the compiler made, section 3 is
+the real-time loop. `mjcf_run.py` in this folder is the non-interactive
+version: the same XML (or any file), kp / timestep / servos as flags, a
+printed table of the droop over time, then a replay.
+
 What to change, in order, and show the instructor (each one is a change to
-the XML, then a fresh run):
+the XML, then a fresh run; numbers measured with mjcf_run.py, same physics):
 
 1. Run it as shipped. Press A: the servos die and the leg becomes a double
-   pendulum. Press A again and it recovers TARGET. ENTER: the hip droops a
-   few hundredths of a radian below TARGET. Say why a servo can never quite
-   get there.
-2. Add `<freejoint/>` to `upper_leg`. The compiler refuses -- read the error.
-   Fix it with a parent body that carries the freejoint. Predict nq and nv
-   before you run, then check the printout. What can the leg do now?
-3. Sweep kp: 200, 100, 50, 20, 5 (edit both actuators). ENTER each time and
-   write down the hip droop. Does it ever reach zero?
+   pendulum. Press A again and it recovers TARGET. ENTER: the hip droops
+   -0.080 rad below TARGET, the knee -0.007. Say why a servo can never quite
+   get there (the torque that holds the leg up IS kp times the droop).
+2. Add `<freejoint/>` to `upper_leg`. The compiler refuses -- read the error
+   ("more than 6 dofs in body"). Fix it with a parent body that carries the
+   freejoint. Predict nq and nv before you run (7 + 2 and 6 + 2), then check
+   the printout. What can the leg do now?
+3. Sweep kp: 200, 100, 50, 20, 5 (edit both actuators, or run
+   `mjcf_run.py --kp 50`). Hip droop: -0.080, -0.151, -0.269, -0.501, -0.858.
+   Does it ever reach zero? What law does the first three follow?
 4. Change `timestep="0.002"` to `0.02`. Press A (servos off): nothing warns,
-   the swing is just different. Press A again (servos on): ENTER shows the
-   integrator warning and qpos back at zero. One of those is a silent
+   the swing is just different. Press A again (servos on): ENTER shows one
+   BADQACC warning and qpos back at exactly zero. One of those is a silent
    approximation and one is a silent failure -- say which is which.
 5. Add a third body -- a foot -- below `lower_leg` with its own hinge. Confirm
    nq went up by one, and that the foot moves when the knee does.
@@ -51,6 +59,12 @@ import numpy as np
 
 import soc4180
 
+# --- 1. the robot, as text ------------------------------------------------------
+# <option> is a diff against MuJoCo's defaults (timestep 0.002 is in fact the
+# default; it is written out so you can change it). Bodies nest to make the
+# tree; a joint lives in the body it moves, and the body's `pos` is relative
+# to its parent. <actuator> attaches a position servo to a joint: force =
+# kp (ctrl - q) - kv qdot, with kv chosen by dampratio="1" (critical damping).
 MJCF = """
 <mujoco model="two_link_leg">
   <option timestep="0.002"/>
@@ -78,16 +92,20 @@ MJCF = """
 
 # One target per actuator, in the order the <actuator> block lists them.
 # A bent pose, on purpose: gravity fights it, so the servos have to work.
+# (Zero is also gravity's rest position, so a servo commanded to zero
+# "succeeds" at any gain and proves nothing.)
 TARGET = [1.2, -0.8]
 
-
-# --- nothing below needs editing ------------------------------------------
 
 def main() -> int:
     if soc4180.is_colab():
         print("This lab needs a desktop window; run it on your laptop.")
         return 1
 
+    # --- 2. compile: text in, arrays out ----------------------------------------
+    # MjModel is the robot's constants; the compiler refuses inconsistent XML
+    # with a precise message. MjData is the state: qpos (nq numbers), qvel (nv),
+    # ctrl (nu), and everything MuJoCo derives from them.
     try:
         model = mujoco.MjModel.from_xml_string(MJCF)
     except ValueError as err:
@@ -108,19 +126,20 @@ def main() -> int:
         print(f"   actuator {a}: {mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_ACTUATOR, a)}"
               f"  kp = {model.actuator_gainprm[a, 0]:.0f}")
 
-    act_q = model.jnt_qposadr[model.actuator_trnid[:, 0]]
-    limp_flag = int(mujoco.mjtDisableBit.mjDSBL_ACTUATION)
+    act_q = model.jnt_qposadr[model.actuator_trnid[:, 0]]   # each actuator's joint -> its qpos slot
+    limp_flag = int(mujoco.mjtDisableBit.mjDSBL_ACTUATION)  # the bit that switches all servos off
     g_earth = model.opt.gravity.copy()
     state = {"limp": False, "moon": False, "print": False, "reset": True}
 
     def reset():
-        mujoco.mj_resetData(model, data)
-        data.qpos[act_q] = target
-        data.ctrl[:] = target
+        mujoco.mj_resetData(model, data)                     # zero state, zero time
+        data.qpos[act_q] = target                            # start at the target, at rest ...
+        data.ctrl[:] = target                                # ... and command it
         mujoco.mj_forward(model, data)
         print(f"\n[reset]  servos {'OFF' if state['limp'] else 'on'}, gravity {model.opt.gravity[2]:+.2f}")
 
     def on_key(keycode):
+        """Called with a GLFW keycode from the window, or from the terminal thread."""
         if keycode == 65:                                    # 'A'
             state["limp"] = not state["limp"]
             print(f"  actuation {'OFF: the servos are dead' if state['limp'] else 'on'}")
@@ -132,13 +151,15 @@ def main() -> int:
             state["moon"] = not state["moon"]
             model.opt.gravity[:] = [0, 0, -1.62] if state["moon"] else g_earth
             print(f"  gravity {model.opt.gravity[2]:+.2f}")
-        elif keycode == 82:
+        elif keycode == 82:                                  # 'R'
             state["reset"] = True
-        elif keycode in (257, 335):
+        elif keycode in (257, 335):                          # ENTER
             state["print"] = True
 
     def report():
         q = data.qpos[act_q]
+        # BADQACC: the integrator saw an impossible acceleration and RESET the
+        # state to zero. qpos = [0, 0] after it is not a result, it is a reboot.
         warn = int(data.warning[mujoco.mjtWarning.mjWARN_BADQACC].number)
         print(f"  t = {data.time:5.2f} s  qpos = {np.round(data.qpos, 4).tolist()}")
         print(f"  actuated joints {np.round(q, 4).tolist()}   droop from ctrl "
@@ -147,10 +168,12 @@ def main() -> int:
               + ("   <- the simulation reset itself; qpos is not a result" if warn else ""))
 
     print("\n\n".join(__doc__.split("\n\n")[2:3]))
-    soc4180.terminal_keys(on_key)
+    soc4180.terminal_keys(on_key)                            # the same callback, from the terminal
     print("  [terminal] keys dead in the window? press them here instead; 'q' stops.",
           flush=True)
     deadline = time.time() + float(os.environ.get("SOC4180_AUTOCLOSE") or 1e12)
+
+    # --- 3. the real-time loop: one mj_step per timestep, then sleep off the rest --------
     with soc4180.launch_viewer(model, data, passive=True, key_callback=on_key) as viewer:
         while viewer.is_running() and time.time() < deadline:
             wall = time.time()
@@ -158,7 +181,7 @@ def main() -> int:
                 state["reset"] = False; reset()
             model.opt.disableflags = (model.opt.disableflags | limp_flag) if state["limp"] \
                 else (model.opt.disableflags & ~limp_flag)
-            mujoco.mj_step(model, data)
+            mujoco.mj_step(model, data)                      # servo torques, gravity, integrate
             if state["print"]:
                 state["print"] = False; report()
             viewer.sync()

@@ -924,20 +924,40 @@ different machine.
 uv run weeks/01-intro/lab_mjcf.py
 ```
 
-The two-link leg from the slides, as text at the top of the file. The script
-compiles it, prints what the compiler made of it, and opens the viewer with the
-servos holding `TARGET`. `A` kills the servos, `0` commands zero, `T` restores
-the target, `G` is the Moon, `ENTER` prints the droop and the integrator's
-warning count. Every step is an edit to the XML and a fresh run:
+The two-link leg as text at the top of the file, annotated tag by tag; the
+script compiles it, prints what the compiler made, and holds `TARGET`. `A`
+kills the servos, `0` commands zero, `T` restores the target, `G` is the Moon,
+`ENTER` prints the droop and the `BADQACC` count. Every step: edit the XML, run.
 
 | Step | Change | Right looks like |
 | --- | --- | --- |
-| 1 | none; `A`, `A`, `ENTER` | a pendulum, then a held pose with a few hundredths of droop, explained |
-| 2 | `<freejoint/>` on `upper_leg`, then a parent body | the compiler's refusal read aloud; `nq`, `nv` predicted before the run |
-| 3 | `kp` 200 → 5 | droop written down at each; it never reaches zero |
-| 4 | `timestep="0.02"` | servos off: merely different; servos on: `BADQACC` and `qpos` reset to zero |
+| 1 | none; `A`, `A`, `ENTER` | a pendulum, then a held pose; hip droop −0.080 rad, explained |
+| 2 | `<freejoint/>` on `upper_leg`, then a parent body | the refusal read aloud; `nq = 9`, `nv = 8` predicted first |
+| 3 | `kp` 200 → 5 | droop −0.080, −0.151, −0.269, −0.501, −0.858: never zero |
+| 4 | `timestep="0.02"` | servos off: merely different; servos on: `BADQACC`, `qpos` reset to zero |
 | 5 | a foot body with a hinge | `nq` up by one, and it moves with the knee |
 | 6 | `rgba` into a `<default>` class | the picture unchanged |
+
+---
+
+## Lab class: `mjcf_run.py` {.smaller}
+
+```bash
+uv run weeks/01-intro/mjcf_run.py --kp 20 --seconds 3
+uv run weeks/01-intro/mjcf_run.py --timestep 0.02 --no-viewer
+uv run weeks/01-intro/mjcf_run.py --xml my_robot.xml --target 0.5 0.5 0
+```
+
+The same leg, or any MJCF file, with `kp`, the timestep, the servos and
+gravity as flags: compile → print → simulate → replay, in six numbered steps.
+
+| Step | Does | Calls |
+| --- | --- | --- |
+| 1 | compile; apply the flags (`kv` rescaled with `kp`) | `MjModel.from_xml_string`, `opt.timestep`, `actuator_gainprm` |
+| 2 | print what the compiler made | `jnt_qposadr`, `jnt_dofadr`, `mj_id2name` |
+| 3 | put the leg at the target, command it | `jnt_qposadr[actuator_trnid]`, `ctrl` |
+| 4 | the loop: a row of angles, droop, `BADQACC` per half second | `mj_step`, `data.warning` |
+| 6 | replay the recorded motion | `launch_viewer(passive=True)`, `mj_forward`, `sync` |
 
 ---
 

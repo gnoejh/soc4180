@@ -59,17 +59,44 @@ R   reset to TARGET at rest
 ENTER   joint angles, droop from TARGET, contacts, BADQACC warning count
 ```
 
-Every exercise is an edit to the XML followed by a fresh run — the compiler's
-own error messages are part of the lab.
+**The code is complete and explained**: the XML is annotated tag by tag, the
+compile step says what `MjModel` and `MjData` are, and the loop names each
+MuJoCo call. Every exercise is an edit to the XML followed by a fresh run — the
+compiler's own error messages are part of the lab.
 
-| Step | Change | Right looks like |
+| Step | Change | Right looks like (measured) |
 | --- | --- | --- |
-| 1 | none; `A`, `A`, `ENTER` | a double pendulum, then a held pose; droop of a few hundredths of a radian, explained |
-| 2 | `<freejoint/>` on `upper_leg`, then a parent body carrying it | *"more than 6 dofs in body"* read aloud; `nq`, `nv` predicted before the run |
-| 3 | `kp` 200 → 100 → 50 → 20 → 5 | droop noted at each; never zero |
-| 4 | `timestep="0.02"` | servos off: a different swing and no warning; servos on: `BADQACC` counted and `qpos` reset to zero — the silent failure |
+| 1 | none; `A`, `A`, `ENTER` | a double pendulum, then a held pose; hip droop −0.080 rad, knee −0.007, explained |
+| 2 | `<freejoint/>` on `upper_leg`, then a parent body carrying it | *"more than 6 dofs in body"* read aloud; `nq = 9`, `nv = 8` predicted before the run |
+| 3 | `kp` 200 → 100 → 50 → 20 → 5 | hip droop −0.080, −0.151, −0.269, −0.501, −0.858 rad: never zero, and $1/k_p$ while the servo is stiff |
+| 4 | `timestep="0.02"` | servos off: a different swing and no warning; servos on: one `BADQACC` and `qpos` reset to zero — the silent failure |
 | 5 | a foot body with its own hinge | `nq` up by one; it moves with the knee |
 | 6 | the capsules' `rgba` moved into a `<default>` class | the picture unchanged |
+
+### `mjcf_run.py`: compile, print, simulate, replay
+
+```bash
+uv run weeks/01-intro/mjcf_run.py
+uv run weeks/01-intro/mjcf_run.py --kp 20 --seconds 3
+uv run weeks/01-intro/mjcf_run.py --timestep 0.02 --no-viewer
+uv run weeks/01-intro/mjcf_run.py --servos off
+uv run weeks/01-intro/mjcf_run.py --xml my_robot.xml --target 0.5 0.5 0
+```
+
+The same leg (or any MJCF file), with `kp`, the timestep, the servos and
+gravity as flags. It compiles, prints the joints' `qpos`/`qvel` slots and the
+actuators' gains, holds the target for `--seconds` printing the angles and
+their droop every half second with the `BADQACC` count, then replays the
+motion in the simulator. Six numbered steps:
+
+| Step | Does | Calls |
+| --- | --- | --- |
+| 1 | compile the XML; apply `--timestep`, `--gravity`, `--kp` (rescaling `kv` to keep critical damping) | `MjModel.from_xml_string`, `opt.timestep`, `actuator_gainprm`, `actuator_biasprm` |
+| 2 | print what the compiler made | `jnt_qposadr`, `jnt_dofadr`, `mj_id2name` |
+| 3 | put the leg at the target and command it | `jnt_qposadr[actuator_trnid]`, `ctrl`, the actuation disable bit |
+| 4 | the loop, a printed row every `--report` s | `mj_step`, `data.warning` |
+| 5 | summary: droop is the servo's steady-state error; `BADQACC` is a reset | |
+| 6 | replay | `launch_viewer(passive=True)`, `mj_forward`, `sync` |
 
 `SOC4180_AUTOCLOSE=6 uv run weeks/01-intro/lab_mjcf.py` closes the window by
 itself, which is how the script is smoke-tested.

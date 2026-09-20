@@ -651,20 +651,45 @@ that does not exist outside the laboratory.
 uv run weeks/00-robot-stack/lab_stack.py
 ```
 
-The G1 in the interactive viewer, with each key leaving a different set of
-layers switched on: `1` physics and model only (rag doll), `0` the `ctrl = 0`
-trap, `2` servos holding `stand`, `3` the week 4 walker, `4` your own
-`my_controller`, `G` Moon gravity with nothing else touched. Contact forces are
-drawn as arrows on the floor — Layer 1, visible.
+Each key leaves a different set of layers on: `1` physics and model only, `0`
+the `ctrl = 0` trap, `2` servos holding `stand`, `3` the week 4 walker, `4`
+`my_controller` (complete as shipped; change it), `G` Moon gravity. Contact
+forces are drawn as arrows — Layer 1, visible. The code is complete and explained.
 
 | Step | Do | Right looks like |
 | --- | --- | --- |
-| 1 | `1`, `R`, `2` | one sentence on what differs, and which layer it is |
-| 2 | `R`, `0` | a standing robot, and why zero is a command |
-| 3 | `G`, `R`, `1`; then `3` | a slow fall; a walker that does not know it is on the Moon |
-| 4 | write `my_controller`: wave the left arm | the arm waves, the robot stands; the student says which layer keeps it up |
-| 5 | `ENTER` standing, then walking | forces sum to the weight; then they do not, and why |
+| 1 | `1`, `R`, `2` | torso 0.13 m vs 0.792 m; one sentence on which layer differs |
+| 2 | `R`, `0` | a standing robot at 0.791 m, and why zero is a command |
+| 3 | `G`, `R`, `1`; then `3` | a slow fall, 54 N of contact force; a walker that does not know it is on the Moon |
+| 4 | `4`, change `my_controller` | the arm waves, the robot stands; which layer keeps it up |
+| 5 | `ENTER` standing, then walking | 327.1 N on 8 contacts; then 280–340 N on 4–5, and why |
 | 6 | ctrl-drag under `2` and `3` | no reaction either way: the missing layer named |
+
+---
+
+## Lab class: `stack.py`, the stack you read {.smaller}
+
+```bash
+uv run weeks/00-robot-stack/stack.py --layer hold
+uv run weeks/00-robot-stack/stack.py --layer limp --seconds 3
+uv run weeks/00-robot-stack/stack.py --layer walk --seconds 9
+uv run weeks/00-robot-stack/stack.py --layer wave --gravity 1.62 --no-viewer
+```
+
+The same five layers as flags. Simulates headless, printing torso height,
+contacts and the contact-force sum against the weight every half second,
+then replays the motion in the simulator. Six numbered steps:
+
+| Step | Does | Calls |
+| --- | --- | --- |
+| 1 | layers 1+2: robot, gravity, weight | `load_g1`, `keyframe_data`, `opt.gravity`, `body_mass` |
+| 2 | layer 4: pick the controller | `key_ctrl`, `WalkingController`, the actuation disable bit |
+| 3 | controller writes `ctrl`, one physics step, 500× a second | `mj_step`, `mj_contactForce` |
+| 4 | summary: steps/s, distance, warnings | `data.warning` |
+| 6 | replay the recorded `qpos` | `launch_viewer(passive=True)`, `mj_forward`, `sync` |
+
+Measured: `hold` 0.792 m and 327.1 N for ever; `limp` 0.134 m; `walk` 1.03 m
+in 9 s; ~15,000 physics steps/s here, 30× real time.
 
 ---
 

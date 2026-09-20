@@ -268,15 +268,26 @@ degrades gracefully when the problem is ill-posed.
 
 ---
 
-## Differential IK
+## Differential IK {.smaller}
 
-Do not solve for the angles. Solve for a **change** in the angles that reduces
-the error, then repeat.
+**Forward kinematics, in velocities** (last week's Jacobian):
 
-From last week, $\dot{\mathbf{x}} = J(q)\,\dot{q}$. Ask for the joint change that
-produces a desired foot motion $\mathbf{e}$:
+$$\dot{\mathbf{x}} = J(q)\,\dot{q}$$
+
+- $q$ — the vector of joint angles; $\dot{q}$ — how fast each joint is turning
+- $\mathbf{x}$ — the foot (end-effector) position and orientation; $\dot{\mathbf{x}}$ — how fast the foot moves
+- $J(q)$ — the Jacobian: the matrix that turns joint speeds into foot speed, and changes with the pose
+
+*If you know how fast the joints move, the Jacobian tells you how fast the foot moves.*
+
+**Inverse kinematics asks the opposite:** *what joint motion produces the foot
+motion I want?* So do not solve for the angles. Solve for a small **change** in
+the angles that moves the foot toward the target, then repeat. Rearranged:
 
 $$J\,\Delta q = \mathbf{e}$$
+
+- $\mathbf{e}$ — the desired foot motion: a small step toward the target
+- $\Delta q$ — the joint-angle change that produces that motion
 
 For our square $6\times6$ Jacobian you might just invert it. **Do not.** Near a
 singularity $J$ is nearly rank-deficient, $J^{-1}$ becomes enormous, and the

@@ -16,7 +16,8 @@ import pathlib
 import sys
 import warnings
 
-__all__ = ["GL_BACKEND", "GL_UNAVAILABLE", "MUJOCO_WAS_PREIMPORTED", "gl_report", "is_colab"]
+__all__ = ["GL_BACKEND", "GL_UNAVAILABLE", "MUJOCO_WAS_PREIMPORTED", "TRITON_BLOCKED",
+           "gl_report", "is_colab"]
 
 # Recorded before we touch anything: if mujoco is already in sys.modules then
 # our backend choice arrives too late to matter, and we say so loudly.
@@ -70,6 +71,28 @@ def _osmesa_available() -> bool:
     return ctypes.util.find_library("OSMesa") is not None
 
 
+def _block_triton() -> None:
+    """Make ``import triton`` fail cleanly, because OSMesa and triton cannot
+    share a process.
+
+    Measured on the GitHub Actions runner and reproduced under WSL (Mesa 25.1,
+    torch 2.14, triton 3.8): once libOSMesa is loaded — which ``import mujoco``
+    does at import time when ``MUJOCO_GL=osmesa`` — loading triton's native
+    library segfaults. torch imports triton lazily, the first time an optimizer
+    is constructed, so the kernel died at the first *training* cell of weeks 8
+    and 9 and nowhere else; week 10 imports torch and survived because it never
+    trains. The reverse order (triton first, then OSMesa) works, and so does
+    blocking triton: torch treats a failed ``import triton`` as "not installed"
+    and runs eagerly. Software rendering means there is no GPU, so nothing is
+    lost by doing that here.
+    """
+    global TRITON_BLOCKED
+    if "triton" in sys.modules:
+        return  # already loaded (the working order) or already blocked
+    sys.modules["triton"] = None  # type: ignore[assignment]
+    TRITON_BLOCKED = True
+
+
 def _select_backend() -> str:
     """Choose a MuJoCo GL backend for this machine and export ``MUJOCO_GL``.
 
@@ -77,9 +100,14 @@ def _select_backend() -> str:
     - Colab / headless Linux with an NVIDIA GPU -> ``egl``.
     - Colab / headless Linux without a GPU -> ``osmesa`` (software rendering).
     - Windows and macOS -> MuJoCo's default, which renders offscreen fine.
+
+    Whenever the answer is ``osmesa``, chosen or explicit, triton is blocked
+    (see ``_block_triton``).
     """
     explicit = os.environ.get("MUJOCO_GL")
     if explicit:
+        if explicit.strip().lower() == "osmesa":
+            _block_triton()
         return explicit
 
     headless_linux = sys.platform.startswith("linux") and not os.environ.get("DISPLAY")
@@ -112,6 +140,8 @@ def _select_backend() -> str:
 
     os.environ["MUJOCO_GL"] = backend
     os.environ.setdefault("PYOPENGL_PLATFORM", backend)
+    if backend == "osmesa":
+        _block_triton()
 
     if MUJOCO_WAS_PREIMPORTED:
         warnings.warn(
@@ -128,6 +158,9 @@ def _select_backend() -> str:
 # Set when no usable rendering backend exists; render_rollout raises with it.
 GL_UNAVAILABLE: str | None = None
 
+# True when this module made `import triton` fail on purpose (OSMesa only).
+TRITON_BLOCKED = False
+
 GL_BACKEND = _select_backend()
 
 
@@ -142,6 +175,7 @@ def gl_report() -> str:
         f"MUJOCO_GL           : {os.environ.get('MUJOCO_GL') or '(unset)'}",
         f"chosen backend      : {GL_BACKEND}",
         f"mujoco preimported  : {MUJOCO_WAS_PREIMPORTED}",
+        f"triton blocked      : {TRITON_BLOCKED}",
         f"rendering available : {GL_UNAVAILABLE is None}",
     ]
     if GL_UNAVAILABLE:

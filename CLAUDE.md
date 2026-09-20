@@ -44,8 +44,8 @@ agentic content returns only where it attaches to the robot, in weeks 14–15.
 | 05 | Actuation, PD control, and CPG gaits | `05` | built; four figures + `lab_servo.py` added 2026-09-20, **not re-tested on Colab since** |
 | 06 | Sensing, state estimation, observation design | `06` | built; three figures + `lab_imu.py` added 2026-09-20, **not re-tested on Colab since** |
 | 07 | From control to learning: MDPs and environment design | `07` | built; five figures + `lab_env.py` added 2026-09-20, **not re-tested on Colab since** |
-| 08 | Policy gradients and PPO | `08` | built; three figures + `lab_train.py` added 2026-09-20, **not re-tested on Colab since** |
-| 09 | Reward shaping and diagnosing failed runs | `09` | built; three figures + `lab_reward.py` added 2026-09-20, **not re-tested on Colab since** |
+| 08 | Policy gradients and PPO | `08` | built; three figures + `lab_train.py` added 2026-09-20, **not re-tested on Colab since**; never rendered on the Pages runner until the OSMesa/triton fix (below) |
+| 09 | Reward shaping and diagnosing failed runs | `09` | built; three figures + `lab_reward.py` added 2026-09-20, **not re-tested on Colab since**; same Pages-runner history as 08 |
 | 10 | Scaling: GPU-parallel locomotion training | `10` | built; GPU training **runs on A100, untimed**; three figures + `lab_many.py` added 2026-09-20 |
 | 11 | Domain randomization and robustness | — | not written |
 | 12 | Sim-to-real, measured | — | not written |
@@ -673,8 +673,48 @@ without the guard and reproduced the raw
 exactly the message the guard exists to prevent.
 
 `soc4180.gl_report()` prints what selection saw (colab, NVIDIA device node,
-OSMesa, DISPLAY, MUJOCO_GL, chosen backend). Ask for it first when someone
-reports a rendering problem.
+OSMesa, DISPLAY, MUJOCO_GL, chosen backend, whether triton was blocked). Ask
+for it first when someone reports a rendering problem.
+
+### OSMesa and triton cannot share a process (found on the Pages runner)
+
+Weeks 8 and 9 never rendered on the Pages runner: "Kernel died while waiting
+for execute reply" at the first training cell, with nothing on stderr. Week 10
+imports torch on the same runner and survives. Reproduced under WSL with the
+runner's own pieces (Mesa 25.1 `libOSMesa`, torch 2.14, triton 3.8) and
+`python -X faulthandler`: a **segfault inside `triton/knobs.py`** loading
+triton's native library. The chain is `torch.optim.Adam(...)` →
+`torch._compile` → `import torch._dynamo` → `import triton`, so the death is
+at the first optimizer, not at `import torch` — which is why week 10, which
+only steps environments, was fine. `import mujoco` with `MUJOCO_GL=osmesa`
+loads `libOSMesa` at import time, so OSMesa is always in the process first.
+
+Measured, all three orders:
+
+| Order | Result |
+| --- | --- |
+| OSMesa, then triton (any notebook that imports `soc4180` first) | segfault |
+| triton (torch + an optimizer), then OSMesa, then a render | works |
+| OSMesa with `import triton` made to fail, then torch, PPO, a render | works |
+
+The fix lives in `_gl.py`: whenever the backend is `osmesa`, chosen or
+explicit, `sys.modules["triton"] = None` before anything imports torch. torch
+treats the failed import as "triton not installed" and runs eagerly; a
+software-rendering machine has no GPU for triton anyway. `gl_report()` shows
+`triton blocked`. If a Linux laptop ever reports the same death, the question
+is whether torch was imported before `soc4180` — the reverse order works, but
+`soc4180` first is the rule everywhere else, so keep it and let the block do
+its job.
+
+**Linux problems can be reproduced here in WSL** (`wsl -d Ubuntu-24.04`: uv on
+PATH, 36 cores, no passwordless sudo, `DISPLAY=:0` from WSLg so unset it for a
+headless test). Clone the repo to `~/soc4180` (a venv on `/mnt/w` is slow) and
+`uv sync --extra rl --extra env` — a minute with a warm cache, and the Linux
+torch is the same cu130 build the runner gets. `libosmesa6` can be unpacked
+without root: `apt-get download libosmesa6 && dpkg-deb -x *.deb root`, then
+`LD_LIBRARY_PATH=$HOME/osmesa/root/usr/lib/x86_64-linux-gnu`; `find_library`
+honours it because `ld` is installed. `taskset -c 0-3` mimics the runner's
+four cores.
 
 When neither EGL nor OSMesa is usable, `_gl` sets **no** environment variable and
 records `GL_UNAVAILABLE` instead; `render_rollout` raises that message. This is

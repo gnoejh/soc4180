@@ -48,6 +48,7 @@ What to change, in order, and show the instructor:
 
 from __future__ import annotations
 
+import os
 import time
 
 import mujoco
@@ -181,8 +182,10 @@ def main() -> int:
     soc4180.terminal_keys(on_key)
     print("  [terminal] keys dead in the window? press them here instead "
           "-- single keys, no enter, arrows included; 'q' stops.", flush=True)
+    # SOC4180_AUTOCLOSE=<seconds> closes the window by itself: the smoke test.
+    deadline = time.time() + float(os.environ.get("SOC4180_AUTOCLOSE") or 1e12)
     with soc4180.launch_viewer(model, data, passive=True, key_callback=on_key) as viewer:
-        while viewer.is_running():
+        while viewer.is_running() and time.time() < deadline:
             if state["pose"] or state["mirror"]:
                 if state["mirror"]:
                     state["mirror"] = False

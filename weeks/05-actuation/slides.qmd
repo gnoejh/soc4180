@@ -462,27 +462,46 @@ Every remaining week of the course is about closing that loop.
 uv run weeks/05-actuation/lab_servo.py
 ```
 
-The walker live, with a sphere on every leg joint that turns from green to red
-as its torque approaches the reference — the torque limit when one is set.
-`SERVOS` at the top of the file lists (stiffness, damping, limit) settings; keys
-`1`–`6` select one and restart.
-
-`torque_from_pd(kp, kv, ctrl, q, qdot)` is the actuator law, and it is empty.
-Once written, `ENTER` reports how far it is from MuJoCo's `actuator_force`
-(right: ~1e-12). Then **`H` hands the servos over**: the model's gains are
-zeroed and the student's torques go straight into `qfrc_applied` — at **1 kHz**,
-because an explicit spring this stiff is unstable at 500 Hz (week 1, exercise
-14; the engine integrates its own servo implicitly). A correct law changes
-nothing; a wrong or empty one gives the week 0 rag doll.
+The walker live, a sphere on every leg joint turning green → red with its
+torque; `1`–`6` pick a `SERVOS` entry. **The code is complete**: `torque_from_pd`
+is the law, explained; `ENTER` reports its gap from `actuator_force`. **`H` hands
+the servos over** to it, at 1 kHz (an explicit spring this stiff is unstable at
+500 Hz). Break the law and the robot is the week 0 rag doll.
 
 | Step | Do | Right looks like |
 | --- | --- | --- |
-| 1 | write the law | gap ~1e-12 on `ENTER` |
+| 1 | `ENTER` | gap ~1e-12; the two terms explained |
 | 2 | `H`, then delete the damping term and `R` `H` | identical walk, then ringing |
-| 3 | `2` (50 N·m) then `3` (55 N·m) | knees go red at support exchange; one falls, one walks |
-| 4 | `4` and `5` (half and double $k_p$) | one sinks, one is thrown; the student says which and why |
+| 3 | `2` (50 N·m) then `3` (55 N·m) | knees red at support exchange; 50 falls, 55 walks |
+| 4 | `4` and `5` (half and double $k_p$) | half sinks and falls; double is thrown at 5 s |
 | 5 | `SERVO_HZ = 500`, `H` | it blows up; explained with week 1 |
-| 6 | the lowest $k_p$ that walks eight steps, in `SERVOS` | `ENTER` prints its sag; sag against $k_p$ on paper |
+| 6 | the lowest $k_p$ that walks eight steps | `ENTER` prints its sag (11 mm at 500) |
+
+---
+
+## Lab class: `servo.py`, one servo measured {.smaller}
+
+```bash
+uv run weeks/05-actuation/servo.py --kp-scale 4          # left knee, 0.5 rad step, gravity off
+uv run weeks/05-actuation/servo.py --walk --limit 50
+```
+
+Holds `stand`, jumps one joint's target, prints the law by hand against
+`actuator_force`, ζ, the time to 1 %, the overshoot, the peak torque; then
+replays. `--walk` runs the gait under the new gains instead.
+
+| gains | ζ | 1 % reached | overshoot | peak torque |
+| --- | --- | --- | --- | --- |
+| as shipped | 1.00 | 0.132 s | 0.1 % | 250 N·m |
+| kp × 4 | 0.50 | 0.036 s | 2.1 % | 1000 N·m |
+| kv / 4 | 0.25 | 0.034 s | 4.6 % | 250 N·m |
+
+| Step | Does | Calls |
+| --- | --- | --- |
+| 1 | scale gains, set the limit | `scale_gains`, `set_torque_limit` |
+| 2 | ζ = kv / 2√(kp M) | `mj_fullM`, `jnt_dofadr[actuator_trnid]` |
+| 3 | the step or the walk | `ctrl`, `mj_step`, `actuator_force`, `targets_at` |
+| 6 | replay | `launch_viewer(passive=True)` |
 
 ---
 

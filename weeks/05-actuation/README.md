@@ -56,51 +56,66 @@ which is Week 6.
 
 ```bash
 uv run weeks/05-actuation/lab_servo.py
+uv run weeks/05-actuation/servo.py --kp-scale 4
 ```
 
-The walker live in the viewer, with a sphere at each of the twelve leg joints
-coloured green→red by that actuator's torque against a reference (the torque
-limit when one is set, else 100 N·m) and sized the same way. `SERVOS` at the top
-is a list of (name, kp scale, kv scale, torque limit); keys `1`–`9` select and
-restart.
+The walker live, with a sphere on every leg joint that turns from green to red
+as its torque approaches the reference — the torque limit when one is set.
+`SERVOS` lists (stiffness, damping, limit) settings; keys `1`–`6` select one and
+restart. **The code is complete and explained**: `torque_from_pd` is the
+actuator law with both terms explained, and `ENTER` reports how far it is from
+MuJoCo's `actuator_force` (1e-12). **`H` hands the servos over**: the model's
+gains are zeroed and the law's torques go straight into `qfrc_applied` at
+1 kHz, because an explicit spring this stiff is unstable at 500 Hz (week 1,
+exercise 14; the engine integrates its own servo implicitly). A correct law
+changes nothing; break it and the robot is the week 0 rag doll.
 
-```
-1..9    pick a servo setting and restart     R   restart     SPACE   pause
-H       hand the servos over to your own torque law (toggle)
-ENTER   sag, peak torque and its joint, and your law's gap from MuJoCo's
-```
-
-`torque_from_pd(kp, kv, ctrl, q, qdot)` is the actuator law
-$\tau = k_p(\text{ctrl} - q) - k_v \dot q$ over all 29 actuators, and it returns
-`None` as shipped. While MuJoCo's servos run, the script compares the student's
-prediction to `data.actuator_force` every step and `ENTER` prints the largest
-gap over the last second. **`H` zeroes the model's gains and feeds the student's
-torques through `qfrc_applied`**, so their function *is* the servo: a correct
-law changes nothing visible, an empty one gives the week 0 rag doll, one without
-damping rings.
-
-| Step | Change | Right looks like |
+| Step | Do | Right looks like (measured with `servo.py`) |
 | --- | --- | --- |
-| 1 | write the law | `ENTER` reports a gap of ~1e-12 N·m |
-| 2 | `H`; then remove the damping term, `R`, `H` | the walk is unchanged; then it oscillates and falls |
-| 3 | `2` (limit 50) then `3` (limit 55) | knees flash red at every support exchange; 50 drops the robot, 55 walks |
-| 4 | `4` (half kp) and `5` (double kp) | half sinks and collapses; double is thrown over by its own timing |
-| 5 | `SERVO_HZ = 500`, then `H` | the simulation blows up; the student explains it with week 1 |
-| 6 | lowest kp that walks, added to `SERVOS` | `ENTER` prints its sag; the student plots sag against kp |
+| 1 | `ENTER` | gap ~1e-12; the two terms explained |
+| 2 | `H`, then delete the damping term and `R` `H` | identical walk, then ringing |
+| 3 | `2` (50 N·m) then `3` (55 N·m) | knees go red at support exchange; 50 falls (sag 365 mm), 55 walks 0.65 m |
+| 4 | `4` and `5` (half and double $k_p$) | half sinks and falls; double is thrown at 5.0 s with 327 N·m at the knee |
+| 5 | `SERVO_HZ = 500`, `H` | it blows up; explained with week 1 |
+| 6 | the lowest $k_p$ that walks eight steps, in `SERVOS` | `ENTER` prints its sag; sag against $k_p$ on paper (11 mm at 500) |
 
-**The hand-over runs the student's servo loop at 1 kHz, not 500 Hz — and that
-is a lesson, not a workaround.** Measured: the correct law fed through
-`qfrc_applied` at 500 Hz blows up (`BADQACC` after 14 steps), because an
-explicit spring of this stiffness is unstable at that timestep; at 1 kHz it
-walks 0.65 m against 0.66 m with MuJoCo's own servos, and 0.5 kHz/0.25 kHz
-give the same. MuJoCo's position actuator survives 500 Hz only because the
-engine integrates its affine bias implicitly. `SERVO_HZ = 500` is step 5 of the
-lab, and it is week 1's exercise 14 seen from the other side. Also verified:
-the correct law reproduces `actuator_force` to ~1e-13 while MuJoCo's servos
-run, and the empty law gives the rag doll.
+### `servo.py`: one servo, measured
 
-`SOC4180_AUTOCLOSE=6 uv run weeks/05-actuation/lab_servo.py` closes the window
-by itself, which is how the script is smoke-tested.
+```bash
+uv run weeks/05-actuation/servo.py                          # left knee, step 0.5 rad, gravity off
+uv run weeks/05-actuation/servo.py --kp-scale 4
+uv run weeks/05-actuation/servo.py --kv-scale 0.25
+uv run weeks/05-actuation/servo.py --walk --limit 50
+```
+
+Step-response mode holds `stand`, commands one joint to jump by `--step`, and
+prints the law by hand against `actuator_force`, the damping ratio from the
+mass matrix, the time to 1 % of the step, the overshoot and the peak torque,
+then replays it. `--walk` runs the week 4 gait under the scaled gains and an
+optional limit, printing the pelvis sag and the loudest joint every second.
+
+| Step | Does | Calls |
+| --- | --- | --- |
+| 1 | scale the gains, set the limit | `scale_gains` (`actuator_gainprm`, `actuator_biasprm`), `set_torque_limit` (`actuator_forcerange`) |
+| 2 | ζ from the mass matrix | `mj_fullM`, `jnt_dofadr[actuator_trnid]` |
+| 3 | the step (or the walk), a row every 50 ms (or 1 s) | `ctrl`, `mj_step`, `actuator_force`, `targets_at` |
+| 4 | rise time, overshoot, peak torque, the gap | |
+| 6 | replay | `launch_viewer(passive=True)` |
+
+Measured with it, left knee, 0.5 rad step, gravity off:
+
+| gains | ζ | 1 % reached | overshoot | peak torque |
+| --- | --- | --- | --- | --- |
+| as shipped (kp 500, kv 15.85) | 1.00 | 0.132 s | 0.1 % | 250 N·m |
+| kp × 4 | 0.50 | 0.036 s | 2.1 % | 1000 N·m |
+| kv / 4 | 0.25 | 0.034 s | 4.6 % | 250 N·m |
+| kv × 4 | 4.00 | 0.600 s | 0 % | 250 N·m |
+| limit 50 N·m | 1.00 | 0.136 s | 0.1 % | 50 N·m |
+
+The law by hand matches `actuator_force` to 1e-13 in every unclipped case.
+Walking: as shipped 0.66 m in 7 s with 11 mm sag and knees peaking at 57 N·m;
+limit 50 falls, 55 walks; half stiffness sinks and falls, double stiffness is
+thrown at 5.0 s, quarter damping falls.
 
 ## Rebuild
 

@@ -653,28 +653,46 @@ is exercise 5.
 uv run weeks/02b-robot-as-code/lab_body.py
 ```
 
-A window opens with the whole robot frozen in the first pose of `POSES`. Unlike
-week 2's lab, **every** chain is live.
+Every part of the robot, by name. `1`–`5` highlight a chain (yellow spheres
+root to tip, white at its landmark), `M` mirrors the pose, `ENTER` prints it
+as a pasteable `set_pose(...)` call, `R` is `stand`; the sliders move joints
+directly, nothing is simulated. Poses are dictionaries of joint names — no slot
+indices anywhere. The code is complete and explained.
+
+| Step | Do | Right looks like |
+| --- | --- | --- |
+| 1 | `1`–`5` | each chain named aloud before the highlight appears |
+| 2 | drag one slider per chain | the landmarks that move, predicted first; the heat map is the answer key |
+| 3 | three poses in `POSES`, by name | the robot takes them |
+| 4 | a left-arm pose, then `M` | roll and yaw flipped sign, pitch did not |
+| 5 | left hand above the right foot, `ENTER` | the printed call, pasted into the notebook |
+
+---
+
+## Lab class: `anatomy.py`, the robot as data {.smaller}
+
+```bash
+uv run weeks/02b-robot-as-code/anatomy.py                 # the five chains, qpos / qvel map, ranges
+uv run weeks/02b-robot-as-code/anatomy.py --nudge waist   # one row of the heat map, measured live
+uv run weeks/02b-robot-as-code/anatomy.py --pose left_shoulder_roll=0.8 left_elbow=1.2 --mirror
+```
 
 ```
-1 2 3 4 5     highlight a chain — left leg, right leg, waist, left arm, right arm
-SPACE / ←→    next / previous pose
-M             mirror the current pose left <-> right
-ENTER         print the pose as a set_pose(...) call you can paste
-R             back to `stand`
-sliders (F3)  drag any of the 29 joints directly
+chain        joint                         qpos  qvel   range (rad)
+left_leg     left_hip_pitch_joint             7     6   [-2.53, +2.88]
+...
+waist: each joint +0.1 rad from `stand`; landmark motion in mm
+joint                            left foot   right foot    torso IMU   left wrist  right wrist
+waist_yaw_joint                        0.0          0.0          4.4         22.2         22.2
+waist_pitch_joint                      0.0          0.0         15.3         11.4         11.4
 ```
 
-Do these in order, and show each one:
-
-1. Press `1`–`5` and name each chain out loud before the highlight appears.
-2. Drag one slider per chain. For each, say which landmarks moved **before** you
-   look — the heat map is the answer key.
-3. Add three poses to `POSES` by name. No slot indices.
-4. Build a pose with only the left arm, press `M`, and explain which signs
-   flipped and which did not.
-5. Find a pose where the left hand is directly above the right foot. Print it
-   with `ENTER` and paste it into your notebook.
+| Step | Does | Calls |
+| --- | --- | --- |
+| 2 | the chain table: slot, slot − 1, range | `bodies.CHAINS`, `joint_index`, `dof_index`, `jnt_range` |
+| 3 | nudge one joint at a time, measure five landmarks | `set_pose`, `site_xpos`, `xpos` |
+| 4 | a named pose, mirrored | `set_pose`, `mirror`, `chain_of` |
+| 5 | show it, chain highlighted | `launch_viewer(passive=True)`, `chain_bodies`, `user_scn` |
 
 ---
 

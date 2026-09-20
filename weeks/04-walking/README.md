@@ -61,40 +61,59 @@ the exercises worth doing.
 
 ```bash
 uv run weeks/04-walking/lab_walk.py
+uv run weeks/04-walking/walk.py --step-time 0.45
 ```
 
-The walker live, in real time, in the interactive viewer. `GAITS` at the top of
-the file is a list of named `GaitParams`; keys `1`–`9` select one and restart.
+The walker, live and in real time. Keys `1`–`5` pick a gait from the `GAITS`
+list; `G` switches to Moon gravity and `F` to ice *without telling the
+controller*; ctrl-drag pushes the robot; `ENTER` prints distance, pelvis
+height, the ZMP range and the gap between the LIPM written by hand and the
+package's. On the floor: the footstep plan as grey boxes, the commanded centre
+of mass for the current step as white dots, `predict_com`'s version as blue
+dots, the pelvis as a red sphere, the measured ZMP as a yellow one.
 
-```
-1..9    pick a gait and restart      R   restart       SPACE   pause
-G       Moon gravity on/off          F   ice (friction 0.2) on/off
-ENTER   distance, pelvis height, ZMP range, fell/upright
-double-click a body, then ctrl-drag: push it
-```
+**The code is complete and explained.** `predict_com` is the LIPM closed form
+with the physics in its docstring; `Walk` is the loop around the package's
+controller with the MuJoCo call named at each step.
 
-Drawn on the floor every frame: the **footstep plan** (grey boxes), the
-**commanded centre-of-mass path** for the current step (white dots), the
-**pelvis** projected down (red) and the **measured ZMP** (yellow). Blue dots are
-the student's own LIPM: `predict_com(x0, v0, zmp, t, omega)` returns `None` as
-shipped, and the exercise is to write the closed-form cosh/sinh solution so the
-blue dots land inside the white ones.
-
-| Step | Change | Right looks like |
+| Step | Do | Right looks like (measured with `walk.py`) |
 | --- | --- | --- |
-| 1 | write `predict_com` | blue dots inside white on every step; with the sinh sign flipped they run away backwards |
-| 2 | press `2` (no double support) | the student counts the steps before the fall and says which way it went |
-| 3 | press `3`, then lower `step_time` in `GAITS` | a failure point, compared against $1/\omega = 0.247$ s printed at start-up |
-| 4 | press `G` | a prediction from $\omega = \sqrt{g/z_c}$ made *before* looking |
-| 5 | ctrl-drag mid-walk | it never reacts; the student names what a controller would need to know (week 6) |
-| 6 | a gait in `GAITS` that goes further | `ENTER` prints a distance beyond the default's ~1.0 m |
+| 1 | `ENTER`; then flip the sinh sign in `predict_com` | gap 0.0; blue inside white — then the blue dots run backwards |
+| 2 | `2` (no double support) | falls at 2.0 s, before the second step completes; which way, and why |
+| 3 | `3` (rushed, 0.45 s) | four steps, then a fall at 3.2 s; compare 0.45 s to 1/ω = 0.247 s |
+| 4 | `G` | the prediction from ω = √(g/z_c) first; measured: six steps, then a fall at 5.3 s |
+| 5 | ctrl-drag while walking | it never reacts: what it would need to know (week 6) |
+| 6 | a gait that walks further than 0.99 m in 8.8 s | `ENTER` proves it |
 
-The yellow sphere is the point of the class: the theory says it never leaves
-the stance foot, and every student watches it swing wide of the feet at each
-support exchange.
+### `walk.py`: plan → LIPM → IK → physics, one row per step
 
-`SOC4180_AUTOCLOSE=6 uv run weeks/04-walking/lab_walk.py` closes the window by
-itself, which is how the script is smoke-tested.
+```bash
+uv run weeks/04-walking/walk.py
+uv run weeks/04-walking/walk.py --double-support 0 --no-viewer
+uv run weeks/04-walking/walk.py --gravity 1.62
+uv run weeks/04-walking/walk.py --friction 0.2 --steps 6 --step-length 0.20
+```
+
+Every gait parameter is a flag. It prints the footstep plan and the pendulum's
+numbers (ω = 4.04 rad/s, 1/ω = 0.247 s: a 0.65 s step is 2.6 time constants),
+checks the LIPM by hand against the package (0.0), runs the walk headless with
+one row per step — position, pelvis height, the ZMP's sideways range, IK
+tracking error — and a summary, then replays the walk with the plan, pelvis
+and ZMP drawn on the floor.
+
+| Step | Does | Calls |
+| --- | --- | --- |
+| 1 | robot, world, gait; the plan printed | `opt.gravity`, `geom_friction`, `GaitParams`, `WalkingController`, `controller.plan` |
+| 2 | the LIPM by hand vs the package | `controller._segments`, `lipm.evolve` |
+| 3 | the loop, one row per step | `controller.control(t)`, `mj_step`, `controller.zmp(data)`, `last_ik_error` |
+| 4 | summary: distance, ZMP range vs stance width | |
+| 6 | replay with markers | `launch_viewer(passive=True)`, `user_scn` boxes and spheres |
+
+Measured with it: the default gait walks 0.989 m in 8.8 s with the measured
+ZMP swinging over [−0.233, +0.105] m against feet at ±0.119 m — outside the
+support polygon, which is the model failing, not the criterion; ice (friction
+0.2) changes nothing for this gait; the rushed, no-double-support and Moon
+gaits fall at 3.2, 2.0 and 5.3 s.
 
 ## Rebuild
 

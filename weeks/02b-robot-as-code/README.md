@@ -92,38 +92,51 @@ nothing. Use this shape for any future week that adds package code.
 
 ```bash
 uv run weeks/02b-robot-as-code/lab_body.py
+uv run weeks/02b-robot-as-code/anatomy.py --nudge left_arm
 ```
 
-A window opens with the whole robot frozen in the first pose of `POSES`. Unlike
-week 2's `lab_viewer.py`, which poses one leg, **every chain here is live**.
+`lab_body.py` holds the G1 in each pose of `POSES`, never steps physics, and
+drives all five chains: keys `1`–`5` highlight a chain (yellow spheres along
+`chain_bodies`, white at the landmark), `M` mirrors the pose, `ENTER` prints it
+as a pasteable `set_pose(...)` call, `R` returns to `stand`. The Control sliders
+are wired straight onto the joint angles, as in week 2. The code is complete;
+poses are dictionaries of joint names, never slot indices.
 
-```
-1 2 3 4 5     highlight a chain — left leg, right leg, waist, left arm, right arm
-0             highlight nothing
-SPACE / →     next pose            ←   previous pose
-M             mirror the current pose left <-> right
-ENTER         print the pose as a set_pose(...) call you can paste
-R             back to `stand`
-sliders (F3)  drag any of the 29 joints directly
-```
-
-The highlighted chain is a string of **yellow** spheres from the root of the limb
-to its tip; the **white** sphere is that chain's landmark. The printout gives all
-five landmarks and how far each moved since the last pose.
-
-**What students change, and what they should see:**
-
-| Step | Change | Right looks like |
+| Step | Do | Right looks like |
 | --- | --- | --- |
-| 1 | press `1`–`5` | naming each chain out loud *before* the yellow spheres appear |
-| 2 | drag one slider per chain | predicting which landmarks move, then seeing only those move; the deck's heat map is the answer key |
-| 3 | add three poses to `POSES`, by joint name | the robot holds them; no slot index appears anywhere in the file |
-| 4 | a left-arm-only pose, then `M` | the right arm takes the pose; **roll and yaw have flipped sign, pitch and elbow have not** |
-| 5 | left hand above right foot | `ENTER` prints a `set_pose(...)` line whose left-hand and right-foot x and y agree to a centimetre |
+| 1 | `1`–`5` | each chain named aloud before the highlight appears |
+| 2 | drag one slider per chain | the landmarks that move, predicted before looking; the heat map is the answer key |
+| 3 | three poses added to `POSES` by joint name | the robot takes them; no slot indices anywhere |
+| 4 | a left-arm pose, then `M` | roll and yaw flipped sign, pitch did not — measured: the `stand` keyframe's own arms are `[0.2, ±0.2, 0, 1.28, …]` |
+| 5 | the left hand above the right foot, `ENTER` | the printed call pasted into the notebook |
 
-Step 4 is the one that lands. Students who typed the signs by hand will have
-guessed wrong at least once, and `mirror` makes the rule concrete rather than
-memorised.
+### `anatomy.py`: the robot as data, printed
+
+```bash
+uv run weeks/02b-robot-as-code/anatomy.py                 # the five chains and the qpos / qvel map
+uv run weeks/02b-robot-as-code/anatomy.py --nudge waist   # one row of the heat map, measured live
+uv run weeks/02b-robot-as-code/anatomy.py --pose left_shoulder_roll=0.8 left_elbow=1.2 --mirror
+```
+
+With no flags it prints every joint's chain, `qpos` slot, `qvel` slot (one
+less, always) and range. `--nudge CHAIN` moves each joint of the chain 0.1 rad
+from `stand`, one at a time, and prints how far five landmarks moved — the
+deck's heat map, one row per joint, measured: a left-arm joint moves the left
+wrist (elbow 205 mm, shoulder pitch 38, wrist roll 0.0 because the landmark is
+on its axis) and nothing else; a waist joint moves both wrists (22 mm for yaw)
+and the torso IMU (4–15 mm) and neither foot. `--pose` places named joints,
+`--mirror` reflects them, and the simulator shows the result with the chain
+highlighted.
+
+| Step | Does | Calls |
+| --- | --- | --- |
+| 1 | the robot at `stand` | `load_g1`, `keyframe_data`, `mj_forward` |
+| 2 | the chain table | `bodies.CHAINS`, `joint_index`, `dof_index`, `jnt_range` |
+| 3 | nudge and measure | `set_pose` (reset + `mj_forward`), `site_xpos`, `xpos` |
+| 4 | a named pose, mirrored | `set_pose`, `mirror`, `chain_of` |
+| 5 | show it | `launch_viewer(passive=True)`, `chain_bodies`, `user_scn` |
+
+`SOC4180_AUTOCLOSE=4` closes either script's window by itself.
 
 ## Why the viewer is not in the notebook
 

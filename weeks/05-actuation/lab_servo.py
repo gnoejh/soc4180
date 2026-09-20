@@ -23,16 +23,16 @@ MuJoCo's position actuator is a PD controller written into the model file:
 
     tau = kp * (ctrl - q) - kv * qdot
 
-`torque_from_pd` below is that law, and it is empty. While it is empty ENTER
-reports "(not written)". Once you write it, ENTER prints the largest gap
-between your prediction and `data.actuator_force` over the last second. Right
-is a number around 1e-12 -- unless a torque limit is on, when MuJoCo clips and
-you do not; explain the gap you see.
+`torque_from_pd` below is that law, complete and explained. ENTER prints the
+largest gap between it and `data.actuator_force` over the last second: around
+1e-12, unless a torque limit is on, when MuJoCo clips and the law does not --
+explain the gap you see.
 
-Then press H. The model's gains are zeroed and your function IS the servo:
-its torques go straight into `qfrc_applied`, at SERVO_HZ. If it is right,
-nothing changes. If it is wrong, or empty, the robot collapses -- the week 0
-rag doll, because a servo with no law is no servo.
+Then press H. The model's gains are zeroed and the function IS the servo: its
+torques go straight into `qfrc_applied`, at SERVO_HZ. Right, nothing changes.
+Break it -- drop a term, flip a sign -- and the robot collapses: the week 0 rag
+doll, because a servo with the wrong law is no servo. `servo.py` in this
+folder measures one servo's step response and the walk under new gains.
 
 SERVO_HZ is 1000, not the 500 the physics normally runs at, and that is a
 lesson in itself: a spring this stiff, applied *explicitly* between steps,
@@ -40,10 +40,13 @@ is unstable at 500 Hz (it is week 1's exercise 14 again). MuJoCo's own servo
 survives 500 Hz only because the engine integrates it implicitly. Set
 SERVO_HZ = 500 and press H to see the difference.
 
-What to change, in order, and show the instructor:
+Experiments, in order, and what to show the instructor:
 
-1. Write `torque_from_pd`. ENTER should report a gap near 1e-12.
-2. Press H. The walk must continue exactly as before. Then break your law on
+1. ENTER while walking: the gap is near 1e-12. Say what the two terms of
+   the law do (`servo.py` measures the knee's step response: kp x4 reaches
+   1 % in 0.036 s instead of 0.13 s, with 2 % overshoot and 4x the torque;
+   kv/4 overshoots 4.6 %; kv x4 takes 0.6 s).
+2. Press H. The walk must continue exactly as before. Then break the law on
    purpose -- drop the damping term -- and press R then H. Describe what you see
    and name it (week 5 calls it ringing).
 3. Press 2 (torque limit 50 N m). Which joints go red first, in which phase of
@@ -82,17 +85,23 @@ SERVO_HZ = 1000              # rate of YOUR servo loop after H (500 is unstable:
 CONTROL_DT = 0.002           # the walker's targets update at 500 Hz regardless
 
 
+# --- 1. the servo law ---------------------------------------------------------------
+
 def torque_from_pd(kp, kv, ctrl, q, qdot):
-    """The position servo, as arrays over all 29 actuators. Return tau, or None.
+    """The position servo, as arrays over all 29 actuators: tau = kp (ctrl - q) - kv qdot.
 
     kp, kv   gains, one per actuator          (from soc4180.gains)
     ctrl     the commanded angles             (data.ctrl)
     q, qdot  the joint angle and velocity each actuator drives
+
+    The first term is a spring pulling the joint toward its target; the
+    second is a damper resisting motion. With kv = 2 sqrt(kp M) the pair is
+    critically damped, which every G1 leg joint is (zeta = 1.00 on all twelve).
     """
-    return None
+    return kp * (ctrl - q) - kv * qdot
 
 
-# --- nothing below needs editing ------------------------------------------
+# --- 2. drawing, and one run of one servo setting --------------------------------------
 
 def sphere(geom, pos, rgba, radius):
     mujoco.mjv_initGeom(geom, mujoco.mjtGeom.mjGEOM_SPHERE,
@@ -102,6 +111,13 @@ def sphere(geom, pos, rgba, radius):
 
 
 class Run:
+    """One run of the walk under one (kp, kv, limit) setting.
+
+    `scale_gains` rewrites the model's gainprm/biasprm, `set_torque_limit`
+    its forcerange. `step()` is one 2 ms controller tick: while MuJoCo drives
+    the servos it is one `mj_step`; after H it is SERVO_HZ/500 sub-steps in
+    which `torque_from_pd` is written into `qfrc_applied` before each one.
+    """
     base_gain = None
     base_bias = None
     qadr = None
@@ -198,6 +214,8 @@ class Run:
         print(f"  peak torque {self.peak[loud]:.1f} N m at {names[loud]}"
               f"   your law vs MuJoCo: {gap}")
 
+
+# --- 3. the loop --------------------------------------------------------------------------
 
 def main() -> int:
     if soc4180.is_colab():

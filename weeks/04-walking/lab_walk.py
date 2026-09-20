@@ -22,21 +22,27 @@ Drawn on the floor:
     grey boxes      the footstep plan -- where each foot is supposed to land
     white dots      the controller's commanded centre-of-mass path for the
                     current step, from the package's LIPM
-    blue dots       the same path from YOUR `predict_com` below. Right means the
-                    blue dots sit inside the white ones. Until you write it
-                    there are no blue dots.
+    blue dots       the same path from `predict_com` below, the LIPM closed
+                    form written by hand. As shipped it is complete and the
+                    blue dots sit inside the white ones; ENTER prints the gap.
     red sphere      the pelvis, projected onto the floor
     yellow sphere   the measured ZMP -- the centre of pressure under the feet
 
 Watch the yellow sphere. The theory says it can never leave the foot it is
 standing on. Watch how far it actually swings sideways.
 
-What to change, in order, and show the instructor:
+Everything here is complete and explained: `predict_com` in section 1 is
+the pendulum solved by hand, `Walk` in section 3 is the loop around the
+package's controller with the MuJoCo call named at each step. `walk.py` in
+this folder is the non-interactive version: every gait parameter a flag, one
+printed row per step, then a replay.
 
-1. Write `predict_com`: the LIPM closed form
-       x(t) = p + (x0 - p) cosh(wt) + (v0 / w) sinh(wt).
-   The blue dots must land inside the white ones on every step. Get the sign
-   of the sinh term wrong and they run away backwards -- try it, on purpose.
+Experiments, in order, and what to show the instructor:
+
+1. ENTER while walking: "LIPM by hand vs package" is 1e-16 or so, and the
+   blue dots sit inside the white ones. Now break `predict_com` on purpose --
+   flip the sign of the sinh term -- and watch the blue dots run backwards.
+   Say why the sign matters: the CoM falls AWAY from the ZMP.
 2. Press 2 (no double support). Count the steps before it falls, and say which
    way it went and why that way.
 3. Press 3 (rushed). Compare the step time to 1/omega, printed at start-up.
@@ -72,18 +78,26 @@ GAITS = [
 ]
 
 
-def predict_com(x0: float, v0: float, zmp: float, t: float, omega: float) -> float | None:
-    """Where the LIPM puts the centre of mass after `t` seconds, or None until written.
+# --- 1. the linear inverted pendulum, solved by hand -----------------------------
+
+def predict_com(x0: float, v0: float, zmp: float, t: float, omega: float) -> float:
+    """Where the LIPM puts the centre of mass after `t` seconds.
 
     Released at position `x0` with velocity `v0`, with the zero moment point
     held at `zmp`, and omega = sqrt(g / z_c). The equation of motion is
-    x'' = omega^2 (x - zmp) and its solution is a cosh/sinh pair. Use
-    `math.cosh` and `math.sinh`.
+    x'' = omega^2 (x - zmp): the CoM accelerates AWAY from the point of
+    support, the faster the further it already is. Its solution is
+
+        x(t) = zmp + (x0 - zmp) cosh(omega t) + (v0 / omega) sinh(omega t)
+
+    -- exponential growth in both terms, which is why a walker must keep
+    moving the ZMP (its feet) back under the CoM before the exponential wins.
+    The package's LIPM.evolve is the same formula; ENTER prints the gap.
     """
-    return None
+    return zmp + (x0 - zmp) * math.cosh(omega * t) + (v0 / omega) * math.sinh(omega * t)
 
 
-# --- nothing below needs editing ------------------------------------------
+# --- 2. drawing helpers ----------------------------------------------------------
 
 def sphere(geom, pos, rgba, radius):
     mujoco.mjv_initGeom(geom, mujoco.mjtGeom.mjGEOM_SPHERE,
@@ -98,8 +112,17 @@ def box(geom, pos, half, rgba):
                         np.eye(3).flatten(), np.asarray(rgba, dtype=float))
 
 
+# --- 3. one run of one gait -----------------------------------------------------------
+
 class Walk:
-    """One run of one gait, in place: the viewer keeps watching the same MjData."""
+    """One run of one gait, in place: the viewer keeps watching the same MjData.
+
+    The controller is the package's WalkingController: a footstep plan, a
+    LIPM pelvis trajectory chained step to step, and week 3's IK. Each tick,
+    `control(t)` turns the plan into 29 servo targets and `mj_step` moves the
+    world by 2 ms. `zmp(data)` reads the contact forces back out -- the centre
+    of pressure -- which is what the yellow sphere shows.
+    """
 
     def __init__(self, model, data, name, params):
         self.name = name
@@ -112,6 +135,7 @@ class Walk:
         mujoco.mj_forward(model, data)
         self.zmp_y = []
         self.fell = False
+        self.gap = 0.0                        # predict_com vs the package, worst so far
         print(f"\n[{name}]  step_time {params.step_time} s, step_length {params.step_length} m,"
               f" double support {params.double_support:.0%}")
         print(f"  omega = {self.controller.lipm.omega:.2f} rad/s, 1/omega = "
@@ -136,6 +160,7 @@ class Walk:
         print(f"  t = {d.time:5.2f} s  travelled {d.qpos[0]:+.3f} m  pelvis z {d.qpos[2]:.3f} m"
               f"  ZMP y {span}  feet at +-{self.controller.params.stance_width:.3f}"
               f"  {'FELL' if self.fell else 'upright'}")
+        print(f"  LIPM by hand vs package: max gap {self.gap:.1e} m so far")
 
     def com_dots(self):
         """Commanded (white) and predicted (blue) centre-of-mass path for this step."""
@@ -150,10 +175,12 @@ class Walk:
         for tau in np.linspace(0, p.step_time, 9):
             ref.append((c.lipm.evolve(x0, vx, zx, tau)[0], c.lipm.evolve(y0, vy, zy, tau)[0]))
             px, py = predict_com(x0, vx, zx, tau, w), predict_com(y0, vy, zy, tau, w)
-            if px is not None and py is not None:
-                mine.append((px, py))
+            mine.append((px, py))
+            self.gap = max(self.gap, abs(px - ref[-1][0]), abs(py - ref[-1][1]))
         return ref, mine
 
+
+# --- 4. the loop -------------------------------------------------------------------------
 
 def main() -> int:
     if soc4180.is_colab():
@@ -161,7 +188,7 @@ def main() -> int:
         return 1
 
     model = soc4180.load_g1()
-    data = mujoco.MjData(model)
+    data = mujoco.MjData(model)                  # ONE MjData: the viewer is bound to it
     g_earth = model.opt.gravity.copy()
     friction = model.geom_friction[0, 0]
     state = {"i": 0, "walk": Walk(model, data, *GAITS[0]), "paused": False,

@@ -36,20 +36,32 @@ The observation, in order (42 numbers):
 The action is 12 residuals in [-1, 1] in that same joint order, scaled by
 ACTION_SCALE radians.
 
-What to change, in order, and show the instructor:
+Everything here is complete and explained: `my_policy` in section 1 is the
+first closed loop of the course (the ankle strategy), sections 2-3 are the
+drawing and the loop, with the environment's calls named. `env_run.py` in
+this folder runs one episode of any policy headless with the reward split by
+term, can push the robot with a measured force, and then replays.
 
-1. Press 1, 2, 3 and read the three episode lines. Say why "hold the crouch"
-   scores what it scores, and why the week 4 walker -- which walked a metre
-   three weeks ago -- falls here. Then set ACTION_SCALE = 1.0 and
-   CONTROL_HZ = 100 at the top and press 3 again.
-2. Write `my_policy` as a constant: bend both knees a little more. Press 4.
-   Read the reward terms on ENTER: which went up, which went down?
-3. Make `my_policy` periodic in `t` on hip pitch (opposite signs on the two
-   legs). Watch it terminate. Read the episode line and the last ENTER.
-4. Close the first loop of the course: use obs[0:3] to lean the hips against
-   the tilt (hip_roll from the y component, hip_pitch from x). Push the robot
-   with ctrl-drag under policy 1 and under policy 4. Which survives a bigger
-   push, and what did it know that the other did not?
+Experiments, in order, and what to show the instructor (numbers measured
+with env_run.py):
+
+1. Press 1, 2, 3 and read the three episode lines: hold 774 over 500
+   decisions; random 32 and a fall after 38; the week 4 walker -- which walked
+   a metre three weeks ago -- 357 and a fall at 4.3 s. Say why. Then set
+   ACTION_SCALE = 1.0 and CONTROL_HZ = 100 at the top and press 3 again:
+   1805, a metre walked. Say what the two numbers changed.
+2. Change `my_policy` to a constant: bend both knees a little more (a[3] =
+   a[9] = 0.3). Press 4. Read the reward terms on ENTER: which went up, which
+   went down?
+3. Make `my_policy` periodic in `t` on hip pitch, opposite signs on the two
+   legs (a[0], a[6] = +-0.5 sin 4t). Watch it terminate at 1.5 s. Read the
+   episode line and the last ENTER.
+4. Restore `my_policy`: the ankles driven against obs[0:3]. Push the robot
+   with ctrl-drag under policy 1 and under policy 4. Measured with
+   `env_run.py --push`: hold survives 65 N for 0.2 s and falls at 70; the
+   ankle strategy survives 75 and falls at 80; hip roll instead of ankle roll,
+   either sign, changes nothing. What did policy 4 know that policy 1 did
+   not, and why can no stance survive 80 N (what would)?
 5. Change REWARD_WEIGHTS (try alive = 0, or tracking = 0) and re-run 1 and 3.
    Nothing about the *behaviour* changes -- only the numbers. Say why, in one
    sentence, and what that means for next week.
@@ -70,18 +82,33 @@ CONTROL_HZ = 50.0       # decisions per second
 REWARD_WEIGHTS = {}     # e.g. {"alive": 0.0, "tracking": 1.5}; see soc4180.envs.DEFAULT_REWARD
 
 
-def my_policy(obs: np.ndarray, t: float) -> np.ndarray | None:
-    """Your policy: 42 observations (and the time) in, 12 residual actions out.
+# --- 1. the policy ----------------------------------------------------------------
 
-    Return None to hold the crouch. Some starting points:
-        a = np.zeros(12); a[3] = a[9] = 0.3            # both knees, a little more
-        a[0], a[6] = 0.5 * np.sin(4 * t), -0.5 * np.sin(4 * t)   # step in place
-        a[1] = a[7] = -2.0 * obs[1]                     # lean the hips against the roll
+ANKLE_GAIN = 2.0        # residual per unit of body-frame gravity component
+
+
+def my_policy(obs: np.ndarray, t: float) -> np.ndarray:
+    """A policy: 42 observations (and the time) in, 12 residual actions out.
+
+    As shipped, the first closed loop of the course -- the ankle strategy.
+    obs[0:3] is gravity in the torso frame, (0, 0, -1) when upright; obs[1]
+    grows with a sideways tilt and obs[0] with a forward one. Both ankles
+    are turned against them, so the feet push the body back. Measured with
+    env_run.py --push: this survives a 75 N shove (0.2 s) where holding the
+    crouch falls at 70 N. Doing the same with hip roll (a[1], a[7]) changes
+    nothing, and ankle pitch with the sign flipped falls with no push at all.
+
+    Other starting points, for the experiments:
+        a[3] = a[9] = 0.3                                          # both knees, a little more
+        a[0], a[6] = 0.5 * np.sin(4 * t), -0.5 * np.sin(4 * t)     # step in place
     """
-    return None
+    a = np.zeros(12, dtype=np.float32)
+    a[5] = a[11] = ANKLE_GAIN * obs[1]        # ankle roll, both legs, against the sideways tilt
+    a[4] = a[10] = ANKLE_GAIN * obs[0]        # ankle pitch, both legs, against the forward tilt
+    return a
 
 
-# --- nothing below needs editing ------------------------------------------
+# --- 2. drawing --------------------------------------------------------------------
 
 def sphere(geom, pos, rgba, radius):
     mujoco.mjv_initGeom(geom, mujoco.mjtGeom.mjGEOM_SPHERE,
@@ -105,6 +132,8 @@ def arrow(geom, origin, direction, rgba, length=0.35, radius=0.006):
                         np.asarray(origin, dtype=float), mat, np.asarray(rgba, dtype=float))
 
 
+# --- 3. the loop ---------------------------------------------------------------------
+
 def main() -> int:
     if soc4180.is_colab():
         print("This lab needs a desktop window; run it on your laptop.")
@@ -116,6 +145,9 @@ def main() -> int:
         print("This lab needs gymnasium: run `uv sync --extra rl` once, then try again.")
         return 1
 
+    # G1WalkEnv is the MDP written down: observation, action, reward terms and
+    # weights, termination (fell) and truncation (time). One env.step is one
+    # decision = several physics steps (500 / CONTROL_HZ).
     env = G1WalkEnv(action_scale=ACTION_SCALE, control_hz=CONTROL_HZ,
                     reward_weights=REWARD_WEIGHTS or None)
     model, data = env.model, env.data
@@ -133,8 +165,7 @@ def main() -> int:
         return walker_actions(env, walker, data.time)
 
     def mine(obs, t):
-        a = my_policy(obs, t)
-        return np.zeros(12, dtype=np.float32) if a is None else np.asarray(a, np.float32)
+        return np.asarray(my_policy(obs, t), np.float32)
 
     POLICIES = [("hold the crouch (zero action)", hold),
                 ("uniform random", random_policy),
@@ -207,7 +238,7 @@ def main() -> int:
                 policy = POLICIES[state["i"]][1]
                 a = policy(state["obs"], data.time)
                 state["action"] = a
-                obs, r, term, trunc, info = env.step(a)
+                obs, r, term, trunc, info = env.step(a)      # decide -> act -> observe, score
                 state["obs"], state["info"] = obs, info
                 state["ret"] += r; state["steps"] += 1
                 if term or trunc:

@@ -8,7 +8,7 @@ the world, so RIGHT MEANS VERTICAL. A thin white arrow is the truth.
 
     orange   accelerometer only: gravity is wherever the specific force points
     cyan     gyroscope only: integrate the turning rate from a known start
-    green    YOUR complementary filter, `my_filter` below (no arrow until written)
+    green    the complementary filter, `my_filter` below -- complete, and yours to break
 
     W                      walk / stand (restarts)
     N                      inject a gyro bias and accelerometer noise (toggle)
@@ -21,20 +21,28 @@ the world, so RIGHT MEANS VERTICAL. A thin white arrow is the truth.
     If no key does anything in the window, press the same key in this terminal
     instead -- single keys, no enter. `q` stops it.
 
-What to change, in order, and show the instructor:
+Everything here is complete and explained: `my_filter` in section 1 is the
+complementary filter, `down_in_world` / `true_tilt` in section 2 turn a
+(roll, pitch) into an arrow and the answer key, section 3 is the loop.
+`imu.py` in this folder is the non-interactive version: the same three
+estimators scored every second, an alpha sweep, then a replay.
+
+Experiments, in order, and what to show the instructor:
 
 1. Push the standing robot sideways with ctrl-drag and let it settle. The
    orange arrow swings wildly *during* the push and is right afterwards. Say
-   why (what does an accelerometer measure?).
+   why (what does an accelerometer measure?). The green one barely moves.
 2. Press N. The cyan arrow starts to lean, slowly, and never comes back. Press
-   ENTER twice a few seconds apart: its error only grows. Name the effect.
-3. Write `my_filter`: predict with the gyro, correct toward the accelerometer,
-       angle = alpha * (angle + omega * dt) + (1 - alpha) * angle_from_accel
-   for roll and pitch. The green arrow should sit inside the white one while
-   standing, stay there under a push, and not drift with N on.
+   ENTER twice a few seconds apart: its error only grows (0.02 rad/s of bias
+   is 1.1 degrees per second, for ever). Name the effect.
+3. Break `my_filter` on purpose: return the gyro prediction alone (alpha = 1)
+   and the green arrow becomes the cyan one; return the accelerometer alone
+   (alpha = 0) and it becomes the orange one. The filter is the sum of a
+   low-pass on one and a high-pass on the other, and that is all it is.
 4. Press W. The robot walks. Compare the three arrows and the ENTER numbers.
    Now sweep alpha with [ and ]: find the alpha that is worst, and say what
-   it is trading.
+   it is trading (`imu.py --walk --noise --sweep` prints the whole curve:
+   the mean error bottoms out near alpha = 0.998).
 5. The pelvis IMU has been ignored. Change SITE to "pelvis". Does anything
    improve? Explain either way.
 """
@@ -57,19 +65,30 @@ GYRO_BIAS = 0.02        # rad/s on the roll axis when N is on
 ACCEL_NOISE = 0.5       # m/s^2 standard deviation when N is on
 
 
+# --- 1. the complementary filter --------------------------------------------------
+
 def my_filter(roll: float, pitch: float, gyro, accel, dt: float, alpha: float):
-    """One complementary-filter update. Return (roll, pitch), or None until written.
+    """One complementary-filter update. Returns the new (roll, pitch).
 
-    `roll`, `pitch` are your previous estimates. `gyro` is the angular velocity
+    `roll`, `pitch` are the previous estimates. `gyro` is the angular velocity
     (rad/s, body frame) and `accel` the specific force (m/s^2, body frame).
-    `soc4180.tilt_from_accel(accel)` gives the accelerometer's own (roll, pitch).
-    Predict by integrating gyro[0] into roll and gyro[1] into pitch, then pull
-    each a fraction (1 - alpha) of the way toward the accelerometer's answer.
+
+        predict:  angle + omega * dt            (the gyro: right about fast motion, drifts)
+        correct:  toward angle_from_accel       (gravity: never drifts, misreads every push)
+        blend:    alpha * predicted + (1 - alpha) * measured
+
+    alpha is the gyro's share. It is a low-pass on the accelerometer and a
+    high-pass on the gyro that add to one, with time constant
+    tau = -dt / ln(alpha): 0.4 s at alpha = 0.995 and 500 Hz. Measured on the
+    biased-gyro walk: mean error is smallest near alpha = 0.998.
     """
-    return None
+    acc_roll, acc_pitch = soc4180.tilt_from_accel(accel)        # the accelerometer's own answer
+    roll = alpha * (roll + gyro[0] * dt) + (1 - alpha) * acc_roll
+    pitch = alpha * (pitch + gyro[1] * dt) + (1 - alpha) * acc_pitch
+    return roll, pitch
 
 
-# --- nothing below needs editing ------------------------------------------
+# --- 2. from angles to arrows, and the answer key ------------------------------------------
 
 def down_in_world(R, roll, pitch):
     """A (roll, pitch) estimate as the unit 'down' vector it implies, in the world."""
@@ -92,6 +111,8 @@ def arrow(geom, origin, direction, rgba, length=0.4, radius=0.008):
                         np.asarray(origin, dtype=float), mat, np.asarray(rgba, dtype=float))
 
 
+# --- 3. the loop ----------------------------------------------------------------------------
+
 def main() -> int:
     if soc4180.is_colab():
         print("This lab needs a desktop window; run it on your laptop.")
@@ -99,6 +120,7 @@ def main() -> int:
 
     model = soc4180.load_g1()
     data = mujoco.MjData(model)
+    # nsensor = 4 is two IMUs, gyro + accelerometer at imu_in_torso and imu_in_pelvis
     site_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_SITE, f"imu_in_{SITE}")
     dt = model.opt.timestep
     rng = np.random.default_rng(0)
@@ -145,7 +167,7 @@ def main() -> int:
         elif not state["walk"]:
             data.ctrl[:] = c.control(0.0)                    # hold the crouch
         mujoco.mj_step(model, data)
-        gyro, accel = soc4180.read_imu(model, data, SITE)
+        gyro, accel = soc4180.read_imu(model, data, SITE)      # 6 numbers out of data.sensordata
         if state["noise"]:
             gyro = gyro + np.array([GYRO_BIAS, 0.0, 0.0])
             accel = accel + rng.normal(0.0, ACCEL_NOISE, 3)

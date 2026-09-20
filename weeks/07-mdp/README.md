@@ -58,13 +58,14 @@ upright, or mean velocity alongside it.
 ## Lab class: on your laptop
 
 ```bash
-uv run weeks/07-mdp/lab_env.py        # needs gymnasium: uv sync --extra rl
+uv run weeks/07-mdp/lab_env.py                     # needs gymnasium: uv sync --extra rl
+uv run weeks/07-mdp/env_run.py --policy lean --push 75
 ```
 
 `G1WalkEnv` in the interactive viewer, stepping at the policy rate in real
 time. `POLICIES` holds four functions from observation to action — hold the
-crouch, uniform random, the week 4 walker via `walker_actions`, and the
-student's `my_policy(obs, t)` — selected with keys `1`–`4`.
+crouch, uniform random, the week 4 walker via `walker_actions`, and
+`my_policy(obs, t)` — selected with keys `1`–`4`.
 
 ```
 1..4    pick a policy and reset      R   reset       SPACE   pause
@@ -74,25 +75,52 @@ double-click a body, then ctrl-drag: push it
 
 Drawn on the robot: a **white arrow** for `obs[0:3]` (gravity in the body
 frame, exactly what the policy knows about up), a **bar above the head** for
-this step's reward (green while the tracking term is being earned, orange when
-it is only staying alive), and **yellow feet** when the env counts them airborne.
-Each episode ends with a terminal line: return, steps, distance, and whether it
-**terminated** (fell) or was **truncated** (10 s) — the distinction the deck
-makes about bootstrapping.
+this step's reward, and **yellow feet** when the env counts them airborne. Each
+episode ends with a terminal line: return, steps, distance, and whether it
+**terminated** (fell) or was **truncated** (10 s).
 
-`ACTION_SCALE`, `CONTROL_HZ` and `REWARD_WEIGHTS` at the top of the file are the
-three specification knobs the deck argues about.
+**The code is complete and explained.** `my_policy` as shipped is the first
+closed loop of the course, the ankle strategy: both ankles driven against
+`obs[0:3]`. `ACTION_SCALE`, `CONTROL_HZ` and `REWARD_WEIGHTS` at the top are
+the three specification knobs the deck argues about.
 
-| Step | Change | Right looks like |
+| Step | Change | Right looks like (measured with `env_run.py`) |
 | --- | --- | --- |
-| 1 | `1`, `2`, `3`; then `ACTION_SCALE = 1.0`, `CONTROL_HZ = 100`, `3` again | the walker falls at the defaults and walks at the new ones; the student explains both |
+| 1 | `1`, `2`, `3`; then `ACTION_SCALE = 1.0`, `CONTROL_HZ = 100`, `3` again | hold 774; random 32, falls after 38 decisions; the walker 357, falls at 4.3 s; at the new settings 1805 and a metre walked |
 | 2 | `my_policy` returns a constant that bends both knees | `ENTER` shows upright up, effort down, tracking unchanged |
-| 3 | `my_policy` periodic in `t` on hip pitch, opposite signs per leg | it terminates; the student reads the last `ENTER` |
-| 4 | `my_policy` leans the hips against `obs[0:3]` | the first closed loop of the course: it survives a ctrl-drag push that policy `1` does not |
+| 3 | `my_policy` periodic in `t` on hip pitch, opposite signs per leg | terminates at 1.5 s; the last `ENTER` read |
+| 4 | restore `my_policy`; ctrl-drag under `1` and `4` | hold survives 65 N for 0.2 s and falls at 70; the ankle strategy survives 75 and falls at 80; hip roll instead changes nothing |
 | 5 | `REWARD_WEIGHTS = {"alive": 0.0}` and re-run `1`, `3` | the numbers change, the behaviour does not — nothing here is learning yet |
 
-`SOC4180_AUTOCLOSE=6 uv run weeks/07-mdp/lab_env.py` closes the window by
-itself, which is how the script is smoke-tested.
+### `env_run.py`: one episode, term by term
+
+```bash
+uv run weeks/07-mdp/env_run.py --policy hold
+uv run weeks/07-mdp/env_run.py --policy walker --action-scale 1.0 --hz 100
+uv run weeks/07-mdp/env_run.py --policy lean --push 75
+uv run weeks/07-mdp/env_run.py --policy hold --push 70 --no-viewer
+uv run weeks/07-mdp/env_run.py --policy random --weights alive=0 --no-viewer
+```
+
+Five policies of a few lines each (`hold`, `random`, `walker`, `lean`, `step`),
+one episode printed as a row per second with the reward earned in that second
+split by term, the episode line, the return split by term, and a replay.
+`--push N` applies a sideways force to the torso for 0.2 s at t = 1 s through
+`xfrc_applied`, which is how every push number above was measured.
+
+| Step | Does | Calls |
+| --- | --- | --- |
+| 1 | the environment: spaces, rate, episode length, the reward weights | `G1WalkEnv`, `observation_space`, `action_space`, `reward_weights` |
+| 2 | the policy | `walker_actions`, `WalkingController` |
+| 3 | reset, then decide / act / score until done | `env.reset(seed)`, `env.step(a)`, `info[term]`, `xfrc_applied` |
+| 4 | the episode line and the split | |
+| 6 | replay | `launch_viewer(passive=True)` |
+
+Measured: hold 774.1 (tracking 274, upright 250, alive 250); random 31.6;
+walker 356.6 and a fall at 4.34 s; walker at scale 1.0 and 100 Hz 1804.6 and
+1.05 m; step-in-place 93.3 and a fall at 1.52 s. Pushes: hold survives 65 N,
+falls at 70; ankle gains (2, 2) survive 75, fall at 80; gains of 1 or 4 do no
+better; every hip-roll variant behaves like hold.
 
 ## Rebuild
 

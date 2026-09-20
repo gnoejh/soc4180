@@ -480,20 +480,47 @@ uv run weeks/07-mdp/lab_env.py
 
 `G1WalkEnv`, stepping at 50 Hz in real time in the viewer. Keys `1`–`4` pick a
 policy: hold the crouch, uniform random, the week 4 walker as actions, and
-`my_policy` — a function from the 42-number observation to 12 residuals.
-
-On the robot: a white arrow for `obs[0:3]` (gravity, as the policy sees it), a
-bar above the head for this step's reward, and yellow feet when the env counts
-them as airborne. Every episode ends with return, steps, and **terminated** or
-**truncated**.
+`my_policy` — complete as shipped: the ankle strategy, both ankles driven
+against `obs[0:3]`. On the robot: a white arrow for `obs[0:3]`, a reward bar
+above the head, yellow feet when airborne. Every episode ends with return,
+steps, and **terminated** or **truncated**.
 
 | Step | Do | Right looks like |
 | --- | --- | --- |
-| 1 | `1`, `2`, `3`; then `ACTION_SCALE = 1.0`, `CONTROL_HZ = 100`, `3` | the walker falls, then walks; the student says why |
+| 1 | `1`, `2`, `3`; then `ACTION_SCALE = 1.0`, `CONTROL_HZ = 100`, `3` | 774; 32 and a fall; 357 and a fall at 4.3 s; then 1805 and a metre |
 | 2 | `my_policy` = bend the knees | `ENTER`: upright up, effort down, tracking unchanged |
-| 3 | `my_policy` periodic on hip pitch | a termination, read off the episode line |
-| 4 | `my_policy` leans the hips against `obs[0:3]` | survives a ctrl-drag push that policy `1` does not |
-| 5 | `REWARD_WEIGHTS = {"alive": 0.0}` | the numbers change and the behaviour does not; the student says why |
+| 3 | `my_policy` periodic on hip pitch | a termination at 1.5 s, read off the episode line |
+| 4 | ctrl-drag under `1` and under `4` | hold falls at 70 N; the ankle strategy survives 75 and falls at 80; hip roll instead changes nothing |
+| 5 | `REWARD_WEIGHTS = {"alive": 0.0}` | the numbers change and the behaviour does not |
+
+---
+
+## Lab class: `env_run.py`, one episode term by term {.smaller}
+
+```bash
+uv run weeks/07-mdp/env_run.py --policy walker --action-scale 1.0 --hz 100
+uv run weeks/07-mdp/env_run.py --policy lean --push 75
+uv run weeks/07-mdp/env_run.py --policy hold --push 70 --no-viewer
+```
+
+Five policies of a few lines each; one episode printed as a row per second
+with the reward split by term; the episode line; `--push` shoves the torso for
+0.2 s through `xfrc_applied`; then the replay.
+
+```
+ t (s)   x (m)  reward/s    tracking    upright     effort     smooth      alive
+  1.00  -0.017     77.16       27.28      24.99      -0.00      -0.00      25.00
+  ...
+episode: return   774.09  500 decisions  10.00 s  travelled -0.019 m  TRUNCATED (time ran out)
+return by term: tracking +274.2, upright +249.9, effort +0.0, smooth +0.0, alive +250.0
+```
+
+| Step | Does | Calls |
+| --- | --- | --- |
+| 1 | the MDP written down | `G1WalkEnv`, `observation_space`, `action_space`, `reward_weights` |
+| 3 | reset, decide / act / score until done | `env.reset`, `env.step`, `info`, `xfrc_applied` |
+| 4 | the episode line and the split by term | |
+| 6 | replay | `launch_viewer(passive=True)` |
 
 ---
 

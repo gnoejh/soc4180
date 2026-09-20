@@ -51,35 +51,67 @@ privileged data without making the policy undeployable.
 
 ```bash
 uv run weeks/06-sensing/lab_imu.py
+uv run weeks/06-sensing/imu.py --walk --noise --sweep
 ```
 
-The G1 standing in the crouch (or walking, on `W`), with three arrows hanging
-from the torso IMU. Each is an estimate of "down" computed from the IMU alone
-and drawn back in the world frame, so a correct estimate is a vertical arrow:
-**orange** is the accelerometer's tilt, **cyan** the integrated gyroscope,
-**green** the student's `my_filter`, and a thin **white** arrow is the truth.
+Three arrows hang from the torso IMU, each an estimate of *down* made from the
+IMU alone and drawn back in the world, so **right means vertical**: orange the
+accelerometer, cyan the integrated gyroscope, green the complementary filter,
+white the truth. `W` walks, `N` injects a gyro bias (0.02 rad/s) and
+accelerometer noise (σ 0.5 m/s²), `[` `]` sweep α, `ENTER` prints each
+estimate's mean and final error over the last three seconds, and ctrl-drag
+pushes the robot — the best experiment here.
 
-```
-W       walk / stand (restarts)        N   inject gyro bias 0.02 rad/s + accel noise
-[ ]     alpha: trust the gyro less / more        R   restart, estimates re-aligned
-ENTER   mean and final error (deg) of each estimate over the last 3 s
-double-click a body, then ctrl-drag: push it -- the best experiment in the lab
-```
+**The code is complete and explained**: `my_filter` is the complementary
+filter with predict / correct / blend spelled out and τ = −Δt/ln α in its
+docstring; `down_in_world` and `true_tilt` turn a (roll, pitch) into an arrow
+and into the answer key; the loop names `read_imu` (six numbers out of
+`sensordata`) and `mj_step`.
 
-`my_filter(roll, pitch, gyro, accel, dt, alpha)` returns `None` as shipped, and
-there is no green arrow until it is written. The complementary filter is one
-line per axis; `soc4180.tilt_from_accel` gives the accelerometer's answer.
-
-| Step | Change | Right looks like |
+| Step | Do | Right looks like (measured with `imu.py`) |
 | --- | --- | --- |
-| 1 | push the standing robot | orange swings wildly during the push and settles afterwards; the student says why |
-| 2 | `N`, then `ENTER` twice | cyan leans a little more each time and never returns: drift |
-| 3 | write `my_filter` | green sits inside white standing, pushed, and with `N` on |
-| 4 | `W`, then sweep `[` `]` | a worst $\alpha$ found, and the trade named (mean error vs drift) |
-| 5 | `SITE = "pelvis"` | an explanation either way; the pelvis is kicked harder by footfalls |
+| 1 | ctrl-drag the standing robot | orange swings during the push and is right after; green barely moves |
+| 2 | `N`, `ENTER` twice | cyan leans further every time: 0.02 rad/s is 1.1° per second, for ever |
+| 3 | break `my_filter`: α = 1, then α = 0 | green becomes cyan, then orange: a low-pass plus a high-pass, nothing more |
+| 4 | `W`, then `[` `]` | on the noisy walk: accelerometer 7.8° mean, gyro 3.4°, filter 1.8° at α = 0.995; the sweep bottoms out at α ≈ 0.998 (1.15°) |
+| 5 | `SITE = "pelvis"` | the pelvis accelerometer is worse (8.2°) and its gyro better (0.9°); the same α is no longer the best — explained either way |
 
-`SOC4180_AUTOCLOSE=6 uv run weeks/06-sensing/lab_imu.py` closes the window by
-itself, which is how the script is smoke-tested.
+### `imu.py`: three estimators, scored
+
+```bash
+uv run weeks/06-sensing/imu.py                       # standing, clean sensors
+uv run weeks/06-sensing/imu.py --walk --noise
+uv run weeks/06-sensing/imu.py --walk --noise --sweep --no-viewer
+uv run weeks/06-sensing/imu.py --site pelvis --walk
+```
+
+Runs the stand or the walk, updates the three estimators every physics step
+from `read_imu`, scores them against `site_xmat` (which a real robot never
+has), prints a row per second and the mean and final errors, optionally sweeps
+twelve values of α, then replays with the four arrows.
+
+| Step | Does | Calls |
+| --- | --- | --- |
+| 1 | the robot and its IMU (`nsensor = 4` is two IMUs) | `mj_name2id(imu_in_torso)`, `read_imu` |
+| 2 | the three estimators, each a few lines | `tilt_from_accel`, `integrate_gyro`, `complementary` |
+| 3 | the loop, a row per second | `mj_step`, `sensordata`, `site_xmat` |
+| 4 | mean and final error | |
+| 5 | `--sweep`: α from 0.9 to 1 | the same loop, twelve times |
+| 6 | replay with arrows | `launch_viewer(passive=True)`, `mju_quatZ2Vec` |
+
+Measured, walking with the biased gyro and noisy accelerometer, 6 s:
+
+| α | τ | mean error | final error |
+| --- | --- | --- | --- |
+| 0.99 | 0.20 s | 2.77° | 3.25° |
+| 0.995 | 0.40 s | 1.79° | 2.06° |
+| 0.998 | 1.00 s | **1.15°** | 0.36° |
+| 0.9985 | 1.33 s | 1.24° | **0.36°** |
+| 0.999 | 2.00 s | 1.53° | 1.24° |
+| 1 (bare gyro) | ∞ | 3.43° | 6.58° |
+
+Standing with clean sensors every estimate is within 0.5°; the filter's only
+job then is the push.
 
 ## Rebuild
 

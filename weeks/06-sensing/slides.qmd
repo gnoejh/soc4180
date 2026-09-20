@@ -430,16 +430,49 @@ uv run weeks/06-sensing/lab_imu.py
 
 Three arrows hang from the torso IMU, each an estimate of *down* made from the
 IMU alone and drawn back in the world — so **right means vertical**. Orange is
-the accelerometer, cyan the integrated gyroscope, green the student's own
-`my_filter`; a thin white arrow is the truth.
+the accelerometer, cyan the integrated gyroscope, green the complementary
+filter `my_filter` (complete and explained: predict, correct, blend), white the
+truth.
 
 | Step | Do | Right looks like |
 | --- | --- | --- |
-| 1 | ctrl-drag the standing robot | orange swings during the push and is right after; the student says what an accelerometer measures |
+| 1 | ctrl-drag the standing robot | orange swings during the push and is right after; green barely moves |
 | 2 | `N` (gyro bias + accel noise), `ENTER` twice | cyan leans further every time: drift, named |
-| 3 | write `my_filter` | green inside white, standing, pushed, and with `N` on |
-| 4 | `W` to walk, then `[` `]` to sweep $\alpha$ | the student finds the worst $\alpha$ and names the trade |
-| 5 | `SITE = "pelvis"` | an explanation either way |
+| 3 | break `my_filter`: α = 1, then α = 0 | green becomes cyan, then orange |
+| 4 | `W` to walk, then `[` `]` to sweep α | 7.8° / 3.4° / 1.8° mean error at α = 0.995; the trade named |
+| 5 | `SITE = "pelvis"` | its accelerometer worse, its gyro better; an explanation either way |
+
+---
+
+## Lab class: `imu.py`, three estimators scored {.smaller}
+
+```bash
+uv run weeks/06-sensing/imu.py --walk --noise
+uv run weeks/06-sensing/imu.py --walk --noise --sweep --no-viewer
+```
+
+The same three estimators, each a few explained lines, run against the truth
+and scored every second; `--sweep` runs twelve values of α; then the replay
+with four arrows.
+
+```
+error over the run (degrees):        mean    final
+   accelerometer only         7.79    10.46
+   gyroscope only             3.43     6.58
+   complementary filter       1.79     2.06         (alpha 0.995)
+sweep:   alpha  tau (s)    mean   final
+        0.9900     0.20    2.77    3.25
+        0.9980     1.00    1.15    0.36
+        0.9990     2.00    1.53    1.24
+        1.0000      inf    3.43    6.58
+```
+
+| Step | Does | Calls |
+| --- | --- | --- |
+| 1 | the IMU: `nsensor = 4` is two gyro + accelerometer pairs | `read_imu`, `sensordata` |
+| 2 | `tilt_from_accel`, `integrate_gyro`, `complementary` | numpy only |
+| 3 | the loop, scored against `site_xmat` | `mj_step` |
+| 6 | replay with arrows | `launch_viewer(passive=True)`, `mju_quatZ2Vec` |
 
 ---
 

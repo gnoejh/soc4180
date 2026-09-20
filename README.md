@@ -31,12 +31,15 @@ result. Every deck is readable in a browser at
 00 is the day-one lecture, taught before 01. 02b is 02's
 **lab class** — the same robot read as code — not a separate week.
 
-**Every week has two artifacts for students.** The *notebook* carries the
+**Every week has three artifacts for students.** The *notebook* carries the
 lecture's code and rendered video and runs on Colab. The *laptop lab* is a
-`.py` you edit and run with `uv run`: it opens MuJoCo's interactive viewer,
-the robot responds live, and each script has a list at the top to extend, a
-function that is empty until you write it, and a visible difference between
-right and wrong. The lab is the second class of the week.
+`lab_*.py` you run with `uv run`: it opens MuJoCo's interactive viewer, the
+robot responds live, and the script has a list at the top to extend, a
+complete and explained function you change, and a visible difference between
+right and wrong. The *pipeline script* beside it is the same idea as a linear
+program with flags: it computes, prints what it did, then shows it in the
+simulator; read it in class with the slides open. The lab is the second class
+of the week.
 
 *11–15 are planned; see the syllabus in `CLAUDE.md`.*
 

@@ -36,17 +36,17 @@ agentic content returns only where it attaches to the robot, in weeks 14–15.
 
 | Wk | Topic | Deck | Status |
 | --- | --- | --- | --- |
-| 01 | The five-layer robot stack; MuJoCo and MJCF | `00`, `01` | built; figures + `lab_stack.py` / `lab_mjcf.py` added 2026-09-20, **not yet Colab-tested** |
-| 02 | Transforms and forward kinematics | `02` | built, Colab-verified; **has a lab-class script** (`lab_viewer.py`); lecture class only — the lab class is `02b` |
-| 02b | The robot as code: body tree, `qpos` map, the package | `02b` | built; **not yet Colab-tested**; **has a lab-class script** (`lab_body.py`) |
-| 03 | Inverse kinematics | `03` | built; five figures + `lab_ik.py` added 2026-09-20, **not re-tested on Colab since** |
-| 04 | Contact, balance, analytic walking (LIPM/ZMP) | `04` | built; five figures + `lab_walk.py` added 2026-09-20, **not re-tested on Colab since** |
-| 05 | Actuation, PD control, and CPG gaits | `05` | built; four figures + `lab_servo.py` added 2026-09-20, **not re-tested on Colab since** |
-| 06 | Sensing, state estimation, observation design | `06` | built; three figures + `lab_imu.py` added 2026-09-20, **not re-tested on Colab since** |
-| 07 | From control to learning: MDPs and environment design | `07` | built; five figures + `lab_env.py` added 2026-09-20, **not re-tested on Colab since** |
-| 08 | Policy gradients and PPO | `08` | built; three figures + `lab_train.py` added 2026-09-20, **not re-tested on Colab since**; never rendered on the Pages runner until the OSMesa/triton fix (below) |
-| 09 | Reward shaping and diagnosing failed runs | `09` | built; three figures + `lab_reward.py` added 2026-09-20, **not re-tested on Colab since**; same Pages-runner history as 08 |
-| 10 | Scaling: GPU-parallel locomotion training | `10` | built; GPU training **runs on A100, untimed**; three figures + `lab_many.py` added 2026-09-20 |
+| 01 | The five-layer robot stack; MuJoCo and MJCF | `00`, `01` | built; `lab_stack.py` + `stack.py`, `lab_mjcf.py` + `mjcf_run.py` (complete, explained, 2026-09-21); Pages-green; **not yet Colab-tested** |
+| 02 | Transforms and forward kinematics | `02` | built, Colab-verified before 2026-09-20; `lab_viewer.py` (both FKs complete) + `fk.py`; lecture class only — the lab class is `02b` |
+| 02b | The robot as code: body tree, `qpos` map, the package | `02b` | built; `lab_body.py` + `anatomy.py`; Pages-green since the import-order fix; **not yet Colab-tested** |
+| 03 | Inverse kinematics | `03` | built; 29 slides with colour-coded maths (2026-09-20); `lab_ik.py` (three solvers) + `reach.py`; **not re-tested on Colab since** |
+| 04 | Contact, balance, analytic walking (LIPM/ZMP) | `04` | built; `lab_walk.py` + `walk.py`; **not re-tested on Colab since 2026-09-20** |
+| 05 | Actuation, PD control, and CPG gaits | `05` | built; `lab_servo.py` + `servo.py`; **not re-tested on Colab since 2026-09-20** |
+| 06 | Sensing, state estimation, observation design | `06` | built; `lab_imu.py` + `imu.py`; **not re-tested on Colab since 2026-09-20** |
+| 07 | From control to learning: MDPs and environment design | `07` | built; `lab_env.py` (ankle strategy, push-measured) + `env_run.py`; **not re-tested on Colab since 2026-09-20** |
+| 08 | Policy gradients and PPO | `08` | built; `lab_train.py` + `train.py`; Pages-green since the OSMesa/triton fix (below); **not re-tested on Colab since 2026-09-20** |
+| 09 | Reward shaping and diagnosing failed runs | `09` | built; `lab_reward.py` + `shape.py`; Pages-green, same history as 08; **not re-tested on Colab since 2026-09-20** |
+| 10 | Scaling: GPU-parallel locomotion training | `10` | built; GPU training **runs on A100, untimed**; `lab_many.py` + `many.py`; renders locally only with `--extra gpu` synced and the machine quiet |
 | 11 | Domain randomization and robustness | — | not written |
 | 12 | Sim-to-real, measured | — | not written |
 | 13 | Perception and imitation | — | not written |
@@ -59,12 +59,12 @@ is now the longest of the course**: week 1 grew from 14 slides to 38 when MJCF
 was taught properly, so plan to split it or set part of the MJCF read as
 preparation.
 
-**Current state.** Weeks 1–9 are built and confirmed working on Colab, except
-week 1's new material (MJCF, conventions, the simulation loop): it renders
-cleanly here — 27 cells, 38 slides, `lab.ipynb` regenerated — but has **not been
-run on Colab**. Week 2b is new and in the same position: it renders cleanly here
-— 14 cells, 21 slides, six generated figures, `lab.ipynb` executed end to end
-under `nbclient` — but has **not been run on Colab**. Week 10 is built and its GPU training path now runs on a Colab
+**Current state (2026-09-21).** Every deck 0–10 renders on the Pages runner
+(all twelve green on 2026-09-20, after the 2b import-order and the
+OSMesa/triton fixes) and every week ships two complete, explained lab scripts
+that `scripts/check_labs.py` runs 24 of 24. **None of the weeks has been opened
+on Colab since the 2026-09-20 rework**; weeks 1–9 were Colab-verified before
+it, weeks 1 (MJCF material) and 2b never. Week 10 is built and its GPU training path now runs on a Colab
 A100, after a long series of dependency failures documented below —
 but **no run has been timed**, so `num_timesteps = 5M` is a reduction from a
 known-too-slow figure rather than a measured one. Weeks 11–15 are designed and
@@ -441,12 +441,18 @@ The pipeline is proven; follow it rather than improvising.
 6. Add `weeks/NN-slug/README.md` and a row in the top-level README table.
    The README needs a **lab class** section: what students change, and what
    they should see on screen when it is right.
-7. Add the lab-class artifact: a `.py` under the week that students edit and run
-   on their laptops (`uv run weeks/NN-slug/<name>.py`), using only what
-   `uv.lock` installs. It may open the viewer; `lab.ipynb` may not. Follow
-   `weeks/02-transforms/lab_viewer.py`: a list at the top students extend, a
-   function they fill in, and a visible on-screen difference between right and
-   wrong.
+7. Add the two lab-class scripts under the week, using only what `uv.lock`
+   installs (plus `--extra rl` from week 7). They may open the viewer;
+   `lab.ipynb` may not. Follow week 3 (`lab_ik.py` and `reach.py`): an
+   interactive `lab_*.py` with a list at the top, keys in the docstring, a
+   complete and explained function students change, and a visible difference
+   on screen between right and wrong; and a linear pipeline script with flags
+   that computes, prints, then replays in the passive viewer (`--no-viewer`
+   for headless). **Measure every number in the docstring with the pipeline
+   script before writing it**, add the week to `scripts/check_labs.py` and
+   its calls to `docs/mujoco-calls.md`, and run the checker. Screenshot the
+   lab slides in headless Chrome (`--screenshot`, `#/lab-class-on-your-laptop`)
+   — three of the first eleven overflowed at 1280 × 800.
 8. **Push, then test it on Colab.** Every environment bug this project hit was
    invisible on Windows: the GL ordering bug, the dependency upgrades that broke
    the runtime, the unguarded renderer. Ask for `soc4180.gl_report()` when

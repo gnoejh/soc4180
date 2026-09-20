@@ -359,25 +359,85 @@ for lam in (0.0, 1e-3, 1e-2, 1e-1):                 # same J at stand, same 5 cm
 ---
 
 
-## Where the formula comes from {.smaller}
+## Where the formula comes from: the cost {.smaller}
 
-Ask for the $\Delta q$ that minimises
+Instead of *solving* $J\,\Delta q = \mathbf{e}$, ask for the $\Delta q$ that
+**minimises a cost** with two terms — the error left over, and the joint motion
+spent:
 
-$$\|J\,\Delta q - \mathbf{e}\|^2 \;+\; \lambda^2\,\|\Delta q\|^2 .$$
+$$C(\Delta q) = \|J\,\Delta q - \mathbf{e}\|^2 + \lambda^2\,\|\Delta q\|^2 .$$
 
-The first term wants the error gone; the second charges for joint motion.
-Setting the gradient to zero gives $(J^{\mathsf T}J + \lambda^2 I)\,\Delta q =
-J^{\mathsf T}\mathbf{e}$, which rearranges into the update on the previous slide.
+**Step 1 — expand.** Using $\|v\|^2 = v^{\mathsf T}v$:
 
-Write $J = U\,\Sigma\,V^{\mathsf T}$ and the update scales each singular
-direction by
+$$C = \Delta q^{\mathsf T} J^{\mathsf T} J\,\Delta q
+    \;-\; 2\,\mathbf{e}^{\mathsf T} J\,\Delta q
+    \;+\; \mathbf{e}^{\mathsf T}\mathbf{e}
+    \;+\; \lambda^2\,\Delta q^{\mathsf T}\Delta q .$$
 
-$$\frac{\sigma_i}{\sigma_i^2 + \lambda^2} \;\approx\;
-\begin{cases} 1/\sigma_i & \sigma_i \gg \lambda \quad\text{the true inverse}\\[2pt]
+**Step 2 — differentiate with respect to $\Delta q$** (for a symmetric $A$,
+$\nabla\, v^{\mathsf T} A v = 2Av$ and $\nabla\, b^{\mathsf T} v = b$):
+
+$$\nabla C = 2\,J^{\mathsf T} J\,\Delta q \;-\; 2\,J^{\mathsf T}\mathbf{e} \;+\; 2\lambda^2\,\Delta q .$$
+
+**Step 3 — set it to zero.** The minimum satisfies the *normal equations*
+
+$$\left(J^{\mathsf T} J + \lambda^2 I\right)\Delta q = J^{\mathsf T}\mathbf{e}
+\qquad\Longrightarrow\qquad
+\Delta q = \left(J^{\mathsf T} J + \lambda^2 I\right)^{-1} J^{\mathsf T}\mathbf{e}.$$
+
+It *is* the minimum, not just a stationary point: the Hessian $2(J^{\mathsf T}J +
+\lambda^2 I)$ is positive definite for any $\lambda > 0$, because
+$v^{\mathsf T}J^{\mathsf T}Jv = \|Jv\|^2 \ge 0$ and $\lambda^2\|v\|^2 > 0$. The
+same fact says the inverse **always exists** — even at a singularity, where
+$J^{-1}$ does not. That is the whole point of the second term.
+
+---
+
+## Where the formula comes from: two forms, one answer {.smaller}
+
+The previous slide wrote $\Delta q = J^{\mathsf T}(J J^{\mathsf T} + \lambda^2 I)^{-1}\mathbf{e}$
+— the transpose on the *outside*. Both are the same vector, by the
+*push-through identity*. Start from a product that can be read two ways:
+
+$$J^{\mathsf T}\left(J J^{\mathsf T} + \lambda^2 I\right)
+ \;=\; J^{\mathsf T} J J^{\mathsf T} + \lambda^2 J^{\mathsf T}
+ \;=\; \left(J^{\mathsf T} J + \lambda^2 I\right) J^{\mathsf T}.$$
+
+Multiply on the left by $(J^{\mathsf T}J + \lambda^2 I)^{-1}$ and on the right by
+$(JJ^{\mathsf T} + \lambda^2 I)^{-1}$:
+
+$$\left(J^{\mathsf T} J + \lambda^2 I\right)^{-1} J^{\mathsf T}
+ \;=\; J^{\mathsf T}\left(J J^{\mathsf T} + \lambda^2 I\right)^{-1}.$$
+
+Why keep both? For a $6 \times n$ Jacobian the left form inverts an $n \times n$
+matrix and the right form a $6 \times 6$ one; with more joints than constraints
+the right form is the cheaper solve. For the leg, $n = 6$, and they cost the same.
+
+**What the update does to each direction.** Write $J = U\,\Sigma\,V^{\mathsf T}$.
+Then $J^{\mathsf T}J + \lambda^2 I = V(\Sigma^2 + \lambda^2 I)V^{\mathsf T}$ and
+$J^{\mathsf T}\mathbf{e} = V\,\Sigma\,U^{\mathsf T}\mathbf{e}$, so
+
+$$\Delta q = V\,\underbrace{(\Sigma^2 + \lambda^2 I)^{-1}\Sigma}_{\text{diagonal}}\;U^{\mathsf T}\mathbf{e}:
+\qquad \text{direction } i \text{ is scaled by } \frac{\sigma_i}{\sigma_i^2 + \lambda^2}
+\approx \begin{cases} 1/\sigma_i & \sigma_i \gg \lambda \quad\text{the true inverse}\\[2pt]
 \sigma_i/\lambda^2 \to 0 & \sigma_i \ll \lambda \quad\text{switched off}\end{cases}$$
 
 $\lambda$ is a **threshold**: directions the Jacobian barely moves are ignored
 rather than amplified. That is the whole trick.
+
+```{python}
+lam = 1e-3
+I6 = np.eye(6)
+dq_left = np.linalg.solve(J.T @ J + lam**2 * I6, J.T @ err)     # (J'J + l2 I)^-1 J' e
+dq_right = J.T @ np.linalg.solve(J @ J.T + lam**2 * I6, err)    # J' (J J' + l2 I)^-1 e
+U, sig, Vt = np.linalg.svd(J)
+dq_svd = Vt.T @ ((sig / (sig**2 + lam**2)) * (U.T @ err))       # V diag(.) U' e
+print(f"  left form vs right form : {np.abs(dq_left - dq_right).max():.1e}")
+print(f"  either form vs SVD form : {np.abs(dq_left - dq_svd).max():.1e}")
+print("  per-direction gain sigma/(sigma^2+lambda^2) vs the inverse's 1/sigma, at stand:")
+for s_i in sig:
+    print(f"    sigma = {s_i:8.2e}   damped {s_i/(s_i**2+lam**2):10.3g}   inverse {1/s_i:10.3g}")
+```
 
 ---
 

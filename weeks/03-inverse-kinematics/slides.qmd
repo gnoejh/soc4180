@@ -52,11 +52,16 @@ Keeping that separation clear now is what lets Week 4 combine them deliberately.
 ## The easy case: two links in a plane {.smaller}
 
 Ignore the hip's roll and yaw and the ankle. What is left is a thigh and a shin —
-two links, one plane. The law of cosines solves it outright.
+two links, one plane — and hip, knee and foot are the corners of a **triangle
+whose three sides you know**: thigh $\ell_1$, shin $\ell_2$, and the hip-to-foot
+distance $d$. The law of cosines gives the angle at any corner outright. Written
+for the **knee joint angle** $\theta$ — zero when the leg is straight, the way
+MuJoCo's knee counts — the triangle's interior corner is $\pi - \theta$, and the
+hip corner $\varphi$ comes the same way:
 
-With thigh $\ell_1$, shin $\ell_2$, and a target a distance $d$ from the hip:
-
-$$\cos\theta_{\text{knee}} = \frac{d^2 - \ell_1^2 - \ell_2^2}{2\,\ell_1\ell_2}$$
+$$\cos\theta_{\text{knee}} = \frac{d^2 - \ell_1^2 - \ell_2^2}{2\,\ell_1\ell_2},
+\qquad
+\cos\varphi = \frac{\ell_1^2 + d^2 - \ell_2^2}{2\,\ell_1 d}$$
 
 ```{python}
 try:
@@ -86,13 +91,84 @@ print(f"shin   l2 = {shin:.4f} m")
 print(f"reach is an annulus: {abs(thigh-shin):.4f} m to {thigh+shin:.4f} m")
 ```
 
+```{python}
+#| fig-align: center
+import matplotlib.pyplot as plt
+from matplotlib.patches import Arc
+
+def planar_leg(d, l1=thigh, l2=shin):
+    """Hip at the origin, foot straight below it, knee forward: corners and angles."""
+    phi = np.arccos((l1**2 + d**2 - l2**2) / (2 * l1 * d))        # corner at the hip
+    theta = np.arccos((d**2 - l1**2 - l2**2) / (2 * l1 * l2))     # knee joint angle, 0 = straight
+    knee = np.array([l1 * np.sin(phi), -l1 * np.cos(phi)])
+    return phi, theta, knee, np.array([0.0, -d])
+
+def draw_leg(ax, d, x0=0.0, arc_r=0.08):
+    """Thigh, shin, the dashed hip-to-foot side, and the knee joint angle: how far
+    the shin turns away from the thigh's own line (dotted)."""
+    phi, theta, knee, foot = planar_leg(d)
+    knee, foot = knee + [x0, 0], foot + [x0, 0]
+    ax.plot([x0, knee[0]], [0, knee[1]], lw=5, color="#3b7dd8", solid_capstyle="round")
+    ax.plot([knee[0], foot[0]], [knee[1], foot[1]], lw=5, color="#7fb3ea", solid_capstyle="round")
+    ax.plot([x0, foot[0]], [0, foot[1]], "--", lw=1.2, color="0.3")
+    ext = knee + 0.12 * np.array([np.sin(phi), -np.cos(phi)])       # thigh, continued past the knee
+    ax.plot([knee[0], ext[0]], [knee[1], ext[1]], ":", color="0.4")
+    ax.plot(x0, 0, "ko", ms=6, zorder=4)
+    ax.plot(*knee, "o", ms=8, color="w", mec="k", mew=1.5, zorder=4)
+    ax.plot(*foot, "rs", ms=8, zorder=4)
+    a_hip = np.degrees(np.arctan2(-knee[1], x0 - knee[0]))          # direction knee -> hip
+    a_foot = a_hip + 180 - np.degrees(theta)                        # direction knee -> foot
+    ax.add_patch(Arc(knee, 2 * arc_r, 2 * arc_r, theta1=a_foot,     # shin -> thigh's line
+                     theta2=a_hip + 180, color="#c0392b", lw=2))
+    return phi, theta, knee, foot, a_hip, a_foot
+
+deg = np.degrees
+fig, (ax0, ax1) = plt.subplots(1, 2, figsize=(9.6, 3.4), gridspec_kw={"width_ratios": [1, 1.6]})
+
+# left: one triangle with every side and corner named
+d0 = 0.45
+phi, theta, knee, foot, a_hip, a_foot = draw_leg(ax0, d0, arc_r=0.09)
+mid = np.radians((a_foot + a_hip + 180) / 2)
+ax0.text(knee[0] + 0.2 * np.cos(mid), knee[1] + 0.2 * np.sin(mid),
+         r"$\theta_{\rm knee}$" + f" = {deg(theta):.0f}°", color="#c0392b", ha="center", va="center")
+ax0.add_patch(Arc(knee, 0.12, 0.12, theta1=a_hip, theta2=a_foot, color="0.4", lw=1.5))
+mid = np.radians((a_hip + a_foot) / 2)
+ax0.text(knee[0] + 0.1 * np.cos(mid), knee[1] + 0.1 * np.sin(mid), r"$\pi - \theta$",
+         color="0.3", ha="center", va="center", fontsize=9)
+ax0.add_patch(Arc((0, 0), 0.22, 0.22, theta1=270, theta2=270 + deg(phi), color="#2e8b57", lw=2))
+mid = np.radians(270 + deg(phi) / 2)
+ax0.text(0.17 * np.cos(mid), 0.17 * np.sin(mid), r"$\varphi$" + f" = {deg(phi):.0f}°",
+         color="#2e8b57", ha="center", va="center")
+ax0.text(*(knee / 2 + 0.03 * np.array([np.cos(phi), np.sin(phi)])), r"$\ell_1$",
+         ha="left", va="bottom", fontsize=12)
+sh = foot - knee; n = np.array([-sh[1], sh[0]]) / np.linalg.norm(sh)  # outward normal of the shin
+ax0.text(*((knee + foot) / 2 + 0.03 * n), r"$\ell_2$", ha="left", va="top", fontsize=12)
+ax0.text(-0.025, -d0 / 2, f"d = {d0:.2f} m", ha="right", va="center", fontsize=10)
+ax0.annotate("hip", (0, 0), xytext=(-8, 6), textcoords="offset points", ha="right")
+ax0.annotate("knee", knee, xytext=(10, 2), textcoords="offset points", va="center")
+ax0.annotate("foot = target", foot, xytext=(0, -9), textcoords="offset points", ha="center", va="top")
+ax0.set_aspect("equal"); ax0.set_xlim(-0.24, 0.5); ax0.set_ylim(-0.6, 0.08); ax0.set_axis_off()
+ax0.set_title("the triangle the law of cosines solves", fontsize=10)
+
+# right: the same triangle for four distances, out to the straight leg
+for k, dk in enumerate((0.30, 0.45, 0.62, thigh + shin - 1e-3)):
+    x0 = 0.42 * k
+    _, th, _, ft, _, _ = draw_leg(ax1, dk, x0=x0, arc_r=0.07)
+    ax1.text(x0, ft[1] - 0.04, f"d = {dk:.2f} m\n" + r"$\theta_{\rm knee}$" + f" = {deg(th):.0f}°",
+             ha="center", va="top", fontsize=9)
+ax1.set_aspect("equal"); ax1.set_xlim(-0.16, 1.45); ax1.set_ylim(-0.82, 0.08); ax1.set_axis_off()
+ax1.set_title(r"the knee straightens as the target moves away; $\theta \to 0$ at $d = \ell_1 + \ell_2$",
+              fontsize=10)
+fig.tight_layout(); plt.show()
+```
+
 ---
 
 ## What the closed form tells you {.smaller}
 
 ```{python}
 def knee_angle(d, l1=thigh, l2=shin):
-    """Interior knee angle for a hip-to-foot distance d, or None if unreachable."""
+    """Knee joint angle (0 = straight leg) for a hip-to-foot distance d, or None if unreachable."""
     c = (d**2 - l1**2 - l2**2) / (2 * l1 * l2)
     if abs(c) > 1.0:
         return None                      # outside the annulus: no solution
@@ -101,7 +177,7 @@ def knee_angle(d, l1=thigh, l2=shin):
 for dist in (0.02, 0.20, 0.40, 0.60, 0.64, 0.70):
     a = knee_angle(dist)
     print(f"  d={dist:.2f} m -> " +
-          ("unreachable" if a is None else f"knee bend {np.degrees(np.pi - a):6.1f} deg"))
+          ("unreachable" if a is None else f"knee angle {np.degrees(a):6.1f} deg"))
 ```
 
 Three lessons in one table:
@@ -123,7 +199,7 @@ out with $\sin\theta$ in the denominator:
 
 $$\left|\frac{d\theta}{d\,d}\right| = \frac{d}{\ell_1\,\ell_2\,\sin\theta}$$
 
-At full reach $\theta \to \pi$, $\sin\theta \to 0$, and one millimetre of target
+At full reach $\theta \to 0$, $\sin\theta \to 0$, and one millimetre of target
 asks for whole degrees of knee.
 
 ```{python}
@@ -132,7 +208,7 @@ import matplotlib.pyplot as plt
 
 d = np.linspace(abs(thigh - shin) + 1e-3, thigh + shin - 1e-4, 600)
 c = (d**2 - thigh**2 - shin**2) / (2 * thigh * shin)
-bend = np.pi - np.arccos(c)                       # bend = 0 is a straight leg
+bend = np.arccos(c)                               # knee joint angle: 0 is a straight leg
 sens = d / (thigh * shin * np.sqrt(1 - c**2))     # |d theta / d d|
 
 fig, (ax0, ax1) = plt.subplots(1, 2, figsize=(9.6, 4.2))
@@ -158,10 +234,10 @@ ax0.set_xlabel("x (m)"); ax0.set_ylabel("z (m)")
 ax0.legend(fontsize=8, loc="upper left")
 ax0.set_title("one distance, two solutions; reach is the ring", fontsize=10)
 
-# right: knee bend and its sensitivity against distance
+# right: knee angle and its sensitivity against distance
 ax1.plot(d, np.degrees(bend), lw=2, color="#3b7dd8")
 ax1.set_xlabel("hip-to-foot distance d (m)")
-ax1.set_ylabel("knee bend (deg)", color="#3b7dd8")
+ax1.set_ylabel("knee angle (deg), 0 = straight", color="#3b7dd8")
 ax1.axvline(thigh + shin, color="0.5", ls=":")
 ax1.text(thigh + shin - 0.006, 8, "full reach", rotation=90, fontsize=8, color="0.4", ha="right")
 ax2 = ax1.twinx()

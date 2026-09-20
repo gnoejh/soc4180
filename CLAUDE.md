@@ -39,7 +39,7 @@ agentic content returns only where it attaches to the robot, in weeks 14–15.
 | 01 | The five-layer robot stack; MuJoCo and MJCF | `00`, `01` | built; figures + `lab_stack.py` / `lab_mjcf.py` added 2026-09-20, **not yet Colab-tested** |
 | 02 | Transforms and forward kinematics | `02` | built, Colab-verified; **has a lab-class script** (`lab_viewer.py`); lecture class only — the lab class is `02b` |
 | 02b | The robot as code: body tree, `qpos` map, the package | `02b` | built; **not yet Colab-tested**; **has a lab-class script** (`lab_body.py`) |
-| 03 | Inverse kinematics | `03` | built; four figures + `lab_ik.py` added 2026-09-20, **not re-tested on Colab since** |
+| 03 | Inverse kinematics | `03` | built; five figures + `lab_ik.py` added 2026-09-20, **not re-tested on Colab since** |
 | 04 | Contact, balance, analytic walking (LIPM/ZMP) | `04` | built; five figures + `lab_walk.py` added 2026-09-20, **not re-tested on Colab since** |
 | 05 | Actuation, PD control, and CPG gaits | `05` | built; four figures + `lab_servo.py` added 2026-09-20, **not re-tested on Colab since** |
 | 06 | Sensing, state estimation, observation design | `06` | built; three figures + `lab_imu.py` added 2026-09-20, **not re-tested on Colab since** |
@@ -969,6 +969,16 @@ only then names it — the finite differences and `mj_jacSite` agree exactly.
 so `|body_pos|` of `knee_link` gives 0.194 m when the real thigh is **0.341 m**
 (shin 0.300 m, so reach is an annulus from 0.041 m to 0.641 m). Getting this
 wrong silently produced a reachability table calling 0.50 m unreachable.
+
+**Week 3's two-link slide defines $\theta_{\text{knee}}$ as the joint angle — zero
+for a straight leg, the way the G1's knee counts — and its law of cosines is
+written for that angle**: $\cos\theta = (d^2 - \ell_1^2 - \ell_2^2)/(2\ell_1\ell_2)$,
+which is the *interior* corner's cosine with the sign flipped. The interior
+corner is $\pi - \theta$. An earlier draft used that formula and then applied
+$\pi - \theta$ again in the code, so the table reported a 174° "bend" at full
+reach while the prose said the knee straightens; the triangle drawing (the
+first figure) made the contradiction visible. Every cell now reports $\theta$
+itself: 144° at $d = 0.20$ m, 6° at 0.64 m.
 
 The week-3 circle demo tracks to 8.4e-05 m. A taller circle leaves the reachable
 set and pins at 2.68e-03 m regardless of iteration count — that invariance is

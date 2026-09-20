@@ -445,32 +445,78 @@ for s_i in sig:
 
 ```{python}
 #| fig-align: center
-lams = np.logspace(-6, 1, 29)
-fig, (ax0, ax1) = plt.subplots(1, 2, figsize=(9.6, 3.8))
-for Jp, label, col in ((J, "stand: straight leg", "#e8743b"),
-                       (J_crouch, "crouch: bent knee", "#3b7dd8")):
+lams = np.logspace(-6, 1, 29)                     # damping, almost-inverse to heavy
+sweep = {}
+for Jp, name in ((J, "stand"), (J_crouch, "crouch")):
     size, drop = [], []
     for lam in lams:
         dq = Jp.T @ np.linalg.solve(Jp @ Jp.T + lam**2 * np.eye(6), err)
         size.append(np.linalg.norm(dq)); drop.append(-(Jp @ dq)[2] * 1000)
-    ax0.loglog(lams, size, lw=2, color=col, label=label)
-    ax1.semilogx(lams, drop, lw=2, color=col, label=label)
-ax0.set_xlabel(r"$\lambda$"); ax0.set_ylabel(r"$\|\Delta q\|$ (rad)"); ax0.legend(fontsize=8)
-ax0.set_title("how much joint motion one step asks for", fontsize=10)
-ax1.axhline(50, color="0.5", ls=":"); ax1.text(2e-6, 46, "asked for 50 mm", fontsize=8, color="0.4")
-ax1.set_xlabel(r"$\lambda$"); ax1.set_ylabel("foot lowered by (mm), first order")
-ax1.set_title("how much of the request one step delivers", fontsize=10)
-for a in (ax0, ax1):
-    a.grid(alpha=0.3)
+    sweep[name] = (np.array(size), np.array(drop))
+
+cols = {"stand": "#e8743b", "crouch": "#3b7dd8"}
+names = {"stand": "stand: straight leg (singular)", "crouch": "crouch: bent knee"}
+fig, (ax0, ax1) = plt.subplots(1, 2, figsize=(9.6, 3.5))
+for k in ("stand", "crouch"):
+    size, drop = sweep[k]
+    ax0.loglog(lams, size, lw=2, color=cols[k], label=names[k])
+    ax1.semilogx(lams, drop, lw=2, color=cols[k], label=names[k])
+
+# LEFT: the size of the joint step the solver asks for
+ax0.set_title("LEFT: joint motion one step asks for", fontsize=10)
+ax0.set_xlabel(r"damping $\lambda$"); ax0.set_ylabel(r"$\|\Delta q\|$ (rad)")
+ax0.annotate(f"undamped: {sweep['stand'][0][0]:.0e} rad", (lams[0], sweep['stand'][0][0]),
+             xytext=(14, -4), textcoords="offset points", fontsize=8, color=cols["stand"])
+ax0.annotate(f"{sweep['crouch'][0][0]:.2f} rad, the sensible answer", (lams[0], sweep['crouch'][0][0]),
+             xytext=(14, 8), textcoords="offset points", fontsize=8, color=cols["crouch"])
+ax0.legend(fontsize=8, loc="upper right")
+
+# RIGHT: how far that step really moves the foot (first order, J dq)
+ax1.set_title("RIGHT: how much of the request that step delivers", fontsize=10)
+ax1.set_xlabel(r"damping $\lambda$"); ax1.set_ylabel(r"foot lowered (mm), $-(J\,\Delta q)_z$")
+ax1.set_ylim(-3, 64)
+ax1.axhline(50, color="0.5", ls=":"); ax1.text(2e-6, 45, "asked for 50 mm", fontsize=8, color="0.4")
+ax1.text(2e-6, 56, "crouch: the full 50 mm until damping charges too much", fontsize=8, color=cols["crouch"])
+ax1.text(2e-5, 8, "straight leg: 22 mm at best, then nothing\n(no direction shortens the leg)",
+         fontsize=8, color=cols["stand"])
+for a_ in (ax0, ax1):
+    a_.axvline(1e-3, color="0.6", ls="--", lw=1); a_.grid(alpha=0.3)
+ax1.text(1.4e-3, 27, r"$\lambda = 10^{-3}$ (earlier slide)", fontsize=7, color="0.4", va="center")
 fig.tight_layout(); plt.show()
 ```
 
-Read the <span style="color:#e8743b">orange line</span> (straight leg) left to right. Undamped, the straight leg asks for tens of
-thousands of radians and lowers the foot 22 mm of the 50 requested; by
-$\lambda = 10^{-4}$ it asks for a sensible 4 rad and delivers **nothing** — there
-is no direction to deliver it in. The <span style="color:#3b7dd8">blue line</span> (crouch) delivers the full 50 mm for
-any $\lambda$ up to $10^{-3}$ and only fades past $10^{-2}$. That fade is the
-trade: at $\lambda = 1$ the crouched leg moves 0.4 mm per step.
+**Both panels share the x-axis**: the damping $\lambda$, swept from $10^{-6}$
+(almost the plain inverse) to $10$, for the *same* request — lower the foot
+5 cm — from two starting poses, <span style="color:#e8743b">orange</span> standing, <span style="color:#3b7dd8">blue</span> crouched. The grey dashed line
+is $\lambda = 10^{-3}$, the value used two slides ago.
+
+---
+
+## Reading the two panels {.smaller}
+
+```{python}
+near = lambda lam: int(np.argmin(np.abs(np.log(lams) - np.log(lam))))
+for k in ("stand", "crouch"):
+    size, drop = sweep[k]
+    print(f"{k:7}  undamped: {size[0]:9.2e} rad -> {drop[0]:5.1f} mm |  "
+          f"lambda=1e-4: {size[near(1e-4)]:5.2f} rad -> {drop[near(1e-4)]:5.1f} mm |  "
+          f"1e-3: {drop[near(1e-3)]:5.1f} mm |  1e-2: {drop[near(1e-2)]:5.1f} mm |  1: {drop[near(1)]:5.2f} mm")
+```
+
+- **Left — what one step asks of the joints**, $\|\Delta q\|$ on a log scale.
+  <span style="color:#e8743b">Orange, the straight leg</span>: tens of thousands of radians undamped,
+  falling as $\lambda$ grows — by $10^{-4}$ a "sensible" 4.5 rad. <span style="color:#3b7dd8">Blue, the crouch</span>:
+  about half a radian, flat, until $\lambda \approx 10^{-2}$ starts to shrink it.
+- **Right — what that step actually delivers**, how far the foot drops to first
+  order. The dotted line is the 50 mm asked for. <span style="color:#3b7dd8">Blue</span> delivers all of it for
+  any $\lambda$ up to $10^{-3}$ and fades past $10^{-2}$; at $\lambda = 1$ it moves
+  0.4 mm per step — that fade is the price of damping. <span style="color:#e8743b">Orange</span> never
+  delivers: 22 mm at best undamped, nothing once damped, because the straight
+  leg has no direction that shortens it and no $\lambda$ can create one.
+
+**The lesson:** damping makes the *request* sane (left) but cannot invent a
+*direction* the pose lacks (right). The fix for the straight leg is a different
+starting pose, not a different $\lambda$.
 
 ---
 

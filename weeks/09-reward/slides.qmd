@@ -1,5 +1,5 @@
 ---
-title: "Week 9 — Reward Shaping"
+title: "9 — Reward Shaping"
 subtitle: "Specifying what you actually want · SOC4180 Robot and AI"
 author: "Hong Jeong"
 format:
@@ -11,7 +11,7 @@ jupyter: python3
 ---
 
 ::: {.content-visible when-format="ipynb"}
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gnoejh/soc4180/blob/main/weeks/w09-reward/lab.ipynb)
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gnoejh/soc4180/blob/main/weeks/09-reward/lab.ipynb)
 
 **Before you start, two things:**
 
@@ -67,6 +67,48 @@ for label, v, n in (("walk at the target", 0.5, 500),
 
 **The ranking is correct.** Walking wins, standing is second, falling is last.
 The reward is not lying about what we want.
+
+---
+
+## The ranking, and the valley in front of it {.smaller}
+
+The ranking says where the top is. It says nothing about the *path*. Walk a
+one-parameter family of open-loop policies from standing toward stepping and
+score each one in the real environment:
+
+```{python}
+#| fig-align: center
+import matplotlib.pyplot as plt
+from soc4180.envs import G1WalkEnv
+
+def open_loop_return(amplitude, env=G1WalkEnv()):
+    obs, _ = env.reset(seed=0); total, k = 0.0, 0
+    while True:
+        a = np.zeros(12, dtype=np.float32)
+        a[0], a[6] = amplitude * np.sin(4.0 * env.data.time), -amplitude * np.sin(4.0 * env.data.time)
+        a[3], a[9] = amplitude * max(0.0, np.sin(4.0 * env.data.time)), amplitude * max(0.0, -np.sin(4.0 * env.data.time))
+        obs, r, term, trunc, _ = env.step(a); total += r; k += 1
+        if term or trunc:
+            return total, k
+
+amps = np.linspace(0.0, 1.0, 11)
+scored = [open_loop_return(A) for A in amps]
+fig, (ax0, ax1) = plt.subplots(1, 2, figsize=(9.6, 3.4), gridspec_kw={"width_ratios": [1, 1.4]})
+names = ["walk at target", "walk slowly", "stand still", "lunge and fall"]
+vals = [episode_return(0.5, 500), episode_return(0.2, 500), episode_return(0.0, 500), episode_return(1.3, 46)]
+ax0.barh(names, vals, color=["#2a9d5c", "#3b7dd8", "#e8743b", "#c0392b"]); ax0.invert_yaxis()
+ax0.set_xlabel("episode return"); ax0.set_title("the ranking, by hand", fontsize=10); ax0.grid(axis="x", alpha=0.3)
+ax1.plot(amps, [s[0] for s in scored], "o-", color="#3b7dd8", lw=2)
+ax1.set_xlabel("stepping amplitude (0 = stand still)"); ax1.set_ylabel("return", color="#3b7dd8")
+ax2 = ax1.twinx(); ax2.plot(amps, [s[1] for s in scored], "s--", color="#e8743b", lw=1)
+ax2.set_ylabel("steps survived", color="#e8743b")
+ax1.set_title("one family of routes out of standing: every step down", fontsize=10); ax1.grid(alpha=0.3)
+fig.tight_layout(); plt.show()
+```
+
+Standing is 776. Every open-loop attempt to step scores **less** — first
+because effort and smoothness cost a little, then because it falls. Walking
+at 1250 is real, but nothing on this path leads up to it.
 
 ---
 
@@ -128,6 +170,34 @@ Twenty-four terms. Ours had five. Two differences matter most.
 
 ---
 
+## Twenty-four terms, drawn {.smaller}
+
+```{python}
+#| fig-align: center
+playground = {"tracking_lin_vel": 1.0, "tracking_ang_vel": 0.75, "feet_air_time": 2.0, "feet_phase": 1.0,
+              "orientation": -2.0, "ang_vel_xy": -0.15, "pose": -0.1, "feet_slip": -0.25,
+              "joint_deviation_hip": -0.25, "joint_deviation_knee": -0.1, "dof_pos_limits": -1.0,
+              "collision": -0.1, "contact_force": -0.01, "stand_still": -1.0, "termination": -100.0,
+              "alive": 0.0, "torques": 0.0, "action_rate": 0.0, "energy": 0.0, "dof_acc": 0.0,
+              "base_height": 0.0}
+ours = {"tracking": 1.5, "upright": 0.5, "alive": 0.5, "effort": -0.01, "smooth": -0.05}
+fig, (ax0, ax1) = plt.subplots(1, 2, figsize=(10, 4.2), gridspec_kw={"width_ratios": [2.2, 1]})
+names = sorted(playground, key=lambda k: -playground[k])
+vals = np.array([playground[k] for k in names])
+ax0.barh(names, vals, color=np.where(vals > 0, "#2a9d5c", "#c0392b")); ax0.invert_yaxis()
+ax0.set_xscale("symlog", linthresh=0.1); ax0.axvline(0, color="k", lw=0.8)
+ax0.set_title("MuJoCo Playground's G1 reward (symlog axis)", fontsize=10); ax0.grid(axis="x", alpha=0.3)
+ax1.barh(list(ours), list(ours.values()), color=["#2a9d5c" if v > 0 else "#c0392b" for v in ours.values()])
+ax1.invert_yaxis(); ax1.axvline(0, color="k", lw=0.8); ax1.set_title("ours", fontsize=10); ax1.grid(axis="x", alpha=0.3)
+fig.tight_layout(); plt.show()
+```
+
+Two shapes to notice. Theirs has a large one-off **termination** cost and no
+alive bonus; ours has the reverse. And theirs pays for a foot in the air and
+charges for standing still; ours mentions neither.
+
+---
+
 ## The two terms we were missing {.smaller}
 
 **`feet_air_time = +2.0`** — the second-largest positive weight in the whole
@@ -172,13 +242,32 @@ def train_and_probe(weights, steps=40_000, seed=0):
         lengths.append(k); distances.append(env.data.qpos[0]); airborne.append(air / k)
     return np.mean(lengths), np.mean(distances), np.mean(airborne)
 
+results = []
 print(f"{'reward':32} {'steps':>6} {'dist m':>8} {'feet up':>8}")
 for name, w in (("ours, unchanged",            {}),
                 ("+ stand_still -1.0",         {"stand_still": -1.0}),
                 ("+ feet air_time +2.0",       {"air_time": 2.0}),
                 ("+ both",                     {"stand_still": -1.0, "air_time": 2.0})):
     t0 = time.time(); L, D, A = train_and_probe(w)
+    results.append((name, L, D, A))
     print(f"{name:32} {L:6.0f} {D:8.3f} {A:8.2f}   ({time.time()-t0:.0f}s)")
+```
+
+---
+
+## The same table, as a picture {.smaller}
+
+```{python}
+#| fig-align: center
+fig, axs = plt.subplots(1, 3, figsize=(10, 3.2))
+labels = ["unchanged", "+ stand_still", "+ air_time", "+ both"]
+for ax, col, title, k in ((axs[0], "#3b7dd8", "steps survived (of 500)", 1),
+                          (axs[1], "#e8743b", "distance travelled (m)", 2),
+                          (axs[2], "#2a9d5c", "mean feet airborne", 3)):
+    ax.bar(labels, [r[k] for r in results], color=col); ax.set_title(title, fontsize=10)
+    ax.set_xticks(range(len(labels)), labels, rotation=20, ha="right", fontsize=8); ax.grid(axis="y", alpha=0.3)
+    ax.axhline(0, color="k", lw=0.8)
+fig.tight_layout(); plt.show()
 ```
 
 ---
@@ -230,8 +319,15 @@ If the extra reward has the form
 
 $$F(s, s') = \gamma\,\Phi(s') - \Phi(s)$$
 
-for any function $\Phi$ of state, then the **optimal policy is unchanged**. Such
-shaping can only speed up learning, never redirect it.
+for any function $\Phi$ of state, then the **optimal policy is unchanged**. The
+reason is one line: along any trajectory the extra terms telescope,
+
+$$\sum_{t=0}^{T-1} \gamma^t\big[\gamma\,\Phi(s_{t+1}) - \Phi(s_t)\big]
+= \gamma^{T}\Phi(s_T) - \Phi(s_0),$$
+
+which depends only on where the trajectory starts and ends — not on the
+actions that got it there. Such shaping can only speed up learning, never
+redirect it.
 
 Our added terms are *not* of this form — `feet_air_time` is a bounty on a state,
 not a difference of potentials, so it genuinely changes what is optimal. That is
@@ -257,6 +353,30 @@ why they are tuned so carefully.
 
 ---
 
+## Lab class: on your laptop {.smaller}
+
+```bash
+uv run weeks/09-reward/lab_reward.py       # torch + SB3: uv sync --extra rl
+```
+
+`VARIANTS` at the top of the file is the list of reward weightings from this
+lecture. Pick one with a number key, press `T`, and it trains for 40k steps
+in the background while the window keeps playing; then the trained policy
+takes over. Yellow feet mark the `air_time` term firing.
+
+`extra_reward(env, info, x_before, x_after)` is the student's own term, added
+through a wrapper. Potential-based shaping is one line with $\Phi(s) = x$.
+
+| Step | Do | Right looks like |
+| --- | --- | --- |
+| 1 | `1`, `T` | a prediction from the ranking while it trains |
+| 2 | watch the trained robot | it stands; `ENTER` shows it living on alive + upright |
+| 3 | `4`, `T`; then `2` and `3` | only "+ both" leaves the standing pose — backwards |
+| 4 | potential-based `extra_reward`, `1`, `T` | same behaviour; the theorem kept its promise |
+| 5 | pay for torso velocity, upright 0, `T` | watched **before** described |
+
+---
+
 ## Exercises {.smaller}
 
 1. **Tune the pair.** Sweep `stand_still` over −0.5, −1, −2 with `air_time` fixed
@@ -277,7 +397,7 @@ why they are tuned so carefully.
 
 ## Next week
 
-**Week 10 — scaling.** Every result today was limited by budget: 40k steps, one
+**10 — scaling.** Every result today was limited by budget: 40k steps, one
 seed, minutes of CPU. Real locomotion policies train for **150–200 million**
 steps across thousands of parallel environments on a GPU.
 

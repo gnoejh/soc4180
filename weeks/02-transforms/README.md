@@ -1,6 +1,6 @@
-# Week 2 — Transforms and Forward Kinematics
+# 02 — Transforms and Forward Kinematics
 
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gnoejh/soc4180/blob/main/weeks/w02-transforms/lab.ipynb)
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gnoejh/soc4180/blob/main/weeks/02-transforms/lab.ipynb)
 
 | | |
 | --- | --- |
@@ -8,7 +8,7 @@
 | **Wall clock** | ~1 min |
 | **Convergence risk** | None. No learning. |
 | **Lecture class** | `slides.qmd` → `slides.html` |
-| **Lab class** | [`w02b-robot-as-code`](../w02b-robot-as-code/) — the same robot read as code, then `lab_viewer.py` and `lab_body.py` on the laptop |
+| **Lab class** | [`02b-robot-as-code`](../02b-robot-as-code/) — the same robot read as code, then `lab_viewer.py` and `lab_body.py` on the laptop |
 | **Feeds** | Week 3 (IK), Week 4 (walking) |
 
 ## This week now needs a GL backend
@@ -228,7 +228,7 @@ vector splays 5.4 cm sideways. Substituting one for the other costs 4 mm.
 ## Rebuild
 
 ```bash
-quarto render weeks/w02-transforms/slides.qmd
+quarto render weeks/02-transforms/slides.qmd
 ```
 
 Roughly 25 s. Produces `slides.html` (the deck, gitignored) and `lab.ipynb` (the
@@ -272,7 +272,7 @@ hands-on on student laptops. Students edit [`lab_viewer.py`](lab_viewer.py) and
 show the result.
 
 ```bash
-uv run weeks/w02-transforms/lab_viewer.py
+uv run weeks/02-transforms/lab_viewer.py
 ```
 
 It holds the G1 in each pose of `POSES` (SPACE / arrows to move between them),

@@ -1,5 +1,5 @@
 ---
-title: "Week 2 — Transforms and Forward Kinematics"
+title: "2 — Transforms and Forward Kinematics"
 subtitle: "Where is the foot? · SOC4180 Robot and AI"
 author: "Hong Jeong"
 format:
@@ -11,7 +11,7 @@ jupyter: python3
 ---
 
 ::: {.content-visible when-format="ipynb"}
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gnoejh/soc4180/blob/main/weeks/w02-transforms/lab.ipynb)
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gnoejh/soc4180/blob/main/weeks/02-transforms/lab.ipynb)
 
 **Before you start, two things:**
 
@@ -1389,7 +1389,7 @@ The second class this week is hands-on. Bring your laptop with the repo installe
 
 ```bash
 uv run scripts/view.py --pose=-0.35,0,0,0.70,-0.35,0     # the crouch, frozen
-uv run weeks/w02-transforms/lab_viewer.py                 # the lab script
+uv run weeks/02-transforms/lab_viewer.py                 # the lab script
 ```
 
 `lab_viewer.py` holds the G1 in each pose of `POSES` (SPACE for the next one) and
@@ -1409,7 +1409,7 @@ Change the file, in this order, and show each step:
 
 Then exercises 4, 5 and 8 from the previous slide, in the notebook.
 
-**The lab class has its own deck: `w02b-robot-as-code`.** It takes the same robot
+**The lab class has its own deck: `02b-robot-as-code`.** It takes the same robot
 and reads it as a data structure — which of the thirty-six numbers are the leg,
 what the other twenty-three joints do, and how to pose any part of the body by
 name. Start there, then run `lab_body.py` alongside `lab_viewer.py`.

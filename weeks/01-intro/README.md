@@ -1,6 +1,6 @@
-# Week 1 — Robots, Simulation, MuJoCo and MJCF
+# 01 — Robots, Simulation, MuJoCo and MJCF
 
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gnoejh/soc4180/blob/main/weeks/w01-intro/lab.ipynb)
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gnoejh/soc4180/blob/main/weeks/01-intro/lab.ipynb)
 
 | | |
 | --- | --- |
@@ -43,6 +43,37 @@ once with actuation disabled.
 two leg videos repeat the week-0 lesson (`ctrl = 0` is not an uncontrolled robot)
 in a twenty-line model the student owns.
 
+## Lab class: on your laptop
+
+```bash
+uv run weeks/01-intro/lab_mjcf.py
+```
+
+The two-link leg from the slides lives as an XML string at the top of the file.
+The script compiles it, prints `nq`/`nv`/`nu`/`nbody` and every joint's `qpos`
+and `qvel` slot, then opens the viewer with the servos holding `TARGET`.
+
+```
+A   actuation on/off        0   ctrl = 0        T   ctrl = TARGET        G   Moon gravity
+R   reset to TARGET at rest
+ENTER   joint angles, droop from TARGET, contacts, BADQACC warning count
+```
+
+Every exercise is an edit to the XML followed by a fresh run — the compiler's
+own error messages are part of the lab.
+
+| Step | Change | Right looks like |
+| --- | --- | --- |
+| 1 | none; `A`, `A`, `ENTER` | a double pendulum, then a held pose; droop of a few hundredths of a radian, explained |
+| 2 | `<freejoint/>` on `upper_leg`, then a parent body carrying it | *"more than 6 dofs in body"* read aloud; `nq`, `nv` predicted before the run |
+| 3 | `kp` 200 → 100 → 50 → 20 → 5 | droop noted at each; never zero |
+| 4 | `timestep="0.02"` | servos off: a different swing and no warning; servos on: `BADQACC` counted and `qpos` reset to zero — the silent failure |
+| 5 | a foot body with its own hinge | `nq` up by one; it moves with the knee |
+| 6 | the capsules' `rgba` moved into a `<default>` class | the picture unchanged |
+
+`SOC4180_AUTOCLOSE=6 uv run weeks/01-intro/lab_mjcf.py` closes the window by
+itself, which is how the script is smoke-tested.
+
 ## Files
 
 - `slides.qmd` — the single source. Renders to both outputs.
@@ -52,5 +83,5 @@ in a twenty-line model the student owns.
 ## Rebuild
 
 ```bash
-quarto render weeks/w01-intro/slides.qmd
+quarto render weeks/01-intro/slides.qmd
 ```

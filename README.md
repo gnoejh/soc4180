@@ -13,25 +13,32 @@ result. Every deck is readable in a browser at
 
 ## Weeks
 
-| Wk | Topic | Slides | Lab | Runtime |
-| --- | --- | --- | --- | --- |
-| [00](weeks/w00-robot-stack/) | What a Robot Is — the five-layer stack | [deck](https://gnoejh.github.io/soc4180/w00-robot-stack/slides.html) | [![Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gnoejh/soc4180/blob/main/weeks/w00-robot-stack/lab.ipynb) | CPU |
-| [01](weeks/w01-intro/) | Robots, simulation, MuJoCo and MJCF | [deck](https://gnoejh.github.io/soc4180/w01-intro/slides.html) | [![Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gnoejh/soc4180/blob/main/weeks/w01-intro/lab.ipynb) | CPU |
-| [02](weeks/w02-transforms/) | Transforms and forward kinematics | [deck](https://gnoejh.github.io/soc4180/w02-transforms/slides.html) | [![Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gnoejh/soc4180/blob/main/weeks/w02-transforms/lab.ipynb) | GPU (render) |
-| [02b](weeks/w02b-robot-as-code/) | The robot as code — body parts, qpos, the package | [deck](https://gnoejh.github.io/soc4180/w02b-robot-as-code/slides.html) | [![Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gnoejh/soc4180/blob/main/weeks/w02b-robot-as-code/lab.ipynb) | GPU (render) |
-| [03](weeks/w03-inverse-kinematics/) | Inverse kinematics | [deck](https://gnoejh.github.io/soc4180/w03-inverse-kinematics/slides.html) | [![Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gnoejh/soc4180/blob/main/weeks/w03-inverse-kinematics/lab.ipynb) | GPU (render) |
-| [04](weeks/w04-walking/) | Making a humanoid walk — LIPM & ZMP | [deck](https://gnoejh.github.io/soc4180/w04-walking/slides.html) | [![Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gnoejh/soc4180/blob/main/weeks/w04-walking/lab.ipynb) | GPU (render) |
-| [05](weeks/w05-actuation/) | Actuation, PD control, and rhythm | [deck](https://gnoejh.github.io/soc4180/w05-actuation/slides.html) | [![Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gnoejh/soc4180/blob/main/weeks/w05-actuation/lab.ipynb) | GPU (render) |
-| [06](weeks/w06-sensing/) | Sensing and state estimation | [deck](https://gnoejh.github.io/soc4180/w06-sensing/slides.html) | [![Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gnoejh/soc4180/blob/main/weeks/w06-sensing/lab.ipynb) | GPU (render) |
-| [07](weeks/w07-mdp/) | From control to learning: MDPs and env design | [deck](https://gnoejh.github.io/soc4180/w07-mdp/slides.html) | [![Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gnoejh/soc4180/blob/main/weeks/w07-mdp/lab.ipynb) | GPU (render) |
-| [08](weeks/w08-ppo/) | Policy gradients and PPO | [deck](https://gnoejh.github.io/soc4180/w08-ppo/slides.html) | [![Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gnoejh/soc4180/blob/main/weeks/w08-ppo/lab.ipynb) | GPU (render) |
-| [09](weeks/w09-reward/) | Reward shaping | [deck](https://gnoejh.github.io/soc4180/w09-reward/slides.html) | [![Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gnoejh/soc4180/blob/main/weeks/w09-reward/lab.ipynb) | GPU (render) |
-| [10](weeks/w10-scaling/) | Scaling: GPU-parallel training | [deck](https://gnoejh.github.io/soc4180/w10-scaling/slides.html) | [![Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gnoejh/soc4180/blob/main/weeks/w10-scaling/lab.ipynb) | **GPU (training)** |
+| Wk | Topic | Slides | Notebook | Laptop lab | Runtime |
+| --- | --- | --- | --- | --- | --- |
+| [00](weeks/00-robot-stack/) | What a Robot Is — the five-layer stack | [deck](https://gnoejh.github.io/soc4180/00-robot-stack/slides.html) | [![Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gnoejh/soc4180/blob/main/weeks/00-robot-stack/lab.ipynb) | [`lab_stack.py`](weeks/00-robot-stack/lab_stack.py) | CPU |
+| [01](weeks/01-intro/) | Robots, simulation, MuJoCo and MJCF | [deck](https://gnoejh.github.io/soc4180/01-intro/slides.html) | [![Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gnoejh/soc4180/blob/main/weeks/01-intro/lab.ipynb) | [`lab_mjcf.py`](weeks/01-intro/lab_mjcf.py) | CPU |
+| [02](weeks/02-transforms/) | Transforms and forward kinematics | [deck](https://gnoejh.github.io/soc4180/02-transforms/slides.html) | [![Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gnoejh/soc4180/blob/main/weeks/02-transforms/lab.ipynb) | [`lab_viewer.py`](weeks/02-transforms/lab_viewer.py) | GPU (render) |
+| [02b](weeks/02b-robot-as-code/) | The robot as code — body parts, qpos, the package | [deck](https://gnoejh.github.io/soc4180/02b-robot-as-code/slides.html) | [![Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gnoejh/soc4180/blob/main/weeks/02b-robot-as-code/lab.ipynb) | [`lab_body.py`](weeks/02b-robot-as-code/lab_body.py) | GPU (render) |
+| [03](weeks/03-inverse-kinematics/) | Inverse kinematics | [deck](https://gnoejh.github.io/soc4180/03-inverse-kinematics/slides.html) | [![Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gnoejh/soc4180/blob/main/weeks/03-inverse-kinematics/lab.ipynb) | [`lab_ik.py`](weeks/03-inverse-kinematics/lab_ik.py) | GPU (render) |
+| [04](weeks/04-walking/) | Making a humanoid walk — LIPM & ZMP | [deck](https://gnoejh.github.io/soc4180/04-walking/slides.html) | [![Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gnoejh/soc4180/blob/main/weeks/04-walking/lab.ipynb) | [`lab_walk.py`](weeks/04-walking/lab_walk.py) | GPU (render) |
+| [05](weeks/05-actuation/) | Actuation, PD control, and rhythm | [deck](https://gnoejh.github.io/soc4180/05-actuation/slides.html) | [![Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gnoejh/soc4180/blob/main/weeks/05-actuation/lab.ipynb) | [`lab_servo.py`](weeks/05-actuation/lab_servo.py) | GPU (render) |
+| [06](weeks/06-sensing/) | Sensing and state estimation | [deck](https://gnoejh.github.io/soc4180/06-sensing/slides.html) | [![Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gnoejh/soc4180/blob/main/weeks/06-sensing/lab.ipynb) | [`lab_imu.py`](weeks/06-sensing/lab_imu.py) | GPU (render) |
+| [07](weeks/07-mdp/) | From control to learning: MDPs and env design | [deck](https://gnoejh.github.io/soc4180/07-mdp/slides.html) | [![Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gnoejh/soc4180/blob/main/weeks/07-mdp/lab.ipynb) | [`lab_env.py`](weeks/07-mdp/lab_env.py) | GPU (render) |
+| [08](weeks/08-ppo/) | Policy gradients and PPO | [deck](https://gnoejh.github.io/soc4180/08-ppo/slides.html) | [![Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gnoejh/soc4180/blob/main/weeks/08-ppo/lab.ipynb) | [`lab_train.py`](weeks/08-ppo/lab_train.py) | GPU (render) |
+| [09](weeks/09-reward/) | Reward shaping | [deck](https://gnoejh.github.io/soc4180/09-reward/slides.html) | [![Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gnoejh/soc4180/blob/main/weeks/09-reward/lab.ipynb) | [`lab_reward.py`](weeks/09-reward/lab_reward.py) | GPU (render) |
+| [10](weeks/10-scaling/) | Scaling: GPU-parallel training | [deck](https://gnoejh.github.io/soc4180/10-scaling/slides.html) | [![Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gnoejh/soc4180/blob/main/weeks/10-scaling/lab.ipynb) | [`lab_many.py`](weeks/10-scaling/lab_many.py) | **GPU (training)** |
 
-Week 00 is the day-one lecture, taught before Week 01. Week 02b is week 2's
+00 is the day-one lecture, taught before 01. 02b is 02's
 **lab class** — the same robot read as code — not a separate week.
 
-*Weeks 11–15 are planned; see the syllabus in `CLAUDE.md`.*
+**Every week has two artifacts for students.** The *notebook* carries the
+lecture's code and rendered video and runs on Colab. The *laptop lab* is a
+`.py` you edit and run with `uv run`: it opens MuJoCo's interactive viewer,
+the robot responds live, and each script has a list at the top to extend, a
+function that is empty until you write it, and a visible difference between
+right and wrong. The lab is the second class of the week.
+
+*11–15 are planned; see the syllabus in `CLAUDE.md`.*
 
 ## For students
 
@@ -69,7 +76,7 @@ reproduces it exactly, fetching Python 3.12 itself if the laptop lacks it. Do no
 ### Running a week's notebook on your laptop
 
 ```bash
-uv run jupyter lab      # then open weeks/wNN-*/lab.ipynb
+uv run jupyter lab      # then open weeks/NN-*/lab.ipynb
 ```
 
 `uv run` is what matters: it launches Jupyter from the project environment, so
@@ -83,8 +90,20 @@ and you end up running last week's code.
 whenever a week is re-rendered, so edits saved into it are lost at the next
 `git pull`. This is the local version of Colab's *Save a copy in Drive*.
 
-Week 10 trains on GPU through JAX, which has no Windows build — **that week is
-Colab-only**. Everything through week 9 runs on the laptop.
+Week 10's GPU training section runs through JAX, which has no Windows build —
+**that section is Colab-only**. Everything else, including every laptop lab,
+runs on the laptop.
+
+### Running a week's laptop lab
+
+```bash
+uv run weeks/04-walking/lab_walk.py       # any weeks/NN-*/lab_*.py
+```
+
+Each script's docstring lists its keys and the steps to show the instructor,
+and the week's README says what right looks like on screen. Keys go to the
+MuJoCo window (click it first); if the window swallows them, type the same keys
+in the terminal. Weeks 7–10 need `uv sync --extra rl`.
 
 ### Colab, the fallback
 
@@ -100,7 +119,7 @@ the lab scripts are laptop-only.
 uv sync                    # lean environment, pinned by uv.lock
 uv sync --extra rl         # adds gymnasium, stable-baselines3, torch
 uv sync --extra gpu        # adds JAX/MJX/playground (Linux or WSL2 only, see below)
-quarto render weeks/w01-intro/slides.qmd
+quarto render weeks/01-intro/slides.qmd
 ```
 
 `quarto render` produces **both** outputs from the single `slides.qmd`:
@@ -109,7 +128,13 @@ quarto render weeks/w01-intro/slides.qmd
 - `lab.ipynb` — the student notebook, **committed** because Colab loads it from git
 
 A failing code cell aborts the render, so a broken example can never reach a
-lecture.
+lecture. After a render, check the notebook the way a student's *Run All* would
+and look at every figure it produced:
+
+```bash
+uv run scripts/check_notebook.py run    weeks/04-walking/lab.ipynb   # execute every cell
+uv run scripts/check_notebook.py images weeks/04-walking/lab.ipynb _figs   # dump the PNGs
+```
 
 ### Prerequisite
 
@@ -166,8 +191,9 @@ quickest way to find out whether a controller survives a disturbance, and much
 more informative than a rendered video.
 
 `soc4180.launch_viewer(model, data, passive=True, key_callback=...)` is the
-underlying helper if you want to drive the loop yourself; the week 2 lab script
-uses it to step through poses on SPACE.
+underlying helper if you want to drive the loop yourself; every `lab_*.py`
+uses it, and `SOC4180_AUTOCLOSE=6 uv run weeks/NN-*/lab_*.py` closes the window
+after six seconds, which is how the scripts are smoke-tested.
 
 **On Colab there is no interactive viewer** — a notebook has no window to draw
 into, which is why every lab renders video with `mediapy` instead. For an
@@ -212,7 +238,8 @@ src/soc4180/     shared helpers, installed as a package
   envs.py        G1WalkEnv, the Gymnasium walking task
   seeding.py     reproducibility
   checkpoints.py pre-trained policy loading (the RL-week safety net)
-weeks/wNN-*/     slides.qmd (source) -> slides.html + lab.ipynb
+weeks/NN-*/     slides.qmd (source) -> slides.html + lab.ipynb; lab_*.py (laptop lab)
+scripts/         view.py (viewer), check_notebook.py (execute / compile / dump figures), build_site.py
 _quarto.yml      shared deck theme and execution settings
 ```
 

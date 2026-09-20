@@ -1,6 +1,6 @@
-# Week 7 — From Control to Learning
+# 07 — From Control to Learning
 
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gnoejh/soc4180/blob/main/weeks/w07-mdp/lab.ipynb)
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gnoejh/soc4180/blob/main/weeks/07-mdp/lab.ipynb)
 
 **The hinge week.** Six weeks of deriving controllers end; specifying problems
 begins. No learning code appears — only the problem definition.
@@ -55,8 +55,47 @@ commitment about what kind of solution you expect.
 the 50 Hz ones purely because they contain more steps. Report distance, time
 upright, or mean velocity alongside it.
 
+## Lab class: on your laptop
+
+```bash
+uv run weeks/07-mdp/lab_env.py        # needs gymnasium: uv sync --extra rl
+```
+
+`G1WalkEnv` in the interactive viewer, stepping at the policy rate in real
+time. `POLICIES` holds four functions from observation to action — hold the
+crouch, uniform random, the week 4 walker via `walker_actions`, and the
+student's `my_policy(obs, t)` — selected with keys `1`–`4`.
+
+```
+1..4    pick a policy and reset      R   reset       SPACE   pause
+ENTER   the observation (gravity, gyro, joint angles), the action, every reward term
+double-click a body, then ctrl-drag: push it
+```
+
+Drawn on the robot: a **white arrow** for `obs[0:3]` (gravity in the body
+frame, exactly what the policy knows about up), a **bar above the head** for
+this step's reward (green while the tracking term is being earned, orange when
+it is only staying alive), and **yellow feet** when the env counts them airborne.
+Each episode ends with a terminal line: return, steps, distance, and whether it
+**terminated** (fell) or was **truncated** (10 s) — the distinction the deck
+makes about bootstrapping.
+
+`ACTION_SCALE`, `CONTROL_HZ` and `REWARD_WEIGHTS` at the top of the file are the
+three specification knobs the deck argues about.
+
+| Step | Change | Right looks like |
+| --- | --- | --- |
+| 1 | `1`, `2`, `3`; then `ACTION_SCALE = 1.0`, `CONTROL_HZ = 100`, `3` again | the walker falls at the defaults and walks at the new ones; the student explains both |
+| 2 | `my_policy` returns a constant that bends both knees | `ENTER` shows upright up, effort down, tracking unchanged |
+| 3 | `my_policy` periodic in `t` on hip pitch, opposite signs per leg | it terminates; the student reads the last `ENTER` |
+| 4 | `my_policy` leans the hips against `obs[0:3]` | the first closed loop of the course: it survives a ctrl-drag push that policy `1` does not |
+| 5 | `REWARD_WEIGHTS = {"alive": 0.0}` and re-run `1`, `3` | the numbers change, the behaviour does not — nothing here is learning yet |
+
+`SOC4180_AUTOCLOSE=6 uv run weeks/07-mdp/lab_env.py` closes the window by
+itself, which is how the script is smoke-tested.
+
 ## Rebuild
 
 ```bash
-quarto render weeks/w07-mdp/slides.qmd
+quarto render weeks/07-mdp/slides.qmd
 ```

@@ -1,6 +1,6 @@
 """Week 2b lab, on your laptop: drive every part of the robot, by name.
 
-    uv run weeks/w02b-robot-as-code/lab_body.py
+    uv run weeks/02b-robot-as-code/lab_body.py
 
 Week 2's lab posed one leg and checked your forward kinematics against MuJoCo.
 This one is about the *other twenty-three joints*: which numbers are which body

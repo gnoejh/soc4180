@@ -1,5 +1,5 @@
 ---
-title: "Week 7 — From Control to Learning"
+title: "7 — From Control to Learning"
 subtitle: "MDPs and environment design · SOC4180 Robot and AI"
 author: "Hong Jeong"
 format:
@@ -11,7 +11,7 @@ jupyter: python3
 ---
 
 ::: {.content-visible when-format="ipynb"}
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gnoejh/soc4180/blob/main/weeks/w07-mdp/lab.ipynb)
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gnoejh/soc4180/blob/main/weeks/07-mdp/lab.ipynb)
 
 **Before you start, two things:**
 
@@ -53,6 +53,61 @@ $\mathbb{E}\left[\sum_t \gamma^t r_t\right]$.
 
 **MuJoCo being the transition function is the whole reason this works.** We do
 not need to model the dynamics — we can simply run them.
+
+---
+
+## The loop, drawn {.smaller}
+
+```{python}
+#| fig-align: center
+try:
+    import soc4180
+    import gymnasium
+except ImportError:
+    %pip install -q "soc4180[env] @ git+https://github.com/gnoejh/soc4180.git"
+    import soc4180
+
+import numpy as np
+import matplotlib.pyplot as plt
+from matplotlib.patches import FancyBboxPatch
+
+fig, ax = plt.subplots(figsize=(9, 3.4)); ax.axis("off"); ax.set_xlim(0, 10); ax.set_ylim(0, 4)
+def block(x, y, w, h, text, col):
+    ax.add_patch(FancyBboxPatch((x, y), w, h, boxstyle="round,pad=0.1", color=col, alpha=0.9))
+    ax.text(x + w / 2, y + h / 2, text, ha="center", va="center", fontsize=10, color="w")
+block(0.5, 1.2, 2.6, 1.6, "policy  $\\pi_\\theta(a\\mid s)$\n(weeks 8–10: a network)", "#3b7dd8")
+block(5.4, 0.4, 4.2, 3.2, "", "#e8743b")
+ax.text(7.5, 3.3, "environment", ha="center", fontsize=10, color="w", weight="bold")
+block(5.7, 1.9, 1.7, 0.9, "MuJoCo\n$P(s'\\mid s,a)$", "#c0392b")
+block(7.7, 1.9, 1.7, 0.9, "reward\n$R(s,a)$", "#c0392b")
+block(5.7, 0.6, 3.7, 0.9, "terminate? truncate?  (fell / 10 s)", "#c0392b")
+ax.annotate("", xy=(5.3, 2.6), xytext=(3.2, 2.6), arrowprops=dict(arrowstyle="->", lw=2))
+ax.text(4.25, 2.75, "$a_t$: 12 residuals, 50 Hz", ha="center", fontsize=9)
+ax.annotate("", xy=(3.2, 1.5), xytext=(5.3, 1.5), arrowprops=dict(arrowstyle="->", lw=2))
+ax.text(4.25, 1.15, "$s_{t+1}$: 42 numbers,  $r_{t+1}$", ha="center", fontsize=9)
+fig.tight_layout(); plt.show()
+```
+
+Everything inside the orange box is *ours to specify* and nothing inside it
+learns. Everything the algorithm touches is the blue box.
+
+---
+
+## What $\gamma$ means in seconds {.smaller}
+
+The return from time $t$ is $G_t = \sum_{k \ge 0} \gamma^k\, r_{t+k}$. A constant
+reward $r$ sums to $r/(1-\gamma)$, so $1/(1-\gamma)$ is the **effective
+horizon**, in decisions:
+
+| $\gamma$ | horizon (decisions) | at 50 Hz |
+| --- | --- | --- |
+| 0.9 | 10 | 0.2 s — less than one footstep |
+| 0.99 | 100 | 2 s — three footsteps |
+| 0.999 | 1000 | 20 s — longer than the episode |
+
+The same $\gamma$ means a different *time* at a different control rate: the
+$0.99$ that suits 50 Hz is a 0.2 s horizon at 500 Hz. That is a second reason
+the control rate below is a design decision and not a detail.
 
 ---
 
@@ -113,6 +168,29 @@ chases them.** The layered structure from Week 0 survives intact.
 
 ---
 
+## Two clocks {.smaller}
+
+```{python}
+#| fig-align: center
+fig, ax = plt.subplots(figsize=(9.6, 2.4)); ax.set_xlim(-1, 41); ax.set_ylim(-0.7, 2.4); ax.axis("off")
+for k in range(41):
+    ax.plot([k, k], [0, 0.35], color="0.4", lw=1)
+ax.text(-0.8, 0.15, "physics 500 Hz", ha="right", va="center", fontsize=9)
+for k in range(0, 41, 10):
+    ax.plot([k, k], [0.8, 1.6], color="#3b7dd8", lw=3)
+    ax.text(k, 1.75, f"$a_{k // 10}$", ha="center", fontsize=9, color="#3b7dd8")
+    if k < 40:
+        ax.annotate("", xy=(k + 9.6, 1.0), xytext=(k + 0.4, 1.0),
+                    arrowprops=dict(arrowstyle="-|>", lw=1, color="#3b7dd8", alpha=0.6))
+        ax.text(k + 5, 0.55, "held 10 steps", ha="center", fontsize=7, color="#3b7dd8")
+ax.text(-0.8, 1.2, "policy 50 Hz", ha="right", va="center", fontsize=9, color="#3b7dd8")
+ax.text(20, -0.5, "one decision = 20 ms = 10 physics steps; the servos chase the held target underneath",
+        ha="center", fontsize=9)
+fig.tight_layout(); plt.show()
+```
+
+---
+
 ## Design decision 3: when does an episode end? {.smaller}
 
 - **Terminate** when the robot has fallen — body below 0.5 m, or tilted more than
@@ -152,6 +230,33 @@ print(f"episode     : {env.max_steps} decisions = {env.max_steps*env.control_dt:
 Forty-two observations: gravity (3), gyroscope (3), and for each of twelve joints
 its angle, velocity, and last commanded residual. **Arms and waist are frozen** —
 seventeen dimensions the walking problem does not need.
+
+---
+
+## The observation, drawn to scale {.smaller}
+
+```{python}
+#| fig-align: center
+blocks = [("gravity", 3, "#3b7dd8"), ("gyro", 3, "#3b7dd8"),
+          ("12 leg angles − nominal", 12, "#2a9d5c"), ("12 leg velocities", 12, "#2a9d5c"),
+          ("previous action", 12, "#e8743b")]
+fig, ax = plt.subplots(figsize=(10, 2.0)); x = 0
+for k, (name, n, col) in enumerate(blocks):
+    ax.add_patch(plt.Rectangle((x, 0), n, 1, color=col, alpha=0.8))
+    if n > 4:
+        ax.text(x + n / 2, 0.5, f"{name} ({n})", ha="center", va="center", fontsize=8, color="w")
+    else:
+        ax.text(x + n / 2, 1.15 + 0.5 * k, f"{name} ({n})", ha="left", va="bottom", fontsize=8,
+                color=col, rotation=20)
+    x += n
+ax.set_xlim(-0.3, x + 0.3); ax.set_ylim(-0.3, 2.6); ax.axis("off")
+ax.set_title(f"{x} numbers in: IMU (blue), encoders (green), memory (orange)", fontsize=10)
+fig.tight_layout(); plt.show()
+```
+
+Compare it with week 6's 64: the arms and the waist are gone, and the
+**previous action** has been added — the one-step memory that papers over the
+missing Markov property.
 
 ---
 
@@ -236,10 +341,12 @@ Two suspects: the action range is too narrow, and the control rate is too slow.
 Separate them.
 
 ```{python}
+grid = {}
 print(f"{'scale':>6} {'Hz':>5} {'travel':>8} {'z':>7} {'clipped':>8}  outcome")
 for scale in (0.3, 0.6, 1.0):
     for hz in (50, 100, 200):
         x, z, clip, fell = walker_in_env(scale, hz)
+        grid[(scale, hz)] = (x, clip, fell)
         print(f"{scale:6.1f} {hz:5d} {x:+8.3f} {z:7.3f} {clip:7.1f}%  "
               f"{'FELL' if fell else 'survived'}")
 ```
@@ -248,6 +355,36 @@ for scale in (0.3, 0.6, 1.0):
 clipped and it fails at every rate. At $\kappa=1.0$ clipping stops, but 50 Hz
 still fails. Only $\kappa=1.0$ **and** ≥100 Hz reproduces the walk — 1.05 m,
 against 0.99 m at 500 Hz.
+
+---
+
+## The same table, as a picture {.smaller}
+
+```{python}
+#| fig-align: center
+scales, rates = (0.3, 0.6, 1.0), (50, 100, 200)
+dist = np.array([[grid[(s, hz)][0] for hz in rates] for s in scales])
+clip = np.array([[grid[(s, hz)][1] for hz in rates] for s in scales])
+fig, (ax0, ax1) = plt.subplots(1, 2, figsize=(9.6, 3.6), gridspec_kw={"width_ratios": [1.3, 1]})
+ax0.imshow(dist, cmap="Blues", vmin=0, vmax=1.1, origin="lower")
+for i, s in enumerate(scales):
+    for j, hz in enumerate(rates):
+        x, c, fell = grid[(s, hz)]
+        ax0.text(j, i, f"{x:+.2f} m\n{'fell' if fell else 'walked'}", ha="center", va="center",
+                 fontsize=8, color="w" if x > 0.6 else "k")
+ax0.set_xticks(range(3), [f"{hz} Hz" for hz in rates])
+ax0.set_yticks(range(3), [f"$\\kappa$ = {s}" for s in scales])
+ax0.set_title("distance the week 4 walker travels inside the env", fontsize=10)
+ax1.bar([f"$\\kappa$ = {s}" for s in scales], clip[:, 0], color="#e8743b")
+ax1.set_ylabel("% of actions clipped at ±1 (at 50 Hz)")
+ax1.set_title("how often the action space is too small", fontsize=10); ax1.grid(axis="y", alpha=0.3)
+fig.tight_layout(); plt.show()
+```
+
+Only the top-right corner walks. Reading down the right column: the rate was
+fine and the actions were being cut off. Reading across the top row: the
+actions were fine and the rate was too slow. Two separate constraints, each
+sufficient to break it.
 
 ---
 
@@ -305,6 +442,61 @@ them on purpose.**
 
 ---
 
+## The shape of each term {.smaller}
+
+```{python}
+#| fig-align: center
+from soc4180.envs import DEFAULT_REWARD
+v = np.linspace(-0.5, 1.5, 300); tilt = np.linspace(0, 90, 300); a = np.linspace(-1, 1, 200)
+fig, (ax0, ax1, ax2) = plt.subplots(1, 3, figsize=(10, 3.0))
+ax0.plot(v, DEFAULT_REWARD["tracking"] * np.exp(-((v - env.target_velocity) ** 2) / 0.25), lw=2, color="#3b7dd8")
+ax0.axvline(env.target_velocity, color="0.5", ls=":"); ax0.set_xlabel("forward velocity (m/s)")
+ax0.set_title("tracking: $1.5\\,e^{-(v-0.5)^2/0.25}$", fontsize=9)
+ax1.plot(tilt, DEFAULT_REWARD["upright"] * np.cos(np.radians(tilt)), lw=2, color="#2a9d5c")
+ax1.axvline(np.degrees(env.max_tilt), color="#c0392b", ls="--")
+ax1.text(np.degrees(env.max_tilt) + 2, 0.4, "terminate", color="#c0392b", fontsize=8)
+ax1.set_xlabel("tilt from vertical (deg)"); ax1.set_title("upright: $0.5\\,(-g_z)$", fontsize=9)
+ax2.plot(a, DEFAULT_REWARD["effort"] * 12 * a**2, lw=2, color="#e8743b", label="effort: all 12 joints at $a$")
+ax2.plot(a, DEFAULT_REWARD["smooth"] * 12 * a**2, lw=2, color="#8e44ad", label="smooth: all 12 change by $a$")
+ax2.axhline(DEFAULT_REWARD["alive"], color="k", ls=":", label="alive bonus")
+ax2.set_xlabel("action"); ax2.legend(fontsize=7, loc="center right"); ax2.set_title("the small terms", fontsize=9)
+for ax in (ax0, ax1, ax2):
+    ax.grid(alpha=0.3)
+fig.tight_layout(); plt.show()
+```
+
+Read the vertical scales. Tracking is worth up to 1.5 per step, upright 0.5,
+alive 0.5; effort costs at most 0.12 even flat out. The reward is dominated by
+*going the right speed while standing up* — which is what makes standing still
+worth 776 and walking 1250, next week's two numbers.
+
+---
+
+## Lab class: on your laptop {.smaller}
+
+```bash
+uv run weeks/07-mdp/lab_env.py
+```
+
+`G1WalkEnv`, stepping at 50 Hz in real time in the viewer. Keys `1`–`4` pick a
+policy: hold the crouch, uniform random, the week 4 walker as actions, and
+`my_policy` — a function from the 42-number observation to 12 residuals.
+
+On the robot: a white arrow for `obs[0:3]` (gravity, as the policy sees it), a
+bar above the head for this step's reward, and yellow feet when the env counts
+them as airborne. Every episode ends with return, steps, and **terminated** or
+**truncated**.
+
+| Step | Do | Right looks like |
+| --- | --- | --- |
+| 1 | `1`, `2`, `3`; then `ACTION_SCALE = 1.0`, `CONTROL_HZ = 100`, `3` | the walker falls, then walks; the student says why |
+| 2 | `my_policy` = bend the knees | `ENTER`: upright up, effort down, tracking unchanged |
+| 3 | `my_policy` periodic on hip pitch | a termination, read off the episode line |
+| 4 | `my_policy` leans the hips against `obs[0:3]` | survives a ctrl-drag push that policy `1` does not |
+| 5 | `REWARD_WEIGHTS = {"alive": 0.0}` | the numbers change and the behaviour does not; the student says why |
+
+---
+
 ## Exercises {.smaller}
 
 1. **Termination as a reward.** Remove the alive bonus. Does the policy space
@@ -324,7 +516,7 @@ them on purpose.**
 
 ## Next week
 
-**Week 8 — policy gradients and PPO.** The environment is written and checked,
+**08 — policy gradients and PPO.** The environment is written and checked,
 the baselines are measured, and we know what it can and cannot express.
 
 Now we let an algorithm search it — starting on something far easier than a

@@ -1,5 +1,5 @@
 ---
-title: "Week 10 — Scaling"
+title: "10 — Scaling"
 subtitle: "Buying the search · SOC4180 Robot and AI"
 author: "Hong Jeong"
 format:
@@ -11,7 +11,7 @@ jupyter: python3
 ---
 
 ::: {.content-visible when-format="ipynb"}
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gnoejh/soc4180/blob/main/weeks/w10-scaling/lab.ipynb)
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gnoejh/soc4180/blob/main/weeks/10-scaling/lab.ipynb)
 
 **Before you start, two things:**
 
@@ -33,6 +33,28 @@ A tuned locomotion run in the literature uses **150 million** steps.
 
 We have been running **0.03%** of a real experiment and drawing conclusions from
 it. Today we find out what that costs and how it is bought.
+
+---
+
+## The arithmetic of a run {.smaller}
+
+A training run is $N$ environment steps. With $n$ environments each stepping at
+$r$ steps per second, and a learner that needs $\ell$ seconds per update of $B$
+steps:
+
+$$T_{\text{wall}} \;=\; \frac{N}{n\,r} \;+\; \frac{N}{B}\,\ell
+\qquad\text{(collect)} \qquad\;\; \text{(learn)}$$
+
+The first term is what parallelism attacks. The second does not shrink with
+$n$ — it is the serial part, and it caps the speed-up the way Amdahl's law
+says: with a fraction $s$ of the time spent learning, no number of
+environments beats $1/s$.
+
+Two things follow, and today measures both:
+
+- $n$ only helps if the $n$ environments **really run at once**
+- once collection is cheap, the learner's $\ell$ is the wall, and that is why
+  the network is small, the batch is large, and everything is compiled
 
 ---
 
@@ -98,13 +120,15 @@ Run many environments at once. Stable-Baselines3 offers `DummyVecEnv`:
 ```{python}
 from stable_baselines3.common.vec_env import DummyVecEnv
 
+dummy = {}
 for k in (1, 4, 16):
     vec = DummyVecEnv([lambda: G1WalkEnv() for _ in range(k)])
     vec.reset(); acts = np.zeros((k, 12), dtype=np.float32)
     t0 = time.time(); m = 400
     for _ in range(m):
         vec.step(acts)
-    print(f"  DummyVecEnv, {k:2d} envs : {m*k/(time.time()-t0):7.0f} steps/s")
+    dummy[k] = m * k / (time.time() - t0)
+    print(f"  DummyVecEnv, {k:2d} envs : {dummy[k]:7.0f} steps/s")
     vec.close()
 ```
 
@@ -128,6 +152,7 @@ from stable_baselines3.common.vec_env import SubprocVecEnv
 import os
 
 print(f"CPU cores available here: {os.cpu_count()}\n")
+subproc = {}
 for k in (2, 4, 8):
     vec = SubprocVecEnv([G1WalkEnv for _ in range(k)])
     vec.reset(); acts = np.zeros((k, 12), dtype=np.float32)
@@ -136,7 +161,8 @@ for k in (2, 4, 8):
     t0 = time.time(); m = 300
     for _ in range(m):
         vec.step(acts)
-    print(f"  SubprocVecEnv, {k} envs : {m*k/(time.time()-t0):7.0f} steps/s")
+    subproc[k] = m * k / (time.time() - t0)
+    print(f"  SubprocVecEnv, {k} envs : {subproc[k]:7.0f} steps/s")
     vec.close()
 ```
 
@@ -144,6 +170,37 @@ This scales — until you run out of cores. **A Colab CPU runtime has two.**
 
 Even at a perfect 8× we would still need four hours per run, and the tuned config
 asks for **8192** environments. There are not enough cores in the building.
+
+---
+
+## Vectorised against parallel, drawn {.smaller}
+
+```{python}
+#| fig-align: center
+import matplotlib.pyplot as plt
+
+fig, (ax0, ax1) = plt.subplots(1, 2, figsize=(9.6, 3.6))
+ks = sorted(set(dummy) | set(subproc) | {1})
+ax0.loglog(ks, [single * k for k in ks], ":", color="0.5", label="perfect scaling")
+ax0.loglog(sorted(dummy), [dummy[k] for k in sorted(dummy)], "s-", color="#e8743b", lw=2, label="DummyVecEnv (one process)")
+ax0.loglog([1] + sorted(subproc), [single] + [subproc[k] for k in sorted(subproc)], "o-", color="#3b7dd8", lw=2, label="SubprocVecEnv (one process each)")
+ax0.set_xlabel("environments"); ax0.set_ylabel("control steps / s"); ax0.legend(fontsize=8); ax0.grid(alpha=0.3, which="both")
+ax0.set_title("throughput on this machine", fontsize=10)
+rates = np.logspace(3, 7, 100)
+ax1.loglog(rates, 150e6 / rates / 3600, color="k", lw=2)
+for r_, label, col in ((single, "one env", "#e8743b"), (max(subproc.values()), f"{max(subproc)} processes", "#3b7dd8"),
+                       (8192 * 100, "8192 envs on a GPU\n(order of magnitude)", "#2a9d5c")):
+    ax1.plot(r_, 150e6 / r_ / 3600, "o", ms=8, color=col)
+    ax1.annotate(label, (r_, 150e6 / r_ / 3600), xytext=(8, -12), textcoords="offset points", fontsize=8, color=col)
+ax1.axhspan(0.2, 0.5, color="#2a9d5c", alpha=0.1); ax1.text(1.2e3, 0.3, "a lecture", fontsize=8, color="#2a9d5c")
+ax1.set_xlabel("steps / s"); ax1.set_ylabel("hours for 150 M steps"); ax1.grid(alpha=0.3, which="both")
+ax1.set_title("the same budget, three ways", fontsize=10)
+fig.tight_layout(); plt.show()
+```
+
+The orange line is flat: sixteen environments, one core. The blue one climbs
+until the cores run out. The green dot is where the tuned configurations live,
+and no amount of blue reaches it.
 
 ---
 
@@ -165,6 +222,34 @@ Two ideas make it work:
 The price is real: everything must be expressible as fixed-shape array
 operations. **No Python branching, no variable-length loops, no early exit** —
 which is why an MJX environment reads so differently from the one we wrote.
+
+---
+
+## `vmap`, drawn {.smaller}
+
+```{python}
+#| fig-align: center
+fig, (ax0, ax1) = plt.subplots(1, 2, figsize=(9.6, 3.2))
+for ax in (ax0, ax1):
+    ax.axis("off"); ax.set_xlim(0, 10); ax.set_ylim(0, 4)
+for i in range(4):
+    ax0.add_patch(plt.Rectangle((0.5 + 2.3 * i, 1.4), 1.9, 1.2, color="#e8743b", alpha=0.8))
+    ax0.text(1.45 + 2.3 * i, 2.0, f"step(env {i})", ha="center", va="center", fontsize=9, color="w")
+    if i < 3:
+        ax0.annotate("", xy=(2.7 + 2.3 * i, 2.0), xytext=(2.4 + 2.3 * i, 2.0), arrowprops=dict(arrowstyle="->", lw=1.5))
+ax0.text(5, 0.6, "Python loop: one after another, however many cores you own", ha="center", fontsize=9)
+ax0.text(5, 3.4, "for env in envs:  env.step(a)", ha="center", fontsize=10, family="monospace")
+ax1.add_patch(plt.Rectangle((1.0, 0.9), 8.0, 2.2, color="#3b7dd8", alpha=0.8))
+for i in range(8):
+    ax1.add_patch(plt.Rectangle((1.3 + 0.95 * i, 1.2), 0.75, 1.6, color="w", alpha=0.35))
+    ax1.text(1.675 + 0.95 * i, 2.0, f"{i}", ha="center", va="center", fontsize=8, color="w")
+ax1.text(5, 0.4, "one compiled kernel over a batch axis: 8 today, 8192 on the GPU", ha="center", fontsize=9)
+ax1.text(5, 3.5, "jax.vmap(step)(states, actions)", ha="center", fontsize=10, family="monospace")
+fig.tight_layout(); plt.show()
+```
+
+The price, again: every robot must take the same instructions. No `if`, no
+early exit, no variable-length anything. The batch is one array.
 
 ---
 
@@ -405,6 +490,28 @@ and that is a reward bug, not a training one.
 
 ---
 
+## The four shapes, sketched {.smaller}
+
+```{python}
+#| fig-align: center
+t = np.linspace(0, 1, 200)
+shapes = [("flat from the start", 0.05 + 0.02 * np.sin(20 * t), "broken observation / action scale / no gradient"),
+          ("rises then collapses", np.where(t < 0.4, 0.8 * t / 0.4, 0.8 * np.exp(-8 * (t - 0.4))), "learning rate, or week 8's exploration"),
+          ("plateaus below target", 0.6 * (1 - np.exp(-8 * t)), "local optimum: week 9's standing robot"),
+          ("rises smoothly, slowly", 0.9 * t ** 1.5, "working; needs more steps")]
+fig, axs = plt.subplots(1, 4, figsize=(10.5, 2.6), sharey=True)
+for ax, (name, y, cause) in zip(axs, shapes):
+    ax.plot(t, y, lw=2, color="#3b7dd8"); ax.axhline(1.0, color="0.6", ls=":")
+    ax.set_title(name, fontsize=9); ax.set_xlabel(cause, fontsize=7); ax.set_xticks([]); ax.grid(alpha=0.3)
+axs[0].set_ylabel("reward (target dotted)"); axs[0].set_ylim(0, 1.1)
+fig.tight_layout(); plt.show()
+```
+
+Sketches, not data: the point is the *shape*. Plot episode length underneath
+each, always.
+
+---
+
 ## What the budget actually buys {.smaller}
 
 | Budget | What we saw |
@@ -420,6 +527,29 @@ about the algorithm changes. **PPO was never the limitation.**
 Our conclusions from Weeks 8 and 9 were not wrong — but they were conclusions
 about *underfunded* runs, and it is worth being honest about which findings
 survive a real budget.
+
+---
+
+## Lab class: on your laptop {.smaller}
+
+```bash
+uv run weeks/10-scaling/lab_many.py
+```
+
+`N_ROBOTS` copies of the G1 in **one** scene — one model, one `mj_step`, one
+controller driving all of them — walking side by side in the viewer. `+`/`-`
+add and remove robots, `F` randomises each one's friction and mass (they
+drift apart within steps: week 11 in one key), `P` benchmarks 1, 2, 4 and 8
+processes, and `ENTER` prints robot-steps per second against the student's
+`predict_rate`.
+
+| Step | Do | Right looks like |
+| --- | --- | --- |
+| 1 | `ENTER`, then `+` `+` `+` | a prediction for one process, written into `predict_rate`, then checked |
+| 2 | `P` | four numbers, and the core count that explains where they stop |
+| 3 | hours for 150 M at the best rate | the arithmetic of the first slide, done on their own machine |
+| 4 | `F` | robots that diverge; what a policy trained on all of them would have to learn |
+| 5 | `+` until 0.25× real time | the cost of one environment, in milliseconds |
 
 ---
 

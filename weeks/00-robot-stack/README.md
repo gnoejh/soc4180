@@ -1,6 +1,6 @@
-# Week 0 — What a Robot Is: The Five-Layer Stack
+# 00 — What a Robot Is: The Five-Layer Stack
 
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gnoejh/soc4180/blob/main/weeks/w00-robot-stack/lab.ipynb)
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gnoejh/soc4180/blob/main/weeks/00-robot-stack/lab.ipynb)
 
 **Day one. Taught before Week 1** — this is the vocabulary lecture the rest of
 the semester refers back to.
@@ -49,6 +49,39 @@ Three deliberate refinements, each of which heads off a common confusion:
 3. **Timescales are given as the reason layers exist**, rather than layering
    being presented as mere tidiness.
 
+## Lab class: on your laptop
+
+```bash
+uv run weeks/00-robot-stack/lab_stack.py
+```
+
+The G1 in the interactive viewer, physics in real time, and each key leaving a
+different set of layers switched on:
+
+```
+1   layers 1+2 only: every servo dead (rag doll)      0   ctrl = 0: the trap
+2   layer 4, simplest: servos hold `stand`            3   layer 4, full: the week 4 walker
+4   layer 4, yours: my_controller                     G   Moon gravity, nothing else touched
+R   reset     SPACE   pause     ENTER   physics rate, torso height, contacts, force sum vs weight
+double-click a body, then ctrl-drag: push it
+```
+
+Contact forces are drawn as arrows at the contact points — Layer 1 made
+visible. `my_controller(model, data, t)` returns the 29 servo targets and is
+empty as shipped (the robot holds `stand`).
+
+| Step | Change | Right looks like |
+| --- | --- | --- |
+| 1 | `1`, `R`, `2` | one sentence on what differs between a heap and a standing robot, and which layer it lives in |
+| 2 | `R`, `0` | the robot stands straight-legged; the student explains why zero is a command |
+| 3 | `G`, `R`, `1`; then `3` | a slow-motion fall; a walker whose timing assumes Earth |
+| 4 | `my_controller` waves the left arm | the arm waves and the rest keeps standing — the servos (layer 4) hold everything not commanded otherwise |
+| 5 | `ENTER` standing, then during `3` | the force sum equals the weight (327 N); during the walk it does not, because the body accelerates |
+| 6 | ctrl-drag under `2` and `3` | no reaction either way: there is no sensing layer yet (week 6) |
+
+`SOC4180_AUTOCLOSE=6 uv run weeks/00-robot-stack/lab_stack.py` closes the
+window by itself, which is how the script is smoke-tested.
+
 ## Files
 
 - `slides.qmd` — single source
@@ -58,5 +91,5 @@ Three deliberate refinements, each of which heads off a common confusion:
 ## Rebuild
 
 ```bash
-quarto render weeks/w00-robot-stack/slides.qmd
+quarto render weeks/00-robot-stack/slides.qmd
 ```

@@ -1,5 +1,5 @@
 ---
-title: "Week 8 — Policy Gradients and PPO"
+title: "8 — Policy Gradients and PPO"
 subtitle: "Letting the algorithm search · SOC4180 Robot and AI"
 author: "Hong Jeong"
 format:
@@ -11,7 +11,7 @@ jupyter: python3
 ---
 
 ::: {.content-visible when-format="ipynb"}
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gnoejh/soc4180/blob/main/weeks/w08-ppo/lab.ipynb)
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gnoejh/soc4180/blob/main/weeks/08-ppo/lab.ipynb)
 
 **Before you start, two things:**
 
@@ -49,6 +49,45 @@ $$\nabla_\theta J(\theta) = \mathbb{E}\left[\sum_t \nabla_\theta \log \pi_\theta
 
 Read it as an instruction: **make the actions that preceded high return more
 likely.** The gradient touches only the policy network, never the simulator.
+
+---
+
+## The idea, in one dimension {.smaller}
+
+A Gaussian policy over a single action, $\pi_\theta(a) = \mathcal N(\mu, \sigma^2)$,
+so $\nabla_\mu \log\pi(a) = (a-\mu)/\sigma^2$: **the gradient points from the
+mean toward each sample**. Weight those pointers by return and add them up.
+
+```{python}
+#| fig-align: center
+import numpy as np
+import matplotlib.pyplot as plt
+
+rng = np.random.default_rng(0)
+mu, sigma, a_star = -0.8, 0.6, 0.9
+samples = rng.normal(mu, sigma, 25)
+R = -(samples - a_star) ** 2                          # the environment's opinion
+adv = R - R.mean()                                    # with a baseline
+step = 0.6 * np.mean(adv * (samples - mu) / sigma**2) # one REINFORCE update on mu
+
+fig, ax = plt.subplots(figsize=(9, 3.4))
+a = np.linspace(-3, 3, 400)
+ax.plot(a, np.exp(-(a - mu)**2 / (2 * sigma**2)), color="#3b7dd8", lw=2, label=r"$\pi_\theta$ before")
+ax.plot(a, np.exp(-(a - mu - step)**2 / (2 * sigma**2)), color="#3b7dd8", lw=2, ls="--", label=r"$\pi_\theta$ after one update")
+ax.plot(a, np.exp(R.max()) * np.exp(-(a - a_star)**2), color="0.7", lw=1, label="return $R(a)$, rescaled")
+for s, w in zip(samples, adv):
+    ax.annotate("", xy=(s, 0.02), xytext=(mu, 0.02),
+                arrowprops=dict(arrowstyle="->", lw=0.5 + 2.5 * abs(w) / abs(adv).max(),
+                                color="#2a9d5c" if w > 0 else "#c0392b", alpha=0.6))
+ax.plot(samples, np.zeros_like(samples), "k|", ms=12)
+ax.axvline(a_star, color="0.5", ls=":"); ax.text(a_star + 0.05, 0.9, "best action", fontsize=8, color="0.4")
+ax.set_xlabel("action $a$"); ax.set_yticks([]); ax.legend(fontsize=8, loc="upper left")
+ax.set_title("green: above-average samples pull the mean toward them; red: below-average push it away", fontsize=9)
+fig.tight_layout(); plt.show()
+print(f"mean moved from {mu:+.2f} to {mu + step:+.2f}, toward the best action at {a_star:+.2f}")
+```
+
+No derivative of $R$ was taken. The environment only *scored* the samples.
 
 ---
 
@@ -166,6 +205,24 @@ data that was collected. **PPO exists to make that reuse safe.**
 
 ---
 
+## Why a baseline is free {.smaller}
+
+Subtracting any $b(s)$ from the return changes nothing in expectation:
+
+$$\mathbb E_{a\sim\pi}\big[\nabla_\theta \log\pi_\theta(a\mid s)\; b(s)\big]
+= b(s)\,\nabla_\theta \sum_a \pi_\theta(a\mid s)
+= b(s)\,\nabla_\theta 1 = 0 .$$
+
+So the gradient estimate stays **unbiased**, while its variance drops — because
+$\nabla\log\pi \cdot (R - b)$ is small whenever $R$ is close to $b$, which is
+most of the time. The best $b(s)$ is the expected return from $s$, i.e. the
+value function; the batch mean we used on CartPole is the poor man's version.
+
+The advantage $A_t = R_t - V(s_t)$ is this idea taken seriously, and it is the
+quantity PPO's objective is written in.
+
+---
+
 ## PPO in one slide
 
 Let $r_t(\theta) = \dfrac{\pi_\theta(a_t\mid s_t)}{\pi_{\theta_{\text{old}}}(a_t\mid s_t)}$ — how much the new policy has changed its mind.
@@ -177,6 +234,33 @@ is far enough more likely, making it *more* likely buys nothing.
 
 **Small, safe steps, taken many times.** That is the entire idea, and it is why
 PPO is the default for locomotion.
+
+---
+
+## The clip, drawn {.smaller}
+
+```{python}
+#| fig-align: center
+r = np.linspace(0.5, 1.5, 300); eps = 0.2
+fig, (ax0, ax1) = plt.subplots(1, 2, figsize=(9.6, 3.4), sharey=True)
+for ax, A, title in ((ax0, +1.0, "advantage $A > 0$: make this action more likely"),
+                     (ax1, -1.0, "advantage $A < 0$: make it less likely")):
+    unclipped = r * A
+    clipped = np.minimum(r * A, np.clip(r, 1 - eps, 1 + eps) * A)
+    ax.plot(r, unclipped, color="0.6", ls="--", lw=1.5, label=r"$r_t A_t$ (plain ratio)")
+    ax.plot(r, clipped, color="#3b7dd8", lw=2.5, label=r"$L^{\mathrm{CLIP}}$")
+    ax.axvline(1 - eps, color="0.7", ls=":"); ax.axvline(1 + eps, color="0.7", ls=":")
+    ax.axvline(1, color="k", lw=0.8)
+    ax.set_xlabel(r"probability ratio $r_t(\theta)$"); ax.set_title(title, fontsize=9)
+    ax.grid(alpha=0.3); ax.legend(fontsize=8, loc="upper left" if A > 0 else "lower left")
+ax0.set_ylabel("objective")
+fig.tight_layout(); plt.show()
+```
+
+Left: once the action is $1+\epsilon$ times more likely than it was, the
+objective goes **flat** — no gradient, no incentive to keep pushing. Right: the
+mirror image. In both plots the flat part is on the side the update would move
+toward, which is exactly the side that needs a brake.
 
 ---
 
@@ -225,7 +309,7 @@ Two things in those numbers, and both matter.
 
 ## The untrained policy already scores 774 {.smaller}
 
-That is exactly the "do nothing" baseline from Week 7 — and it is **by design**.
+That is exactly the "do nothing" baseline from 07 — and it is **by design**.
 
 Residual actions mean an untrained network, whose outputs hover near zero,
 commands the nominal crouch. It stands there, collects the alive bonus and the
@@ -316,6 +400,28 @@ print(f"untrained, stochastic    (what we train on) : {survival(agent2, probe, F
 
 ---
 
+## Survival against noise, no training at all {.smaller}
+
+```{python}
+#| fig-align: center
+log_stds = (0.0, -1.0, -2.0, -3.0)
+stoch = [survival(PPO("MlpPolicy", probe, verbose=0, seed=0, device="cpu",
+                      policy_kwargs=dict(log_std_init=s)), probe, False) for s in log_stds]
+fig, ax = plt.subplots(figsize=(8, 3.2))
+ax.bar([f"log_std_init = {s:.0f}\nstd = {np.exp(s):.3f}" for s in log_stds], stoch, color="#e8743b",
+       label="stochastic policy (what training sees)")
+ax.axhline(500, color="#3b7dd8", lw=2, label="deterministic policy: 500 of 500")
+ax.set_ylabel("steps survived, mean of 5"); ax.legend(fontsize=8, loc="center left"); ax.grid(axis="y", alpha=0.3)
+ax.set_title("the same untrained network, four widths of exploration noise", fontsize=10)
+fig.tight_layout(); plt.show()
+```
+
+The network is identical in every bar. Only the width of the distribution
+changes, and it decides whether PPO's first batch of data is a robot standing
+or a robot on the floor.
+
+---
+
 ## That is the whole failure {.smaller}
 
 The mean policy stands for the full episode. The **sampled** policy falls in
@@ -371,6 +477,28 @@ Thirty thousand steps is **0.02%** of a real locomotion run; the literature uses
 
 ---
 
+## Lab class: on your laptop {.smaller}
+
+```bash
+uv run weeks/08-ppo/lab_train.py          # torch + SB3: uv sync --extra rl
+```
+
+The G1 in `G1WalkEnv` under a PPO policy, in the viewer. `T` trains the
+selected entry of `CONFIGS` **in the background** (about a minute for 30k
+steps) while the window keeps playing; when it finishes the trained policy
+takes over. `D` flips between the mean action and a sampled one — and does
+nothing until you write `choose_action`, because sampling is the exercise.
+
+| Step | Do | Right looks like |
+| --- | --- | --- |
+| 1 | `ENTER` | std 1.0 on a ±1 range; the deterministic robot stands 500 steps |
+| 2 | write `choose_action`, `D` | the sampled robot lasts tens of steps: this is PPO's training data |
+| 3 | `T`, wait, `D` a few times | trained on wreckage: what it learned, and from what |
+| 4 | `2`, `D`; then `T` | stochastic survival in the hundreds; a trained policy that stands |
+| 5 | add `log_std_init = -4`, predict, `T` | it still does not walk; the student quotes the 0.02% |
+
+---
+
 ## Exercises {.smaller}
 
 1. **No baseline.** Delete the return standardisation from REINFORCE. How much
@@ -392,7 +520,7 @@ Thirty thousand steps is **0.02%** of a real locomotion run; the literature uses
 
 ## Next week
 
-**Week 9 — reward shaping.** We take a real locomotion reward apart term by term,
+**09 — reward shaping.** We take a real locomotion reward apart term by term,
 remove them one at a time, and catalogue the pathology each one produces.
 
 Today's lunging robot is the first entry in that catalogue.

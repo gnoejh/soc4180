@@ -1,5 +1,5 @@
 ---
-title: "Week 3 — Inverse Kinematics"
+title: "3 — Inverse Kinematics"
 subtitle: "Put the foot *there* · SOC4180 Robot and AI"
 author: "Hong Jeong"
 format:
@@ -11,7 +11,7 @@ jupyter: python3
 ---
 
 ::: {.content-visible when-format="ipynb"}
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gnoejh/soc4180/blob/main/weeks/w03-inverse-kinematics/lab.ipynb)
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gnoejh/soc4180/blob/main/weeks/03-inverse-kinematics/lab.ipynb)
 
 **Before you start, two things:**
 
@@ -115,6 +115,65 @@ Three lessons in one table:
 
 ---
 
+
+## Seen, not read {.smaller}
+
+Differentiate the law of cosines and the sensitivity of angle to distance falls
+out with $\sin\theta$ in the denominator:
+
+$$\left|\frac{d\theta}{d\,d}\right| = \frac{d}{\ell_1\,\ell_2\,\sin\theta}$$
+
+At full reach $\theta \to \pi$, $\sin\theta \to 0$, and one millimetre of target
+asks for whole degrees of knee.
+
+```{python}
+#| fig-align: center
+import matplotlib.pyplot as plt
+
+d = np.linspace(abs(thigh - shin) + 1e-3, thigh + shin - 1e-4, 600)
+c = (d**2 - thigh**2 - shin**2) / (2 * thigh * shin)
+bend = np.pi - np.arccos(c)                       # bend = 0 is a straight leg
+sens = d / (thigh * shin * np.sqrt(1 - c**2))     # |d theta / d d|
+
+fig, (ax0, ax1) = plt.subplots(1, 2, figsize=(9.6, 4.2))
+
+# left: one target distance, both solutions, drawn inside the reachable ring
+d_show = 0.45
+phi = np.arccos((thigh**2 + d_show**2 - shin**2) / (2 * thigh * d_show))   # hip angle
+ax0.add_patch(plt.Circle((0, 0), thigh + shin, color="#3b7dd8", alpha=0.07, zorder=0))
+ax0.add_patch(plt.Circle((0, 0), abs(thigh - shin), color="w", zorder=1))
+for r in (thigh + shin, abs(thigh - shin)):
+    ax0.add_patch(plt.Circle((0, 0), r, fill=False, ls=":", color="0.5", zorder=1))
+for sgn, style, col, label in ((+1, "-", "#3b7dd8", "knee forward"),
+                               (-1, "--", "#e8743b", "knee back")):
+    kx, kz = sgn * thigh * np.sin(phi), -thigh * np.cos(phi)
+    ax0.plot([0, kx, 0], [0, kz, -d_show], style, lw=4, color=col,
+             solid_capstyle="round", label=label, zorder=3)
+    ax0.plot(kx, kz, "o", ms=8, color="w", mec="k", mew=1.5, zorder=4)
+ax0.plot(0, 0, "ko", ms=6, zorder=4)
+ax0.plot(0, -d_show, "rs", ms=8, label=f"target, d = {d_show} m", zorder=4)
+ax0.annotate("hip", (0, 0), xytext=(6, 4), textcoords="offset points")
+ax0.set_aspect("equal"); ax0.set_xlim(-0.7, 0.7); ax0.set_ylim(-0.72, 0.3)
+ax0.set_xlabel("x (m)"); ax0.set_ylabel("z (m)")
+ax0.legend(fontsize=8, loc="upper left")
+ax0.set_title("one distance, two solutions; reach is the ring", fontsize=10)
+
+# right: knee bend and its sensitivity against distance
+ax1.plot(d, np.degrees(bend), lw=2, color="#3b7dd8")
+ax1.set_xlabel("hip-to-foot distance d (m)")
+ax1.set_ylabel("knee bend (deg)", color="#3b7dd8")
+ax1.axvline(thigh + shin, color="0.5", ls=":")
+ax1.text(thigh + shin - 0.006, 8, "full reach", rotation=90, fontsize=8, color="0.4", ha="right")
+ax2 = ax1.twinx()
+ax2.semilogy(d, np.degrees(sens), lw=1.5, color="#e8743b")
+ax2.set_ylabel(r"$|d\theta/dd|$ (deg per metre)", color="#e8743b")
+ax1.set_title("the same millimetre costs more and more knee", fontsize=10)
+ax1.grid(alpha=0.3)
+fig.tight_layout(); plt.show()
+```
+
+---
+
 ## Why we cannot stop there
 
 The closed form handles two joints in a plane. A real foot pose is **six
@@ -172,6 +231,67 @@ for lam in (0.0, 1e-3, 1e-2, 1e-1):
 
 ---
 
+
+## Where the formula comes from {.smaller}
+
+Ask for the $\Delta q$ that minimises
+
+$$\|J\,\Delta q - \mathbf{e}\|^2 \;+\; \lambda^2\,\|\Delta q\|^2 .$$
+
+The first term wants the error gone; the second charges for joint motion.
+Setting the gradient to zero gives $(J^{\mathsf T}J + \lambda^2 I)\,\Delta q =
+J^{\mathsf T}\mathbf{e}$, which rearranges into the update on the previous slide.
+
+Write $J = U\,\Sigma\,V^{\mathsf T}$ and the update scales each singular
+direction by
+
+$$\frac{\sigma_i}{\sigma_i^2 + \lambda^2} \;\approx\;
+\begin{cases} 1/\sigma_i & \sigma_i \gg \lambda \quad\text{the true inverse}\\[2pt]
+\sigma_i/\lambda^2 \to 0 & \sigma_i \ll \lambda \quad\text{switched off}\end{cases}$$
+
+$\lambda$ is a **threshold**: directions the Jacobian barely moves are ignored
+rather than amplified. That is the whole trick.
+
+---
+
+## The same sweep, from both poses {.smaller}
+
+```{python}
+#| fig-align: center
+crouch = soc4180.WalkingController(model).nominal        # the week 4 crouch
+bent = mujoco.MjData(model); bent.qpos[:] = crouch; mujoco.mj_forward(model, bent)
+mujoco.mj_jacSite(model, bent, jac_p, jac_r, kin.foot_site_id(model, "left"))
+J_crouch = np.vstack([jac_p, jac_r])[:, kin.leg_dof_indices(model, "left")]
+
+lams = np.logspace(-6, 1, 29)
+fig, (ax0, ax1) = plt.subplots(1, 2, figsize=(9.6, 3.8))
+for Jp, label, col in ((J, "stand: straight leg", "#e8743b"),
+                       (J_crouch, "crouch: bent knee", "#3b7dd8")):
+    size, drop = [], []
+    for lam in lams:
+        dq = Jp.T @ np.linalg.solve(Jp @ Jp.T + lam**2 * np.eye(6), err)
+        size.append(np.linalg.norm(dq)); drop.append(-(Jp @ dq)[2] * 1000)
+    ax0.loglog(lams, size, lw=2, color=col, label=label)
+    ax1.semilogx(lams, drop, lw=2, color=col, label=label)
+ax0.set_xlabel(r"$\lambda$"); ax0.set_ylabel(r"$\|\Delta q\|$ (rad)"); ax0.legend(fontsize=8)
+ax0.set_title("how much joint motion one step asks for", fontsize=10)
+ax1.axhline(50, color="0.5", ls=":"); ax1.text(2e-6, 46, "asked for 50 mm", fontsize=8, color="0.4")
+ax1.set_xlabel(r"$\lambda$"); ax1.set_ylabel("foot lowered by (mm), first order")
+ax1.set_title("how much of the request one step delivers", fontsize=10)
+for a in (ax0, ax1):
+    a.grid(alpha=0.3)
+fig.tight_layout(); plt.show()
+```
+
+Read the orange line left to right. Undamped, the straight leg asks for tens of
+thousands of radians and lowers the foot 22 mm of the 50 requested; by
+$\lambda = 10^{-4}$ it asks for a sensible 4 rad and delivers **nothing** — there
+is no direction to deliver it in. The blue line delivers the full 50 mm for
+any $\lambda$ up to $10^{-3}$ and only fades past $10^{-2}$. That fade is the
+trade: at $\lambda = 1$ the crouched leg moves 0.4 mm per step.
+
+---
+
 ## That table is a singularity {.smaller}
 
 Those numbers are not a quirk of the example. The `stand` keyframe has **every
@@ -188,6 +308,35 @@ print(f"condition number     : {sv[0]/sv[-1]:.3e}")
 A straight leg has **no direction that shortens it**. The Jacobian has lost a
 rank, undamped IK divides by nearly zero, and no amount of iteration helps —
 the information simply is not there.
+
+---
+
+
+## Six singular values, two poses {.smaller}
+
+```{python}
+#| fig-align: center
+sv_crouch = np.linalg.svd(J_crouch, compute_uv=False)
+fig, ax = plt.subplots(figsize=(8.4, 3.4))
+x = np.arange(6)
+ax.bar(x - 0.2, sv, 0.4, color="#e8743b", label="stand (straight leg)")
+ax.bar(x + 0.2, sv_crouch, 0.4, color="#3b7dd8", label="crouch (bent knee)")
+ax.set_yscale("log"); ax.set_xticks(x, [f"$\\sigma_{i + 1}$" for i in x])
+ax.set_ylabel("singular value of $J$ (log)"); ax.legend(fontsize=8, loc="lower left")
+for xi, (a, b) in enumerate(zip(sv, sv_crouch)):
+    ax.annotate(f"{a:.1e}", (xi - 0.2, a), xytext=(0, 3), textcoords="offset points",
+                ha="center", fontsize=7)
+    ax.annotate(f"{b:.2f}", (xi + 0.2, b), xytext=(0, 3), textcoords="offset points",
+                ha="center", fontsize=7)
+ax.set_title(f"the sixth direction: {sv[-1]:.1e} straight, {sv_crouch[-1]:.3f} crouched "
+             f"— a factor of {sv_crouch[-1] / sv[-1]:,.0f}", fontsize=10)
+ax.grid(axis="y", alpha=0.3); fig.tight_layout(); plt.show()
+```
+
+Five of the six singular values barely change between the poses. The sixth is
+the direction that *shortens the leg*, and bending the knee restores it by a
+factor of about a hundred thousand. That one number is why every gait in the
+course starts from a crouch.
 
 ---
 
@@ -305,6 +454,52 @@ Only a residual that shrinks slowly is a solver problem.
 
 ---
 
+
+## Why exactly there {.smaller}
+
+```{python}
+#| fig-align: center
+hip = anchor("left_hip_pitch_link")
+angles = np.linspace(0, 2 * np.pi, 90)
+fig, (ax0, ax1) = plt.subplots(1, 2, figsize=(9.6, 4.0))
+for rz, col, label in ((0.04, "#3b7dd8", "circle, 4 cm tall"),
+                       (0.06, "#e8743b", "stretched, 6 cm tall")):
+    seed = crouch.copy(); dist, tg, ach = [], [], []
+    for angle in angles:
+        goal = centre + np.array([0.09 * np.cos(angle), 0.0, rz * np.sin(angle)])
+        r = kin.ik_legs(model, scratch, data.qpos[:3], data.qpos[3:7],
+                        {**feet, "left": (goal, feet["left"][1])}, seed_qpos=seed)
+        q = seed.copy(); q[:3] = data.qpos[:3]; q[3:7] = data.qpos[3:7]
+        for side in ("left", "right"):
+            q[kin.leg_qpos_indices(model, side)] = r[side]
+        seed = q
+        dist.append(np.linalg.norm(goal - hip))
+        tg.append(goal); ach.append(soc4180.fk_foot(model, q, "left")[0])
+    tg, ach = np.array(tg), np.array(ach)
+    ax0.plot(tg[:, 0], tg[:, 2], ":", color=col, lw=1.5, label=f"{label}: asked")
+    ax0.plot(ach[:, 0], ach[:, 2], "-", color=col, lw=2, label="achieved")
+    ax1.plot(np.degrees(angles), dist, color=col, lw=2, label=label)
+ax0.set_aspect("equal"); ax0.set_xlabel("x (m)"); ax0.set_ylabel("z (m)")
+ax0.legend(fontsize=7, loc="upper center", bbox_to_anchor=(0.5, -0.22), ncol=2)
+ax0.set_title("target vs achieved foot path (side view)", fontsize=10)
+ax1.axhline(thigh + shin, color="k", ls="--", lw=1)
+ax1.text(5, thigh + shin + 0.002, f"reach = {thigh + shin:.4f} m", fontsize=8)
+ax1.set_xlabel("angle around the circle (deg)"); ax1.set_ylabel("hip-to-target distance (m)")
+ax1.legend(fontsize=8, loc="lower left")
+ax1.set_title("the residual is non-zero exactly where this crosses the line", fontsize=10)
+for a in (ax0, ax1):
+    a.grid(alpha=0.3)
+fig.tight_layout(); plt.show()
+```
+
+For about 30° around the bottom of the stretched circle the hip-to-target
+distance climbs **above the leg's reach**, and that is precisely where the
+achieved path flattens off the dotted target. Everywhere else the two curves
+are indistinguishable at this scale. Reachability is a property of the
+*target*, and you can check it with a ruler before running any solver.
+
+---
+
 ## Two habits worth keeping
 
 **Warm starting.** Each solve begins from the previous answer. It converges in
@@ -337,6 +532,31 @@ model**, and the robot walks.
 
 ---
 
+
+## Lab class: on your laptop {.smaller}
+
+```bash
+uv run weeks/03-inverse-kinematics/lab_ik.py
+```
+
+The G1 in the crouch, a **red** target you move with the arrow keys, a **green**
+sphere at the foot, and a translucent sphere showing the leg's reach. Nothing is
+simulated; the pelvis never moves.
+
+The solver is yours. Until you write `dls_step` the foot does not follow the
+target, because the package's solver is not called — the script only measures
+the error, fetches the Jacobian and clamps to the joint limits.
+
+| Step | Do | Right looks like |
+| --- | --- | --- |
+| 1 | write `dls_step` | the green sphere chases the red one; residual < 1e-4 |
+| 2 | `[` to $\lambda = 10^{-6}$, `S` for the straight leg, arrow down | huge $\|\Delta q\|$, foot stays; `S` again and it drops |
+| 3 | push the target out of the translucent sphere | residual freezes at one value; hip distance > reach |
+| 4 | `]` to $\lambda = 1$ | the foot creeps: find the largest $\lambda$ that still tracks |
+| 5 | add two entries to `TARGETS`, one unreachable | your prediction is right before you press SPACE |
+
+---
+
 ## Exercises {.smaller}
 
 1. **Both elbows.** The knee has two solutions. Force the other one by seeding
@@ -357,7 +577,7 @@ model**, and the robot walks.
 
 ## Next week
 
-**Week 4 — the robot walks.** Footstep planning, the linear inverted pendulum,
+**04 — the robot walks.** Footstep planning, the linear inverted pendulum,
 and the analytic gait that carries a 29-DOF humanoid across the floor with no
 learning of any kind.
 

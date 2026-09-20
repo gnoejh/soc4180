@@ -1,5 +1,5 @@
 ---
-title: "Week 1 — Robots, Simulation, MuJoCo and MJCF"
+title: "1 — Robots, Simulation, MuJoCo and MJCF"
 subtitle: "SOC4180 · Robot and AI"
 author: "Hong Jeong"
 format:
@@ -11,7 +11,7 @@ jupyter: python3
 ---
 
 ::: {.content-visible when-format="ipynb"}
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gnoejh/soc4180/blob/main/weeks/w01-intro/lab.ipynb)
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gnoejh/soc4180/blob/main/weeks/01-intro/lab.ipynb)
 
 **Before you start, two things:**
 
@@ -634,6 +634,40 @@ wins a little. That residue is where week 5 begins.
 
 ---
 
+## The droop, against the gain {.smaller}
+
+A proportional servo produces torque only through its error, so holding a load
+means holding an error: $\tau = k_p(\text{ctrl} - q)$ balances gravity's
+torque $\tau_g$ at a droop of $q - \text{ctrl} = -\tau_g / k_p$.
+
+```{python}
+#| fig-align: center
+import matplotlib.pyplot as plt
+
+def droop(kp, seconds=3.0):
+    m = mujoco.MjModel.from_xml_string(LEG.replace('kp="200"', f'kp="{kp}"'))
+    d = mujoco.MjData(m); d.qpos[:] = TARGET; d.ctrl[:] = TARGET
+    while d.time < seconds:
+        mujoco.mj_step(m, d)
+    return d.qpos - TARGET
+
+gains = np.array([5, 10, 20, 50, 100, 200, 500])
+hip = np.array([droop(k)[0] for k in gains])
+fig, ax = plt.subplots(figsize=(7.6, 3.4))
+ax.loglog(gains, -hip, "o-", lw=2, color="#3b7dd8", label="hip droop, measured")
+ax.loglog(gains, -hip[-2] * 200 / gains, "--", color="0.5", label=r"$\propto 1/k_p$")
+ax.set_xlabel("$k_p$"); ax.set_ylabel("droop below TARGET (rad)"); ax.legend(fontsize=9); ax.grid(alpha=0.3, which="both")
+ax.set_title("a servo commanded to a pose gravity fights never quite gets there", fontsize=10)
+fig.tight_layout(); plt.show()
+print("droop at kp=200:", f"{hip[-2]:+.4f} rad;", "at kp=5:", f"{hip[0]:+.3f} rad")
+```
+
+Ten times the gain, a tenth of the error — and never zero. Removing the error
+entirely needs a term that remembers (an integrator) or one that knows about
+gravity in advance (feedforward). Both are week 5.
+
+---
+
 ## `model` is the robot; `data` is the moment {.smaller}
 
 You have been using both since the third cell. They are not the same kind of
@@ -779,6 +813,38 @@ contact forces act.
 
 ---
 
+## Watching the floor push back {.smaller}
+
+```{python}
+#| fig-align: center
+d = soc4180.keyframe_data(model, "stand")
+t, total, ncon = [], [], []
+force = np.zeros(6)
+while d.time < 1.0:
+    mujoco.mj_step(model, d)
+    s = 0.0
+    for i in range(d.ncon):
+        mujoco.mj_contactForce(model, d, i, force); s += force[0]
+    t.append(d.time); total.append(s); ncon.append(d.ncon)
+
+fig, ax = plt.subplots(figsize=(8.4, 3.2))
+ax.plot(t, total, lw=1.5, color="#3b7dd8", label="sum of contact normal forces")
+ax.axhline(model.body_mass.sum() * 9.81, color="k", ls="--", lw=1, label="weight $mg$")
+ax.set_xlabel("time (s)"); ax.set_ylabel("N"); ax.legend(fontsize=9, loc="lower right"); ax.grid(alpha=0.3)
+ax2 = ax.twinx(); ax2.plot(t, ncon, color="#e8743b", lw=1, drawstyle="steps-post"); ax2.set_ylabel("contacts", color="#e8743b")
+ax.set_title("the keyframe starts a hair above the floor; the robot lands, rings, and settles", fontsize=10)
+fig.tight_layout(); plt.show()
+```
+
+$$\sum_i F_{n,i} = m g \quad\text{once nothing is accelerating}$$
+
+The first few milliseconds are a landing: the keyframe places the robot a
+fraction of a millimetre above the floor, the spheres touch down one by one,
+and the force overshoots before the servos settle. After that the sum is the
+weight, to the decimal.
+
+---
+
 ## Run it twice {.smaller}
 
 ```{python}
@@ -815,6 +881,63 @@ here and 0.142 m on a Colab T4.
 **Therefore, all semester: never assert an exact number from a fall, and never
 grade one.** Assert direction and size — "dropped more than 0.5 m", "stayed above
 0.7 m". A stable robot reproduces exactly; a falling one never will.
+
+---
+
+## The amplification, over time {.smaller}
+
+Chaos has a signature: the gap between two nearby runs grows **exponentially**,
+$\delta(t) \approx \delta_0\, e^{\lambda t}$, and $\lambda$ is a property of
+the system, not of the nudge.
+
+```{python}
+#| fig-align: center
+def fall_trace(nudge, steps=1500):
+    d = soc4180.keyframe_data(model, "stand"); d.qpos[knee] += nudge; out = []
+    with soc4180.actuation_disabled(model):
+        for _ in range(steps):
+            mujoco.mj_step(model, d); out.append(d.qpos.copy())
+    return np.array(out)
+
+ref = fall_trace(0.0)
+tt = np.arange(1, 1501) * model.opt.timestep
+fig, ax = plt.subplots(figsize=(8.4, 3.4))
+for nudge, col in ((1e-12, "#3b7dd8"), (1e-9, "#2a9d5c"), (1e-6, "#e8743b")):
+    gap = np.abs(fall_trace(nudge) - ref).max(axis=1)
+    ax.semilogy(tt, np.maximum(gap, 1e-17), lw=1.5, color=col, label=f"knee nudged {nudge:.0e} rad")
+ax.semilogy(tt, 1e-12 * np.exp(3.8 * tt), ls=":", color="0.4", label=r"$10^{-12}\,e^{3.8\,t}$")
+ax.set_xlabel("time (s)"); ax.set_ylabel("max |difference in qpos|"); ax.legend(fontsize=8, loc="lower right")
+ax.grid(alpha=0.3, which="both"); ax.set_title("three nudges, one slope: the slope is the robot's", fontsize=10)
+fig.tight_layout(); plt.show()
+```
+
+Parallel lines on a log axis: the *rate* of separation is the same for all
+three, and it is about $e^{3.8}$ — forty-fold — per second. That number belongs
+to the falling robot, and it is why the same code gives a different heap on a
+different machine.
+
+---
+
+## Lab class: on your laptop {.smaller}
+
+```bash
+uv run weeks/01-intro/lab_mjcf.py
+```
+
+The two-link leg from the slides, as text at the top of the file. The script
+compiles it, prints what the compiler made of it, and opens the viewer with the
+servos holding `TARGET`. `A` kills the servos, `0` commands zero, `T` restores
+the target, `G` is the Moon, `ENTER` prints the droop and the integrator's
+warning count. Every step is an edit to the XML and a fresh run:
+
+| Step | Change | Right looks like |
+| --- | --- | --- |
+| 1 | none; `A`, `A`, `ENTER` | a pendulum, then a held pose with a few hundredths of droop, explained |
+| 2 | `<freejoint/>` on `upper_leg`, then a parent body | the compiler's refusal read aloud; `nq`, `nv` predicted before the run |
+| 3 | `kp` 200 → 5 | droop written down at each; it never reaches zero |
+| 4 | `timestep="0.02"` | servos off: merely different; servos on: `BADQACC` and `qpos` reset to zero |
+| 5 | a foot body with a hinge | `nq` up by one, and it moves with the knee |
+| 6 | `rgba` into a `<default>` class | the picture unchanged |
 
 ---
 

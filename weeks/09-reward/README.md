@@ -1,6 +1,6 @@
-# Week 9 — Reward Shaping
+# 09 — Reward Shaping
 
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gnoejh/soc4180/blob/main/weeks/w09-reward/lab.ipynb)
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gnoejh/soc4180/blob/main/weeks/09-reward/lab.ipynb)
 
 | | |
 | --- | --- |
@@ -56,8 +56,48 @@ follow it. That is Week 10.
 Single seed, single budget. The direction is real; the exact numbers are noise.
 Exercise 6 has students re-run with three seeds.
 
+## Lab class: on your laptop
+
+```bash
+uv run weeks/09-reward/lab_reward.py       # torch + SB3: uv sync --extra rl
+```
+
+`G1WalkEnv` in the viewer under a PPO policy, with `VARIANTS` — the reward
+weightings from the lecture, as `reward_weights` overrides — selectable with
+keys `1`–`9`. **`T` trains the selected variant in a background thread** (40k
+steps, `log_std_init = -2`, roughly two minutes on a laptop CPU) while the
+window keeps playing; the trained policy takes over when it finishes.
+
+```
+1..9    select a variant (trained if trained)     T   train it (background)
+R       reset      SPACE   pause      ENTER   every reward term this step, weighted
+```
+
+Drawn on the robot: a reward bar above the head (green while tracking is being
+earned, orange when only alive) and **yellow feet** whenever the env counts a
+foot airborne — the `air_time` term made visible. Each episode ends with
+return, steps, distance and the feet-up fraction, the three columns of the
+lecture's table.
+
+`extra_reward(env, info, x_before, x_after)` is the student's own term, added
+through a `gym.Wrapper` on top of the variant, and returns 0 as shipped.
+
+| Step | Change | Right looks like |
+| --- | --- | --- |
+| 1 | `1`, `T` | a return predicted from the hand ranking before training ends |
+| 2 | watch a full trained episode | standing; `ENTER` shows alive + upright carrying the score |
+| 3 | `4`, `T`; then `2`, `3` | only "+ both" leaves the standing pose, and it goes backwards |
+| 4 | potential-based term with $\Phi(s) = x$, `1`, `T` | behaviour unchanged; the telescoping identity quoted |
+| 5 | pay for torso $x$-velocity with `upright` at 0, `T` | the student watches the whole episode before describing it |
+
+Training runs are single-seed and short, exactly like the lecture's: the
+direction of each result is the lesson, the exact numbers are not.
+
+`SOC4180_AUTOCLOSE=8 uv run weeks/09-reward/lab_reward.py` closes the window
+by itself, which is how the script is smoke-tested (training is not triggered).
+
 ## Rebuild
 
 ```bash
-quarto render weeks/w09-reward/slides.qmd     # ~7 minutes; it trains four times
+quarto render weeks/09-reward/slides.qmd     # ~7 minutes; it trains four times
 ```

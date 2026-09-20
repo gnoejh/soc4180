@@ -73,8 +73,9 @@ def build(out: pathlib.Path) -> list[dict]:
 
 
 def _card(w: dict) -> str:
-    num = w["slug"][1:3]
-    title = html.escape(w["title"])
+    num = w["slug"].split("-")[0]
+    # The deck title starts with the same number the card already shows.
+    title = html.escape(re.sub(r"^(?:Week\s+)?\d\d?b?\s*—\s*", "", w["title"]))
     subtitle = html.escape(w["subtitle"])
     links = []
     if w["deck"]:

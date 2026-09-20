@@ -1,6 +1,6 @@
-# Week 10 — Scaling
+# 10 — Scaling
 
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gnoejh/soc4180/blob/main/weeks/w10-scaling/lab.ipynb)
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gnoejh/soc4180/blob/main/weeks/10-scaling/lab.ipynb)
 
 | | |
 | --- | --- |
@@ -140,6 +140,45 @@ CPU-only, since JAX has no Windows CUDA wheels. One timed run on Colab is needed
 to set `num_timesteps` so the lab lands at 12–15 minutes — and note that an A100
 will be substantially faster than the T4 the current figure assumes.
 
+## Lab class: on your laptop
+
+```bash
+uv run weeks/10-scaling/lab_many.py
+```
+
+The GPU section is Colab-only, so the laptop lab measures the thing the GPU
+buys — throughput — with the tools a laptop has. `N_ROBOTS` copies of the G1
+are attached into **one scene** with `MjSpec` (names prefixed `r0_`, `r1_`,
+…), so there is one model, one `MjData`, one `mj_step`, and one week 4
+controller whose command is tiled across every robot. They walk side by side.
+
+```
++ / -   one more / fewer robot (rebuilds the scene and reopens the window)
+F       randomise each robot's foot friction (0.3–1.0) and mass (±20%): they diverge
+P       benchmark 1, 2, 4, 8 processes with one robot each, two seconds
+R       restart      ENTER   robot-steps/s measured vs predicted, x real time, hours for 150 M
+```
+
+`predict_rate(n, single)` is the student's model of one process's throughput
+with `n` robots, given the single-robot rate the script measures at start-up;
+it returns `None` as shipped.
+
+| Step | Change | Right looks like |
+| --- | --- | --- |
+| 1 | `ENTER`; `+` three times with `ENTER` each | a written prediction (flat, growing, or shrinking), then measured |
+| 2 | `P` | robot-steps/s for 1/2/4/8 processes, and the core count that explains the ceiling |
+| 3 | arithmetic | hours for 150 M steps at the best rate on this laptop |
+| 4 | `F` | robots that drift apart within a few steps; what a policy trained on all of them at once would have to learn |
+| 5 | `+` until the window drops below 0.25× real time | the cost of one environment in milliseconds |
+
+Measured while writing it: four *overlapping* robots (before the sideways
+offset was applied) ran at 2,459 robot-steps/s in one process against ~13,000
+for one robot alone — contacts between robots are not free, which is itself a
+point about batching.
+
+`SOC4180_AUTOCLOSE=8 uv run weeks/10-scaling/lab_many.py` closes the window by
+itself, which is how the script is smoke-tested.
+
 ## Rebuilding this week
 
 `mujoco_playground` must be present or the config cells fail, and a plain
@@ -148,7 +187,7 @@ first:
 
 ```bash
 uv sync --extra rl --extra gpu --extra env
-quarto render weeks/w10-scaling/slides.qmd
+quarto render weeks/10-scaling/slides.qmd
 ```
 
 The setup cell's auto-restart calls `os.kill(os.getpid(), 9)` **only when
@@ -157,5 +196,5 @@ The setup cell's auto-restart calls `os.kill(os.getpid(), 9)` **only when
 ## Rebuild
 
 ```bash
-quarto render weeks/w10-scaling/slides.qmd
+quarto render weeks/10-scaling/slides.qmd
 ```

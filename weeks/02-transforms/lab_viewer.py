@@ -1,6 +1,6 @@
 """Week 2 lab, on your laptop: pose the leg, predict the foot, then look.
 
-    uv run weeks/w02-transforms/lab_viewer.py
+    uv run weeks/02-transforms/lab_viewer.py
 
 A window opens with the G1 frozen in the first pose of POSES. Physics is never
 stepped: this is kinematics, so the robot holds poses it could never balance in.

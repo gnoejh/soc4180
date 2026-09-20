@@ -1,6 +1,6 @@
-# Week 6 — Sensing and State Estimation
+# 06 — Sensing and State Estimation
 
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gnoejh/soc4180/blob/main/weeks/w06-sensing/lab.ipynb)
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gnoejh/soc4180/blob/main/weeks/06-sensing/lab.ipynb)
 
 | | |
 | --- | --- |
@@ -47,8 +47,42 @@ on real hardware. Body height and world position are explicitly excluded as
 privileged, with asymmetric actor-critic introduced as the principled way to use
 privileged data without making the policy undeployable.
 
+## Lab class: on your laptop
+
+```bash
+uv run weeks/06-sensing/lab_imu.py
+```
+
+The G1 standing in the crouch (or walking, on `W`), with three arrows hanging
+from the torso IMU. Each is an estimate of "down" computed from the IMU alone
+and drawn back in the world frame, so a correct estimate is a vertical arrow:
+**orange** is the accelerometer's tilt, **cyan** the integrated gyroscope,
+**green** the student's `my_filter`, and a thin **white** arrow is the truth.
+
+```
+W       walk / stand (restarts)        N   inject gyro bias 0.02 rad/s + accel noise
+[ ]     alpha: trust the gyro less / more        R   restart, estimates re-aligned
+ENTER   mean and final error (deg) of each estimate over the last 3 s
+double-click a body, then ctrl-drag: push it -- the best experiment in the lab
+```
+
+`my_filter(roll, pitch, gyro, accel, dt, alpha)` returns `None` as shipped, and
+there is no green arrow until it is written. The complementary filter is one
+line per axis; `soc4180.tilt_from_accel` gives the accelerometer's answer.
+
+| Step | Change | Right looks like |
+| --- | --- | --- |
+| 1 | push the standing robot | orange swings wildly during the push and settles afterwards; the student says why |
+| 2 | `N`, then `ENTER` twice | cyan leans a little more each time and never returns: drift |
+| 3 | write `my_filter` | green sits inside white standing, pushed, and with `N` on |
+| 4 | `W`, then sweep `[` `]` | a worst $\alpha$ found, and the trade named (mean error vs drift) |
+| 5 | `SITE = "pelvis"` | an explanation either way; the pelvis is kicked harder by footfalls |
+
+`SOC4180_AUTOCLOSE=6 uv run weeks/06-sensing/lab_imu.py` closes the window by
+itself, which is how the script is smoke-tested.
+
 ## Rebuild
 
 ```bash
-quarto render weeks/w06-sensing/slides.qmd
+quarto render weeks/06-sensing/slides.qmd
 ```

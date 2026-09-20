@@ -1,6 +1,6 @@
-# Week 4 — Making a Humanoid Walk
+# 04 — Making a Humanoid Walk
 
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gnoejh/soc4180/blob/main/weeks/w04-walking/lab.ipynb)
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gnoejh/soc4180/blob/main/weeks/04-walking/lab.ipynb)
 
 **The keystone week.** A 29-DOF humanoid walks using a linear ODE and inverse
 kinematics — no learning of any kind, six weeks before RL appears.
@@ -57,8 +57,47 @@ learned policies later in the course.
 genuinely sensitive, and several nearby settings fall over — which is what makes
 the exercises worth doing.
 
+## Lab class: on your laptop
+
+```bash
+uv run weeks/04-walking/lab_walk.py
+```
+
+The walker live, in real time, in the interactive viewer. `GAITS` at the top of
+the file is a list of named `GaitParams`; keys `1`–`9` select one and restart.
+
+```
+1..9    pick a gait and restart      R   restart       SPACE   pause
+G       Moon gravity on/off          F   ice (friction 0.2) on/off
+ENTER   distance, pelvis height, ZMP range, fell/upright
+double-click a body, then ctrl-drag: push it
+```
+
+Drawn on the floor every frame: the **footstep plan** (grey boxes), the
+**commanded centre-of-mass path** for the current step (white dots), the
+**pelvis** projected down (red) and the **measured ZMP** (yellow). Blue dots are
+the student's own LIPM: `predict_com(x0, v0, zmp, t, omega)` returns `None` as
+shipped, and the exercise is to write the closed-form cosh/sinh solution so the
+blue dots land inside the white ones.
+
+| Step | Change | Right looks like |
+| --- | --- | --- |
+| 1 | write `predict_com` | blue dots inside white on every step; with the sinh sign flipped they run away backwards |
+| 2 | press `2` (no double support) | the student counts the steps before the fall and says which way it went |
+| 3 | press `3`, then lower `step_time` in `GAITS` | a failure point, compared against $1/\omega = 0.247$ s printed at start-up |
+| 4 | press `G` | a prediction from $\omega = \sqrt{g/z_c}$ made *before* looking |
+| 5 | ctrl-drag mid-walk | it never reacts; the student names what a controller would need to know (week 6) |
+| 6 | a gait in `GAITS` that goes further | `ENTER` prints a distance beyond the default's ~1.0 m |
+
+The yellow sphere is the point of the class: the theory says it never leaves
+the stance foot, and every student watches it swing wide of the feet at each
+support exchange.
+
+`SOC4180_AUTOCLOSE=6 uv run weeks/04-walking/lab_walk.py` closes the window by
+itself, which is how the script is smoke-tested.
+
 ## Rebuild
 
 ```bash
-quarto render weeks/w04-walking/slides.qmd
+quarto render weeks/04-walking/slides.qmd
 ```

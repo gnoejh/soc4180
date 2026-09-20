@@ -19,7 +19,8 @@ it and `uv sync` reproduces it, so a lab may only depend on what the lock file
 installs (plus `--extra rl` from week 7). Colab is the no-install fallback for
 the notebook, not the primary lab environment. A week is not finished until it has a lab-class
 artifact students can edit and run locally — week 2's `lab_viewer.py` and week
-2b's `lab_body.py` are the pattern; weeks 0–1 and 3–10 still lack one.
+2b's `lab_body.py` are the pattern, and **every week 0–10 now has one** (see
+*Lab scripts* below).
 
 **Week 0 is the day-one stack/vocabulary lecture, taught before Week 1.** Every
 week names which of its five layers it belongs to.
@@ -35,17 +36,17 @@ agentic content returns only where it attaches to the robot, in weeks 14–15.
 
 | Wk | Topic | Deck | Status |
 | --- | --- | --- | --- |
-| 1 | The five-layer robot stack; MuJoCo and MJCF | `w00`, `w01` | built; w01's MJCF section **not yet Colab-tested** |
-| 2 | Transforms and forward kinematics | `w02` | built, Colab-verified; **has a lab-class script** (`lab_viewer.py`); lecture class only — the lab class is `w02b` |
-| 2b | The robot as code: body tree, `qpos` map, the package | `w02b` | built; **not yet Colab-tested**; **has a lab-class script** (`lab_body.py`) |
-| 3 | Inverse kinematics | `w03` | built, Colab-verified |
-| 4 | Contact, balance, analytic walking (LIPM/ZMP) | `w04` | built, Colab-verified |
-| 5 | Actuation, PD control, and CPG gaits | `w05` | built, Colab-verified |
-| 6 | Sensing, state estimation, observation design | `w06` | built, Colab-verified |
-| 7 | From control to learning: MDPs and environment design | `w07` | built, Colab-verified |
-| 8 | Policy gradients and PPO | `w08` | built, Colab-verified |
-| 9 | Reward shaping and diagnosing failed runs | `w09` | built, Colab-verified |
-| 10 | Scaling: GPU-parallel locomotion training | `w10` | built; GPU training **runs on A100, untimed** |
+| 01 | The five-layer robot stack; MuJoCo and MJCF | `00`, `01` | built; figures + `lab_stack.py` / `lab_mjcf.py` added 2026-09-20, **not yet Colab-tested** |
+| 02 | Transforms and forward kinematics | `02` | built, Colab-verified; **has a lab-class script** (`lab_viewer.py`); lecture class only — the lab class is `02b` |
+| 02b | The robot as code: body tree, `qpos` map, the package | `02b` | built; **not yet Colab-tested**; **has a lab-class script** (`lab_body.py`) |
+| 03 | Inverse kinematics | `03` | built; four figures + `lab_ik.py` added 2026-09-20, **not re-tested on Colab since** |
+| 04 | Contact, balance, analytic walking (LIPM/ZMP) | `04` | built; five figures + `lab_walk.py` added 2026-09-20, **not re-tested on Colab since** |
+| 05 | Actuation, PD control, and CPG gaits | `05` | built; four figures + `lab_servo.py` added 2026-09-20, **not re-tested on Colab since** |
+| 06 | Sensing, state estimation, observation design | `06` | built; three figures + `lab_imu.py` added 2026-09-20, **not re-tested on Colab since** |
+| 07 | From control to learning: MDPs and environment design | `07` | built; five figures + `lab_env.py` added 2026-09-20, **not re-tested on Colab since** |
+| 08 | Policy gradients and PPO | `08` | built; three figures + `lab_train.py` added 2026-09-20, **not re-tested on Colab since** |
+| 09 | Reward shaping and diagnosing failed runs | `09` | built; three figures + `lab_reward.py` added 2026-09-20, **not re-tested on Colab since** |
+| 10 | Scaling: GPU-parallel locomotion training | `10` | built; GPU training **runs on A100, untimed**; three figures + `lab_many.py` added 2026-09-20 |
 | 11 | Domain randomization and robustness | — | not written |
 | 12 | Sim-to-real, measured | — | not written |
 | 13 | Perception and imitation | — | not written |
@@ -107,7 +108,7 @@ the standing optimum — 224 steps, −0.524 m, feet lifted 0.08 — i.e. it fal
 backwards. Shaping picks which optimum you land in; it does not buy the search.
 `G1WalkEnv` now takes `reward_weights`; see `DEFAULT_REWARD` in `envs.py`.
 
-### Week 10 — scaling
+### 10 — scaling
 
 **Measured locally (36-core Windows).** Single env 1308 control steps/s (13,083
 physics steps/s), so 150M steps is ~32 hours. `DummyVecEnv` gives **no speedup**
@@ -191,12 +192,78 @@ uv sync --extra rl                             # + gymnasium, SB3, torch (CUDA o
 uv sync --extra gpu                            # + JAX/MJX/playground (Linux/WSL2)
 uv run python -c "import soc4180"              # smoke test
 uv run scripts/view.py --walk                  # interactive viewer (laptop/desktop)
-quarto render weeks/w01-intro/slides.qmd       # -> slides.html + lab.ipynb
+quarto render weeks/01-intro/slides.qmd        # -> slides.html + lab.ipynb
 uv run python scripts/build_site.py            # rendered decks -> _site/ for Pages
 ```
 
 There is no test suite or linter configured. Add the tooling before inventing
 commands for it.
+
+### Lab scripts, weeks 0–10 (added 2026-09-20)
+
+| Week | Script | Fill-in (returns `None` until written) | What changes on screen when it is right |
+| --- | --- | --- | --- |
+| 00 | `lab_stack.py` | `my_controller` (29 servo targets) | keys `1/0/2/3/4/G` switch layers on and off; contact-force arrows on the floor |
+| 01 | `lab_mjcf.py` | the MJCF string and `TARGET` | the compiler's own errors; droop, `BADQACC` count on ENTER |
+| 03 | `lab_ik.py` | `dls_step(J, err, lam)` | the green foot chases the red target inside a translucent reach sphere |
+| 04 | `lab_walk.py` | `predict_com` (LIPM closed form) | blue dots inside the white commanded-CoM dots; yellow ZMP sphere |
+| 05 | `lab_servo.py` | `torque_from_pd` | joints colour by torque; `H` makes the student's law *the* servo |
+| 06 | `lab_imu.py` | `my_filter` (complementary) | three "down" arrows; the green one vertical |
+| 07 | `lab_env.py` | `my_policy(obs, t)` | gravity arrow, reward bar, yellow airborne feet, episode lines |
+| 08 | `lab_train.py` | `choose_action(mean, std, rng)` | `D` flips deterministic/stochastic; `T` trains in a thread |
+| 09 | `lab_reward.py` | `extra_reward` (a wrapper term) | variants trained in a thread; feet-up shown |
+| 10 | `lab_many.py` | `predict_rate(n, single)` | N robots in one scene; `P` benchmarks processes |
+
+Conventions, all followed: a list at the top to extend; one fill-in; keys in
+the docstring; `soc4180.terminal_keys` as the second route; **restarts reuse
+the same `MjData`** (`mj_resetData` + copy `qpos`), because the passive viewer
+is bound to one data object — only `lab_many.py` reopens the viewer, since its
+model changes; and **`SOC4180_AUTOCLOSE=<seconds>` closes the window by
+itself**, so `SOC4180_AUTOCLOSE=6 uv run weeks/NN/lab_x.py < /dev/null` is the
+smoke test. Every script passed it on 2026-09-20.
+
+Facts these scripts and the new figures established, each measured:
+
+- **An explicit servo law fed through `qfrc_applied` is unstable at 500 Hz and
+  fine at 1 kHz.** Zeroing the G1's gains and applying $k_p(\text{ctrl}-q) -
+  k_v\dot q$ by hand blew up (`BADQACC`) after 14 steps at `dt = 0.002`; at
+  `dt = 0.001`, `0.0005` and `0.00025` it walks 0.65 m against 0.66 m with the
+  model's own servos. MuJoCo's position actuator survives 500 Hz only because
+  `implicitfast` integrates its affine bias implicitly. `lab_servo.py`'s `H`
+  therefore runs the student's loop at 1 kHz and says so; `SERVO_HZ = 500` is
+  a lab step, and it is week 1's exercise 14 from the other side.
+- **Every G1 leg joint is critically damped**: $\zeta = k_v / 2\sqrt{k_p M_{ii}}
+  = 1.00$ on all twelve against the mass-matrix diagonal at `stand`
+  (`mj_fullM(model, data, M)` in mujoco 3.12 — it takes the data object). Arms
+  0.7–1.9. That is *why* `kv` varies tenfold while `kp` does not.
+- Knee step response, gravity off: `kp x4` reaches 1% in 0.034 s vs 0.116 s
+  with 2% overshoot and 4x the torque; `kv / 4` overshoots 9%; `kv x4` is 1%
+  short after 0.5 s. Sag vs `kp`: 11.0 mm at 500, 9.4 at 600, 6.0 at 750 (the
+  $1/k_p$ law), falls at 400 and at 1000. The knee exceeds 50 N·m for only
+  **4.0%** of the walk and that limit still drops the robot.
+- Week 6's complementary filter: on the biased-gyro walk, mean error is
+  smallest at $\alpha = 0.9985$ ($\tau = 1.32$ s) and final error at 0.9977.
+  Both bottom out near 0.998 — an earlier draft claimed they pulled opposite
+  ways, and the sweep disproved it. The filter's low-pass time constant is
+  $\tau = -\Delta t / \ln\alpha$.
+- Week 7's grid, re-measured for the figure: only $\kappa = 1.0$ at 100/200 Hz
+  walks (1.05 m); $\kappa = 1.0$ at 50 Hz goes 1.56 m and falls.
+- Week 9's "valley": an open-loop stepping family in `G1WalkEnv` (hip pitch
+  and knee sinusoids, amplitude 0 → 1) scores *less* than standing at every
+  amplitude — first effort, then falling. The reward's optimum is real and no
+  route in that family climbs to it.
+- **Multi-robot scenes work through `MjSpec`**: `frame = spec.worldbody.add_frame();
+  frame.attach_body(child.worldbody.first_body(), "r0_", "")` per robot, then
+  `compile()`. Names get the prefix; actuators and `qpos` are contiguous per
+  robot in attach order (`nq = 36 K`, `nu = 29 K`). **A free-joint body's
+  offset goes in `qpos`, not in the frame's `pos`** — four robots attached at
+  different frame positions all sat at `y = 0` and collided, at 2,459
+  robot-steps/s against ~13,000 for one robot alone. `MjSpec.from_file` wants
+  a `str`, not a `Path`.
+- **Timing cells measure the machine.** Week 10's `SubprocVecEnv` numbers came
+  out 8 processes < 4 processes when rendered while weeks 8 and 9 were
+  training in the background. Never render 8, 9 and 10 concurrently; re-render
+  10 on a quiet machine.
 
 ### The interactive viewer: lab tool, never a notebook cell
 
@@ -215,7 +282,7 @@ seconds here and is invisible in a rendered video.
 **It must never appear as a cell in `lab.ipynb`.** The notebook has to render
 headless under Quarto and on the Pages runner, and run on Colab, where there is
 no window and `launch_viewer` raises. Viewer work lives in `.py` files under the
-week (`weeks/w02-transforms/lab_viewer.py`) and in the README's lab section;
+week (`weeks/02-transforms/lab_viewer.py`) and in the README's lab section;
 the notebook carries the exercises and rendered video. `launch_viewer` takes a
 `key_callback` for passive mode; the lab script uses SPACE/arrows to step
 through poses and draws its markers through `viewer.user_scn` under
@@ -280,28 +347,38 @@ actuator drives one hinge; `ctrlrange == jnt_range`), and copy `qpos` back into
 
 The pipeline is proven; follow it rather than improvising.
 
-1. `weeks/wNN-slug/slides.qmd`, with the notebook-only Colab header (below) and
+1. `weeks/NN-slug/slides.qmd`, with the notebook-only Colab header (below) and
    the `<slug>` updated.
 2. Put reusable code in `src/soc4180/`, not in the slides. Slides show the idea;
    the package carries anything a later week needs.
 3. **Verify a claim before writing it into a slide.** Several assertions in this
    repo were wrong until measured: that the robot falls with `ctrl=0`, that a
    residual was iteration-limited, that a leg segment was 0.194 m long. Run it.
-4. `quarto render weeks/wNN-slug/slides.qmd` — a broken cell fails the render.
-5. Execute the generated notebook standalone with `nbclient` before committing.
-   **For any `eval: false` cell, compile-check it** — nothing else will. A
-   broken f-string reached a student's runtime this way:
+4. `quarto render weeks/NN-slug/slides.qmd` — a broken cell fails the render.
+5. Execute the generated notebook standalone with `nbclient` before committing,
+   **then dump its figures and look at them**:
 
-   ```python
-   compile("".join(cell["source"]), "cell", "exec")   # over every code cell
+   ```bash
+   uv run scripts/check_notebook.py run    weeks/NN-slug/lab.ipynb
+   uv run scripts/check_notebook.py images weeks/NN-slug/lab.ipynb <dir>
    ```
-6. Add `weeks/wNN-slug/README.md` and a row in the top-level README table.
+
+   `run` compiles every code cell first (magics stripped) and then executes
+   them all, `eval: false` included — use `compile` instead of `run` for week
+   10, whose GPU cell would otherwise try to train on the CPU. **For any
+   `eval: false` cell, the compile check is the only check** — a broken
+   f-string reached a student's runtime this way. And a figure that *renders*
+   is not a figure that is *right*: on 2026-09-20 five of the first thirty new
+   figures came out clipped, overlapping or autoscaled wrongly (matplotlib
+   patches do not autoscale the axes; `annotate` does not either), all with a
+   green render. Look at the PNGs.
+6. Add `weeks/NN-slug/README.md` and a row in the top-level README table.
    The README needs a **lab class** section: what students change, and what
    they should see on screen when it is right.
 7. Add the lab-class artifact: a `.py` under the week that students edit and run
-   on their laptops (`uv run weeks/wNN-slug/<name>.py`), using only what
+   on their laptops (`uv run weeks/NN-slug/<name>.py`), using only what
    `uv.lock` installs. It may open the viewer; `lab.ipynb` may not. Follow
-   `weeks/w02-transforms/lab_viewer.py`: a list at the top students extend, a
+   `weeks/02-transforms/lab_viewer.py`: a list at the top students extend, a
    function they fill in, and a visible on-screen difference between right and
    wrong.
 8. **Push, then test it on Colab.** Every environment bug this project hit was
@@ -316,7 +393,7 @@ The pipeline is proven; follow it rather than improvising.
 
 ## Authoring model: one source, two outputs
 
-Each week is a single `weeks/wNN-*/slides.qmd` that Quarto renders into:
+Each week is a single `weeks/NN-*/slides.qmd` that Quarto renders into:
 
 - `slides.html` — self-contained reveal.js deck (**gitignored build artifact**)
 - `lab.ipynb` — student notebook (**committed**; Colab loads it from GitHub)
@@ -518,7 +595,7 @@ So, from PowerShell:
 $env:PATH = "C:\Program Files\Quarto\bin;$env:PATH"
 $env:QUARTO_PYTHON = "W:\soc4180GH\.venv\Scripts\python.exe"
 $env:PYTHONIOENCODING = 'utf-8'
-quarto render weeks/w01-intro/slides.qmd
+quarto render weeks/01-intro/slides.qmd
 ```
 
 **When quarto is unavailable** (another machine, or a broken install), verify a
@@ -534,23 +611,23 @@ what `execute.error: false` catches during a render — but it does **not** prod
   anything real moved, filter them out:
 
   ```bash
-  git diff -- weeks/wNN-slug/lab.ipynb | grep "^[-+]" | grep -v '"id"'
+  git diff -- weeks/NN-slug/lab.ipynb | grep "^[-+]" | grep -v '"id"'
   ```
 
 - **Never leave `lab.ipynb` open in the VS Code notebook editor.** It re-serialises
   the JSON on save — `id` moves above `metadata`, `name`/`output_type` swap — and
-  that is exactly where the unexplained churn in w00/w01/w04/w09 came from. After
+  that is exactly where the unexplained churn in 00/01/04/09 came from. After
   a render the editor offers Save or Ignore: **Ignore, always.** Save writes the
   editor's stale buffer over the notebook quarto just generated, silently
   reverting a week for every student who opens the badge.
 
-- **Cost, measured re-rendering all four:** w00, w01 and w04 take seconds;
-  **w09 takes 746 s**, because it trains four 40k-step PPO runs on CPU.
+- **Cost, measured re-rendering all four:** 00, 01 and 04 take seconds;
+  **09 takes 746 s**, because it trains four 40k-step PPO runs on CPU.
 
-- **They reproduce bit-identically on this machine.** w04's walking numbers and
-  w09's entire ablation table came back unchanged — including `+ both` at 224
+- **They reproduce bit-identically on this machine.** 04's walking numbers and
+  09's entire ablation table came back unchanged — including `+ both` at 224
   steps, −0.524 m, feet up 0.08 — with a fixed seed and `device="cpu"`. The only
-  thing that moved was the wall-clock seconds the w09 cell prints about itself.
+  thing that moved was the wall-clock seconds the 09 cell prints about itself.
   So re-rendering is safe to do freely: **a changed number means a real change.**
 
 ### MUJOCO_GL ordering (this has already broken once)
@@ -914,7 +991,7 @@ anything demonstrating kinematics, so the robot does not fall over mid-lesson.
 ### The whole body (week 2b)
 
 Week 2 teaches one leg and never says which six of the thirty-six numbers it is.
-**`w02b-robot-as-code` is week 2's lab class**: the same robot read as a data
+**`02b-robot-as-code` is week 2's lab class**: the same robot read as a data
 structure, then `lab_body.py` on the laptop. Week 2's deck stays the lecture and
 is unchanged at 46 slides — **do not merge them**, 67 slides is not one session.
 

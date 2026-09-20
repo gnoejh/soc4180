@@ -1,13 +1,13 @@
-# Week 3 — Inverse Kinematics
+# 03 — Inverse Kinematics
 
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gnoejh/soc4180/blob/main/weeks/w03-inverse-kinematics/lab.ipynb)
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gnoejh/soc4180/blob/main/weeks/03-inverse-kinematics/lab.ipynb)
 
 | | |
 | --- | --- |
 | **Runtime** | Local: CPU. **Colab: pick a GPU runtime** (Runtime > Change runtime type > T4). |
 | **Wall clock** | ~1 min |
 | **Convergence risk** | None. No learning. |
-| **Feeds** | Week 4 — the walker calls this solver 500 times a second |
+| **Feeds** | 04 — the walker calls this solver 500 times a second |
 
 ## Objectives
 
@@ -49,8 +49,45 @@ never stepped**. IK is a statement about geometry; a pose it solves perfectly ma
 be one the robot cannot hold. Keeping that separate here is what lets Week 4
 combine them deliberately.
 
+## Lab class: on your laptop
+
+```bash
+uv run weeks/03-inverse-kinematics/lab_ik.py
+```
+
+The G1 frozen in the crouch, a **red** target sphere moved with the arrow keys
+(`,` and `.` for sideways), a **green** sphere at the left foot site, and a
+large translucent sphere centred on the hip showing the leg's reach, measured
+from the model (thigh 0.3409 + shin 0.3000 = 0.6409 m). Physics is never
+stepped and the pelvis never moves.
+
+```
+arrows / , .   move the target          [ ]      lambda ten times smaller / larger
+S              straight-leg <-> crouch seed      R   target back onto the foot
+SPACE          next entry of TARGETS             ENTER   print target, foot, residual
+```
+
+**The solver is the student's.** `dls_step(J, err, lam)` returns `None` as
+shipped, and while it does the foot never moves: the script measures the error,
+fetches `mj_jacSite`, clamps to the joint limits and iterates three times per
+frame, but the damped-least-squares step itself is the exercise.
+
+| Step | Change | Right looks like |
+| --- | --- | --- |
+| 1 | write `dls_step` | the green sphere chases the red one; residual < 1e-4 within a frame |
+| 2 | `[` down to $\lambda = 10^{-6}$, `S` for the straight leg, arrow down | $\|\Delta q\|$ in the thousands and the foot does not come down; `S` again and it drops |
+| 3 | push the target out of the translucent sphere | the residual freezes at one value on every ENTER; printed hip distance exceeds reach |
+| 4 | `]` up to $\lambda = 1$ | the foot creeps; the student names the trade and finds the largest $\lambda$ that still tracks 5 cm in a second |
+| 5 | add two `TARGETS`, one unreachable | the prediction is right before SPACE is pressed |
+
+Step 3 is the one that lands: a residual that does not move with more
+iterations is a geometry problem, and the sphere makes the geometry visible.
+
+`SOC4180_AUTOCLOSE=4 uv run weeks/03-inverse-kinematics/lab_ik.py` closes the
+window after four seconds, which is how the script is smoke-tested.
+
 ## Rebuild
 
 ```bash
-quarto render weeks/w03-inverse-kinematics/slides.qmd
+quarto render weeks/03-inverse-kinematics/slides.qmd
 ```

@@ -1,5 +1,5 @@
 ---
-title: "Week 5 — Actuation, PD Control, and Rhythm"
+title: "5 — Actuation, PD Control, and Rhythm"
 subtitle: "The motors were never ideal · SOC4180 Robot and AI"
 author: "Hong Jeong"
 format:
@@ -11,7 +11,7 @@ jupyter: python3
 ---
 
 ::: {.content-visible when-format="ipynb"}
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gnoejh/soc4180/blob/main/weeks/w05-actuation/lab.ipynb)
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gnoejh/soc4180/blob/main/weeks/05-actuation/lab.ipynb)
 
 **Before you start, two things:**
 
@@ -63,6 +63,81 @@ print(f"kv : {kv.min():.2f} .. {kv.max():.2f}   ({len(np.unique(kv))} distinct v
 
 **Stiffness is uniform; damping is not.** Heavier joints nearer the trunk carry
 more damping, because the same stiffness driving a larger inertia would ring.
+
+---
+
+## One joint is a second-order system {.smaller}
+
+Put the servo law into Newton's law for one joint with effective inertia $M$
+(the other joints held still):
+
+$$M\ddot{q} + k_v\,\dot{q} + k_p\,q = k_p\,\text{ctrl}
+\qquad\qquad
+\omega_n = \sqrt{\frac{k_p}{M}},\qquad
+\zeta = \frac{k_v}{2\sqrt{k_p M}}$$
+
+$\omega_n$ says how fast the joint responds; $\zeta$ says whether it overshoots
+($\zeta < 1$), creeps ($\zeta > 1$), or arrives as fast as possible without
+overshooting ($\zeta = 1$). Read $M$ off the mass matrix and ask what the G1's
+designers chose:
+
+```{python}
+d = soc4180.keyframe_data(model, "stand"); mujoco.mj_forward(model, d)
+M = np.zeros((model.nv, model.nv)); mujoco.mj_fullM(model, d, M)
+dofs = model.jnt_dofadr[model.actuator_trnid[:, 0]]
+zeta = kv / (2 * np.sqrt(kp * M[dofs, dofs]))
+for a in (0, 3, 4, 12, 16):
+    name = mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_ACTUATOR, a)
+    print(f"  {name:26s} M = {M[dofs[a], dofs[a]]:.4f}   kv = {kv[a]:5.2f}   zeta = {zeta[a]:.2f}")
+print(f"\nall twelve leg joints: zeta = {zeta[:12].min():.2f} .. {zeta[:12].max():.2f}")
+```
+
+**Every leg joint is critically damped, $\zeta = 1.00$.** That is why $k_v$
+varies by a factor of ten while $k_p$ does not: the damping was set to
+$2\sqrt{k_p M}$ joint by joint, so the heavy hip and the light ankle respond
+the same way. The arms are looser, 0.7 to 1.9.
+
+---
+
+## The step response, measured {.smaller}
+
+Gravity off, robot floating, and the left knee is asked to go from 0 to 0.5 rad:
+
+```{python}
+#| fig-align: center
+import matplotlib.pyplot as plt
+
+def step_response(kp_scale=1.0, kv_scale=1.0, seconds=0.5):
+    m = soc4180.load_g1(); soc4180.scale_gains(m, kp_scale, kv_scale)
+    m.opt.gravity[:] = 0
+    d = soc4180.keyframe_data(m, "stand")
+    qi = m.jnt_qposadr[m.actuator_trnid[3, 0]]          # the left knee
+    for _ in range(200):
+        mujoco.mj_step(m, d)                              # settle first
+    d.ctrl[3] = 0.5
+    t0, t, q = d.time, [], []
+    while d.time < t0 + seconds:
+        mujoco.mj_step(m, d); t.append(d.time - t0); q.append(d.qpos[qi])
+    return np.array(t), np.array(q)
+
+fig, (ax0, ax1) = plt.subplots(1, 2, figsize=(9.6, 3.6), sharey=True)
+for scale, col in ((0.25, "#e8743b"), (1.0, "k"), (4.0, "#3b7dd8")):
+    t, q = step_response(kp_scale=scale)
+    ax0.plot(t, q, lw=2, color=col, label=f"$k_p$ = {500 * scale:.0f}")
+for scale, col in ((0.25, "#e8743b"), (1.0, "k"), (4.0, "#3b7dd8")):
+    t, q = step_response(kv_scale=scale)
+    ax1.plot(t, q, lw=2, color=col, label=fr"$k_v \times$ {scale}")
+for ax, title in ((ax0, "stiffness sets how fast"), (ax1, "damping sets whether it overshoots")):
+    ax.axhline(0.5, color="0.5", ls=":"); ax.set_xlabel("time after the step (s)")
+    ax.legend(fontsize=8, loc="lower right"); ax.grid(alpha=0.3); ax.set_title(title, fontsize=10)
+ax0.set_ylabel("knee angle (rad)")
+fig.tight_layout(); plt.show()
+```
+
+Four times the stiffness reaches the target three times sooner — and draws
+four times the torque, 1000 N·m against 250 for this half-radian step. A
+quarter of the damping overshoots by 9%; four times the damping never quite
+arrives. The nominal pair does neither, which is what $\zeta = 1$ means.
 
 ---
 
@@ -119,6 +194,43 @@ finite spring holding up a 33 kg robot.
 
 ---
 
+## Sag against stiffness {.smaller}
+
+A spring under a fixed load deflects as $1/k_p$. Sweep the stiffness and check:
+
+```{python}
+#| fig-align: center
+def walk_sag(kp_scale):
+    m = soc4180.load_g1(); soc4180.scale_gains(m, kp_scale, 1.0)
+    c = WalkingController(m, GaitParams(n_steps=8)); d = c.initial_data(); s = []
+    while d.time < c.total_time:
+        d.ctrl[:] = c.control(d.time); mujoco.mj_step(m, d)
+        if d.time > c.params.settle_time:
+            s.append(c.targets_at(d.time)[0][2] - d.qpos[2])
+    return np.mean(s) * 1000, d.qpos[2]
+
+scales = np.array([0.8, 1.0, 1.2, 1.5, 2.0])
+sags, ok = [], []
+for s in scales:
+    mm, z = walk_sag(s); sags.append(mm); ok.append(z > 0.5)
+sags, ok = np.array(sags), np.array(ok)
+fig, ax = plt.subplots(figsize=(7.2, 3.4))
+ax.plot(500 * scales[ok], sags[ok], "o", ms=8, color="#3b7dd8", label="walked: mean sag")
+ax.plot(500 * scales[~ok], np.zeros((~ok).sum()), "x", ms=10, mew=2, color="#e8743b", label="fell")
+kk = np.linspace(400, 1100, 100)
+ax.plot(kk, sags[1] * 500 / kk, "--", color="0.5", label=r"$\propto 1/k_p$ through the nominal point")
+ax.set_xlabel("$k_p$"); ax.set_ylabel("mean pelvis sag (mm)"); ax.set_ylim(bottom=-1)
+ax.legend(fontsize=8); ax.grid(alpha=0.3)
+fig.tight_layout(); plt.show()
+```
+
+Between 500 and 750 the sag follows the spring law. Below 500 the robot does
+not sag more — it **falls**: a leg that gives too much at support exchange has
+stopped supporting. Above 750 it falls too, for the reason on the next slides —
+the gait's timing was tuned against one particular stiffness.
+
+---
+
 ## The motors in this model are infinitely strong {.smaller}
 
 Before tuning anything, check what the simulator is actually giving us:
@@ -163,6 +275,44 @@ for limit in (30, 45, 50, 55, 80, None):
 A crisp threshold: the gait **needs more than 50 N·m** and survives at 55. Below
 that the stance leg cannot hold the robot up during weight transfer, and it goes
 down.
+
+---
+
+## Where the torque goes {.smaller}
+
+```{python}
+#| fig-align: center
+m = soc4180.load_g1()
+c = WalkingController(m, GaitParams(n_steps=8)); d = c.initial_data()
+tt, tau = [], []
+while d.time < c.total_time:
+    d.ctrl[:] = c.control(d.time); mujoco.mj_step(m, d)
+    tt.append(d.time); tau.append(d.actuator_force.copy())
+tt, tau = np.array(tt), np.abs(np.array(tau))
+names = [mujoco.mj_id2name(m, mujoco.mjtObj.mjOBJ_ACTUATOR, i).replace("_joint", "")
+         for i in range(m.nu)]
+peak_tau = tau.max(axis=0)
+
+fig, (ax0, ax1) = plt.subplots(1, 2, figsize=(9.6, 3.6), gridspec_kw={"width_ratios": [1.5, 1]})
+ax0.plot(tt, tau[:, 3], lw=1, color="#3b7dd8", label="left knee")
+ax0.plot(tt, tau[:, 9], lw=1, color="#e8743b", label="right knee")
+for lim, ls in ((50, "--"), (55, ":")):
+    ax0.axhline(lim, color="k", ls=ls, lw=1); ax0.text(0.1, lim + 2, f"{lim} N m", fontsize=8)
+ax0.set_xlabel("time (s)"); ax0.set_ylabel("|knee torque| (N m)")
+ax0.legend(fontsize=8, loc="upper right"); ax0.grid(alpha=0.3)
+ax0.set_title("the knees during the walk", fontsize=10)
+order = np.argsort(peak_tau)[::-1][:8]
+ax1.barh([names[i] for i in order], peak_tau[order], color="#3b7dd8"); ax1.invert_yaxis()
+ax1.axvline(50, color="k", ls="--", lw=1); ax1.set_xlabel("peak |torque| (N m)"); ax1.grid(axis="x", alpha=0.3)
+ax1.set_title("the eight loudest actuators", fontsize=10)
+fig.tight_layout(); plt.show()
+print(f"left knee above 50 N m for {(tau[:, 3] > 50).mean():.1%} of the walk")
+```
+
+The knee holds the body up in single support and spikes at every support
+exchange. It exceeds 50 N·m for about **4% of the walk** — and that is enough.
+A limit that bites for a few hundredths of a second at the wrong moment is a
+limit that drops the robot.
 
 ---
 
@@ -223,6 +373,39 @@ soc4180.show_video(frames, fps=30)
 
 ---
 
+## What the oscillator commands {.smaller}
+
+Two sinusoids per leg, in anti-phase between the legs; the knee only ever bends
+(a half-wave rectified sine) and the ankle counter-rotates to keep the foot
+roughly level:
+
+$$\theta_{\text{hip}} = A_h \sin\phi,\qquad
+\theta_{\text{knee}} = A_k \max(0, \sin\phi),\qquad
+\theta_{\text{ankle}} = -\tfrac{1}{2} A_h \sin\phi,\qquad
+\phi = 2\pi f t \;(+\pi\ \text{for the other leg})$$
+
+```{python}
+#| fig-align: center
+from soc4180 import kinematics as kin
+tt = np.linspace(0, 2.0, 400)
+idx = {s: kin.leg_qpos_indices(model, s) for s in ("left", "right")}
+act_q = np.array([model.jnt_qposadr[model.actuator_trnid[a, 0]] for a in range(model.nu)])
+cmd = np.array([cpg.control(cpg.settle_time + t) for t in tt])       # actuator order
+full = np.tile(cpg.nominal, (len(tt), 1)); full[:, act_q] = cmd
+fig, axs = plt.subplots(2, 1, figsize=(8.4, 4.0), sharex=True)
+for ax, side in zip(axs, ("left", "right")):
+    i = idx[side]
+    for j, lab, col in ((0, "hip pitch", "#3b7dd8"), (3, "knee", "#e8743b"), (4, "ankle pitch", "#2a9d5c")):
+        ax.plot(tt, full[:, i[j]] - cpg.nominal[i[j]], lw=2, color=col, label=lab)
+    ax.set_ylabel(f"{side} leg (rad)"); ax.grid(alpha=0.3)
+axs[0].legend(fontsize=8, ncol=3, loc="upper right"); axs[1].set_xlabel("time (s)")
+fig.tight_layout(); plt.show()
+```
+
+A perfectly plausible stepping pattern. It also has no idea where the floor is.
+
+---
+
 ## Rhythm is not balance {.smaller}
 
 It falls. So does every parameter setting we tried:
@@ -273,6 +456,36 @@ Every remaining week of the course is about closing that loop.
 
 ---
 
+## Lab class: on your laptop {.smaller}
+
+```bash
+uv run weeks/05-actuation/lab_servo.py
+```
+
+The walker live, with a sphere on every leg joint that turns from green to red
+as its torque approaches the reference — the torque limit when one is set.
+`SERVOS` at the top of the file lists (stiffness, damping, limit) settings; keys
+`1`–`6` select one and restart.
+
+`torque_from_pd(kp, kv, ctrl, q, qdot)` is the actuator law, and it is empty.
+Once written, `ENTER` reports how far it is from MuJoCo's `actuator_force`
+(right: ~1e-12). Then **`H` hands the servos over**: the model's gains are
+zeroed and the student's torques go straight into `qfrc_applied` — at **1 kHz**,
+because an explicit spring this stiff is unstable at 500 Hz (week 1, exercise
+14; the engine integrates its own servo implicitly). A correct law changes
+nothing; a wrong or empty one gives the week 0 rag doll.
+
+| Step | Do | Right looks like |
+| --- | --- | --- |
+| 1 | write the law | gap ~1e-12 on `ENTER` |
+| 2 | `H`, then delete the damping term and `R` `H` | identical walk, then ringing |
+| 3 | `2` (50 N·m) then `3` (55 N·m) | knees go red at support exchange; one falls, one walks |
+| 4 | `4` and `5` (half and double $k_p$) | one sinks, one is thrown; the student says which and why |
+| 5 | `SERVO_HZ = 500`, `H` | it blows up; explained with week 1 |
+| 6 | the lowest $k_p$ that walks eight steps, in `SERVOS` | `ENTER` prints its sag; sag against $k_p$ on paper |
+
+---
+
 ## Exercises {.smaller}
 
 1. **Bisect the torque limit.** Narrow the walking threshold between 50 and
@@ -293,7 +506,7 @@ Every remaining week of the course is about closing that loop.
 
 ## Next week
 
-**Week 6 — sensing and state estimation.** The robot has two IMUs and has not
+**06 — sensing and state estimation.** The robot has two IMUs and has not
 used them once. We read gyroscopes and accelerometers, estimate torso
 orientation from noisy signals, and build the observation vector a learned policy
 will eventually consume.

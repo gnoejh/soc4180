@@ -1,13 +1,13 @@
-# Week 2b — The Robot as Code
+# 02b — The Robot as Code
 
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gnoejh/soc4180/blob/main/weeks/w02b-robot-as-code/lab.ipynb)
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gnoejh/soc4180/blob/main/weeks/02b-robot-as-code/lab.ipynb)
 
 | | |
 | --- | --- |
 | **Runtime** | Laptop: CPU, plus a window for the viewer. Colab fallback: **T4 required** — the deck renders the robot. |
 | **Wall clock** | ~1 min |
 | **Convergence risk** | None. No learning, no physics. |
-| **Lecture class** | Week 2 (`w02-transforms`) — transforms, FK, the Jacobian |
+| **Lecture class** | Week 2 (`02-transforms`) — transforms, FK, the Jacobian |
 | **Lab class** | **this deck**, then `lab_body.py` on the laptop |
 | **Feeds** | Week 3 (IK), Week 4 (walking), and every week that indexes `qpos` |
 
@@ -91,7 +91,7 @@ nothing. Use this shape for any future week that adds package code.
 ## Lab class: on your laptop
 
 ```bash
-uv run weeks/w02b-robot-as-code/lab_body.py
+uv run weeks/02b-robot-as-code/lab_body.py
 ```
 
 A window opens with the whole robot frozen in the first pose of `POSES`. Unlike

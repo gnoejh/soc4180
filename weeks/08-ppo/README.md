@@ -1,6 +1,6 @@
-# Week 8 — Policy Gradients and PPO
+# 08 — Policy Gradients and PPO
 
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gnoejh/soc4180/blob/main/weeks/w08-ppo/lab.ipynb)
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gnoejh/soc4180/blob/main/weeks/08-ppo/lab.ipynb)
 
 **The first week that trains anything.**
 
@@ -68,6 +68,44 @@ then scores **776 instead of 95**.
 worth 1250. Fixing this bug removed a bug; 30k steps is 0.02% of a real
 locomotion run. That is Week 10's problem.
 
+## Lab class: on your laptop
+
+```bash
+uv run weeks/08-ppo/lab_train.py          # torch + SB3: uv sync --extra rl
+```
+
+The G1 in `G1WalkEnv`, driven live by a PPO policy. `CONFIGS` at the top lists
+PPO settings (`log_std_init`, `total_timesteps`); keys `1`–`9` select one.
+**`T` trains the selected configuration in a background thread** — about a
+minute for 30k steps on a laptop CPU, with progress every 5k steps in the
+terminal — while the window keeps playing the untrained policy; when training
+finishes, the trained policy takes over. `D` switches between the mean action
+and a sampled one.
+
+```
+T       train the selected config (background)      D   deterministic <-> stochastic
+1..9    select a config (trained if you trained it, else fresh)
+R       reset      SPACE   pause      ENTER   return, steps, action std
+```
+
+`choose_action(mean, std, rng)` returns `None` as shipped, and until it is
+written `D` has no effect: **sampling is the exercise**. One line — a normal
+draw around the mean, clipped to the action space — and the student has written
+the thing that decides whether PPO's first batch of data is a robot standing or
+a robot on the floor. A bar above the head counts steps survived (green
+deterministic, orange stochastic).
+
+| Step | Change | Right looks like |
+| --- | --- | --- |
+| 1 | `ENTER` | std 1.0 on a ±1 range; the deterministic untrained robot survives 500 steps |
+| 2 | write `choose_action`, press `D` | the stochastic robot falls within tens of steps |
+| 3 | `T`, wait, then `D` a few times | a trained policy no better than the untrained one; the student explains what it learned from |
+| 4 | `2` (log_std_init −2), `D`; then `T` | stochastic survival in the hundreds; a trained policy that stands, ~776 |
+| 5 | a `log_std_init = -4` config, prediction first | still not walking; the deck's 0.02% quoted back |
+
+`SOC4180_AUTOCLOSE=8 uv run weeks/08-ppo/lab_train.py` closes the window by
+itself, which is how the script is smoke-tested (training is not triggered).
+
 ## A note on REINFORCE's batch size
 
 Updates use a **batch of 8 episodes**. With one episode per update the variance
@@ -79,5 +117,5 @@ than hiding it.
 ## Rebuild
 
 ```bash
-quarto render weeks/w08-ppo/slides.qmd     # ~6 minutes; it trains
+quarto render weeks/08-ppo/slides.qmd     # ~6 minutes; it trains
 ```

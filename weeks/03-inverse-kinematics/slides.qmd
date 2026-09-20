@@ -55,13 +55,13 @@ Ignore the hip's roll and yaw and the ankle. What is left is a thigh and a shin 
 two links, one plane — and hip, knee and foot are the corners of a **triangle
 whose three sides you know**: thigh $\ell_1$, shin $\ell_2$, and the hip-to-foot
 distance $d$. The law of cosines gives the angle at any corner outright. Written
-for the **knee joint angle** $\theta$ — zero when the leg is straight, the way
-MuJoCo's knee counts — the triangle's interior corner is $\pi - \theta$, and the
-hip corner $\varphi$ comes the same way:
+for the <span style="color:#c0392b">**knee joint angle** ${\color{#c0392b}{\theta}}$</span> — zero when the leg is straight, the way
+MuJoCo's knee counts — the triangle's interior corner is $\pi - {\color{#c0392b}{\theta}}$, and the
+<span style="color:#2e8b57">hip corner ${\color{#2e8b57}{\varphi}}$</span> comes the same way:
 
-$$\cos\theta_{\text{knee}} = \frac{d^2 - \ell_1^2 - \ell_2^2}{2\,\ell_1\ell_2},
+$$\cos{\color{#c0392b}{\theta_{\text{knee}}}} = \frac{d^2 - \ell_1^2 - \ell_2^2}{2\,\ell_1\ell_2},
 \qquad
-\cos\varphi = \frac{\ell_1^2 + d^2 - \ell_2^2}{2\,\ell_1 d}$$
+\cos{\color{#2e8b57}{\varphi}} = \frac{\ell_1^2 + d^2 - \ell_2^2}{2\,\ell_1 d}$$
 
 ```{python}
 try:
@@ -197,10 +197,10 @@ Three lessons in one table:
 Differentiate the law of cosines and the sensitivity of angle to distance falls
 out with $\sin\theta$ in the denominator:
 
-$$\left|\frac{d\theta}{d\,d}\right| = \frac{d}{\ell_1\,\ell_2\,\sin\theta}$$
+$${\color{#c0392b}{\left|\frac{d\theta}{d\,d}\right|}} = \frac{d}{\ell_1\,\ell_2\,\sin{\color{#3b7dd8}{\theta}}}$$
 
-At full reach $\theta \to 0$, $\sin\theta \to 0$, and one millimetre of target
-asks for whole degrees of knee.
+At full reach ${\color{#3b7dd8}{\theta}} \to 0$, $\sin{\color{#3b7dd8}{\theta}} \to 0$, and one millimetre of target
+asks for whole degrees of knee: <span style="color:#3b7dd8">blue is the angle</span>, <span style="color:#c0392b">red its derivative</span>.
 
 ```{python}
 #| fig-align: center
@@ -270,47 +270,43 @@ degrades gracefully when the problem is ill-posed.
 
 ## Differential IK {.smaller}
 
-**Forward kinematics, in velocities** (last week's Jacobian):
+**Forward kinematics, in velocities** (last week's Jacobian). Colour code for
+the rest of the week: <span style="color:#3b7dd8">**blue** is joint motion</span>, <span style="color:#c0392b">**red** is foot motion</span>, $J$ is the map between them:
 
-$$\dot{\mathbf{x}} = J(q)\,\dot{q}$$
+$${\color{#c0392b}{\dot{\mathbf{x}}}} = J(q)\,{\color{#3b7dd8}{\dot{q}}}$$
 
-- $q$ — the vector of joint angles; $\dot{q}$ — how fast each joint is turning
-- $\mathbf{x}$ — the foot (end-effector) position and orientation; $\dot{\mathbf{x}}$ — how fast the foot moves
-- $J(q)$ — the Jacobian: the matrix that turns joint speeds into foot speed, and changes with the pose
+- ${\color{#3b7dd8}{q}}$ — the vector of joint angles; ${\color{#3b7dd8}{\dot{q}}}$ — how fast each joint is turning
+- ${\color{#c0392b}{\mathbf{x}}}$ — the foot (end-effector) position and orientation; ${\color{#c0392b}{\dot{\mathbf{x}}}}$ — how fast the foot moves
+- $J(q)$ — the Jacobian: the matrix that turns <span style="color:#3b7dd8">joint speeds</span> into <span style="color:#c0392b">foot speed</span>, and changes with the pose
 
-*If you know how fast the joints move, the Jacobian tells you how fast the foot moves.*
+*If you know <span style="color:#3b7dd8">how fast the joints move</span>, the Jacobian tells you <span style="color:#c0392b">how fast the foot moves</span>.*
 
-**Inverse kinematics asks the opposite:** *what joint motion produces the foot
-motion I want?* So do not solve for the angles. Solve for a small **change** in
+**Inverse kinematics asks the opposite:** *what <span style="color:#3b7dd8">joint motion</span> produces the <span style="color:#c0392b">foot motion</span> I want?* So do not solve for the angles. Solve for a small **change** in
 the angles that moves the foot toward the target, then repeat. Rearranged:
 
-$$J\,\Delta q = \mathbf{e}$$
+$$J\,{\color{#3b7dd8}{\Delta q}} = {\color{#c0392b}{\mathbf{e}}}$$
 
-- $\mathbf{e}$ — the desired foot motion: a small step toward the target
-- $\Delta q$ — the joint-angle change that produces that motion
-
-For our square $6\times6$ Jacobian you might just invert it. **Do not.** Near a
-singularity $J$ is nearly rank-deficient, $J^{-1}$ becomes enormous, and the
-solver commands joint velocities no motor could produce.
+- ${\color{#c0392b}{\mathbf{e}}}$ — the desired foot motion: a small step toward the target
+- ${\color{#3b7dd8}{\Delta q}}$ — the joint-angle change that produces that motion
 
 ---
 
-## The obvious answer: $\Delta q = J^{-1}\mathbf{e}$ {.smaller}
+## The obvious answer: ${\color{#3b7dd8}{\Delta q}} = J^{-1}{\color{#c0392b}{\mathbf{e}}}$ {.smaller}
 
 Six equations, six unknowns: for one leg $J$ is $6 \times 6$, so if it is
-invertible the system $J\,\Delta q = \mathbf{e}$ has exactly one solution,
+invertible the system $J\,{\color{#3b7dd8}{\Delta q}} = {\color{#c0392b}{\mathbf{e}}}$ has exactly one solution,
 
-$$\Delta q = J^{-1}\,\mathbf{e}.$$
+$${\color{#3b7dd8}{\Delta q}} = J^{-1}\,{\color{#c0392b}{\mathbf{e}}}.$$
 
-$J$ maps joint motion to foot motion; $J^{-1}$ runs that map backwards. Hand it
-the foot motion you want and it returns the joint motion that produces it —
-exactly, so that $J\,\Delta q = \mathbf{e}$ holds to machine precision.
+$J$ maps <span style="color:#3b7dd8">joint motion</span> to <span style="color:#c0392b">foot motion</span>; $J^{-1}$ runs that map backwards. Hand it
+<span style="color:#c0392b">the foot motion you want</span> and it returns <span style="color:#3b7dd8">the joint motion that produces it</span> —
+exactly, so that $J\,{\color{#3b7dd8}{\Delta q}} = {\color{#c0392b}{\mathbf{e}}}$ holds to machine precision.
 
 What the inverse *costs* shows in the singular value decomposition. With
 $J = U\Sigma V^{\mathsf T}$, $J^{-1} = V\Sigma^{-1}U^{\mathsf T}$: each direction
-the foot can move is **divided by its own $\sigma_i$**. A direction the leg
-barely moves (small $\sigma_i$) needs $1/\sigma_i$ of joint motion; at a
-singularity $\sigma_i = 0$ and no solution exists — and just beside it, a huge one.
+the foot can move is **divided by its own ${\color{#e8743b}{\sigma_i}}$**. A direction the leg
+barely moves (small ${\color{#e8743b}{\sigma_i}}$) needs $1/{\color{#e8743b}{\sigma_i}}$ of joint motion; at a
+singularity ${\color{#e8743b}{\sigma_i}} = 0$ and no solution exists — and just beside it, a huge one.
 
 ```{python}
 jac_p, jac_r = np.zeros((3, model.nv)), np.zeros((3, model.nv))
@@ -340,12 +336,12 @@ next slide damps.
 
 ## Damped least squares {.smaller}
 
-Instead of demanding an exact solution, ask for a compromise: reduce the error
-*and* keep the joint motion small.
+Instead of demanding an exact solution, ask for a compromise: <span style="color:#c0392b">reduce the error</span>
+*and* <span style="color:#3b7dd8">keep the joint motion small</span>. One new number, <span style="color:#e8743b">the damping ${\color{#e8743b}{\lambda}}$</span>, sets the trade:
 
-$$\Delta q = J^{\mathsf{T}}\left(J J^{\mathsf{T}} + \lambda^2 I\right)^{-1}\mathbf{e}$$
+$${\color{#3b7dd8}{\Delta q}} = J^{\mathsf{T}}\left(J J^{\mathsf{T}} + {\color{#e8743b}{\lambda^2}} I\right)^{-1}{\color{#c0392b}{\mathbf{e}}}$$
 
-$\lambda$ trades accuracy against stability. Away from singularities it barely
+${\color{#e8743b}{\lambda}}$ trades accuracy against stability. Away from singularities it barely
 matters; near one it is the difference between a smooth motion and a violent
 lunge.
 
@@ -361,39 +357,36 @@ for lam in (0.0, 1e-3, 1e-2, 1e-1):                 # same J at stand, same 5 cm
 
 ## Where the formula comes from: the cost {.smaller}
 
-Instead of *solving* $J\,\Delta q = \mathbf{e}$, ask for the $\Delta q$ that
-**minimises a cost** with two terms — the error left over, and the joint motion
-spent:
+Instead of *solving* $J\,{\color{#3b7dd8}{\Delta q}} = {\color{#c0392b}{\mathbf{e}}}$, ask for the ${\color{#3b7dd8}{\Delta q}}$ that
+**minimises a cost** with two terms — <span style="color:#c0392b">the error left over</span>, and <span style="color:#e8743b">the joint motion spent</span>:
 
-$$C(\Delta q) = \|J\,\Delta q - \mathbf{e}\|^2 + \lambda^2\,\|\Delta q\|^2 .$$
+$$C({\color{#3b7dd8}{\Delta q}}) = {\color{#c0392b}{\|J\,\Delta q - \mathbf{e}\|^2}} + {\color{#e8743b}{\lambda^2\,\|\Delta q\|^2}} .$$
 
 **Step 1 — expand.** Using $\|v\|^2 = v^{\mathsf T}v$:
 
-$$C = \Delta q^{\mathsf T} J^{\mathsf T} J\,\Delta q
-    \;-\; 2\,\mathbf{e}^{\mathsf T} J\,\Delta q
-    \;+\; \mathbf{e}^{\mathsf T}\mathbf{e}
-    \;+\; \lambda^2\,\Delta q^{\mathsf T}\Delta q .$$
+$$C = {\color{#c0392b}{\Delta q^{\mathsf T} J^{\mathsf T} J\,\Delta q \;-\; 2\,\mathbf{e}^{\mathsf T} J\,\Delta q \;+\; \mathbf{e}^{\mathsf T}\mathbf{e}}}
+    \;+\; {\color{#e8743b}{\lambda^2\,\Delta q^{\mathsf T}\Delta q}} .$$
 
-**Step 2 — differentiate with respect to $\Delta q$** (for a symmetric $A$,
+**Step 2 — differentiate with respect to ${\color{#3b7dd8}{\Delta q}}$** (for a symmetric $A$,
 $\nabla\, v^{\mathsf T} A v = 2Av$ and $\nabla\, b^{\mathsf T} v = b$):
 
-$$\nabla C = 2\,J^{\mathsf T} J\,\Delta q \;-\; 2\,J^{\mathsf T}\mathbf{e} \;+\; 2\lambda^2\,\Delta q .$$
+$$\nabla C = {\color{#c0392b}{2\,J^{\mathsf T} J\,\Delta q \;-\; 2\,J^{\mathsf T}\mathbf{e}}} \;+\; {\color{#e8743b}{2\lambda^2\,\Delta q}} .$$
 
 **Step 3 — set it to zero.** The minimum satisfies the *normal equations*
 
-$$\left(J^{\mathsf T} J + \lambda^2 I\right)\Delta q = J^{\mathsf T}\mathbf{e}
+$$\left(J^{\mathsf T} J + {\color{#e8743b}{\lambda^2}} I\right){\color{#3b7dd8}{\Delta q}} = J^{\mathsf T}{\color{#c0392b}{\mathbf{e}}}
 \qquad\Longrightarrow\qquad
-\Delta q = \left(J^{\mathsf T} J + \lambda^2 I\right)^{-1} J^{\mathsf T}\mathbf{e}.$$
+{\color{#3b7dd8}{\Delta q}} = \left(J^{\mathsf T} J + {\color{#e8743b}{\lambda^2}} I\right)^{-1} J^{\mathsf T}{\color{#c0392b}{\mathbf{e}}}.$$
 
 It *is* the minimum, not just a stationary point: the Hessian $2(J^{\mathsf T}J +
-\lambda^2 I)$ is positive definite for any $\lambda > 0$, because
-$v^{\mathsf T}J^{\mathsf T}Jv = \|Jv\|^2 \ge 0$ and $\lambda^2\|v\|^2 > 0$. The
+{\color{#e8743b}{\lambda^2}} I)$ is positive definite for any ${\color{#e8743b}{\lambda}} > 0$, because
+$v^{\mathsf T}J^{\mathsf T}Jv = \|Jv\|^2 \ge 0$ and ${\color{#e8743b}{\lambda^2}}\|v\|^2 > 0$. The
 same fact says the inverse **always exists** — even at a singularity, where
-$J^{-1}$ does not. That is the whole point of the second term.
+$J^{-1}$ does not. That is the whole point of <span style="color:#e8743b">the second term</span>.
 
 ---
 
-## Where the formula comes from: two forms, one answer {.smaller}
+## Where the formula comes from: two forms {.smaller}
 
 The previous slide wrote $\Delta q = J^{\mathsf T}(J J^{\mathsf T} + \lambda^2 I)^{-1}\mathbf{e}$
 — the transpose on the *outside*. Both are the same vector, by the
@@ -413,17 +406,24 @@ Why keep both? For a $6 \times n$ Jacobian the left form inverts an $n \times n$
 matrix and the right form a $6 \times 6$ one; with more joints than constraints
 the right form is the cheaper solve. For the leg, $n = 6$, and they cost the same.
 
+---
+
+## Where the formula comes from: each direction {.smaller}
+
 **What the update does to each direction.** Write $J = U\,\Sigma\,V^{\mathsf T}$.
 Then $J^{\mathsf T}J + \lambda^2 I = V(\Sigma^2 + \lambda^2 I)V^{\mathsf T}$ and
 $J^{\mathsf T}\mathbf{e} = V\,\Sigma\,U^{\mathsf T}\mathbf{e}$, so
 
-$$\Delta q = V\,\underbrace{(\Sigma^2 + \lambda^2 I)^{-1}\Sigma}_{\text{diagonal}}\;U^{\mathsf T}\mathbf{e}:
-\qquad \text{direction } i \text{ is scaled by } \frac{\sigma_i}{\sigma_i^2 + \lambda^2}
-\approx \begin{cases} 1/\sigma_i & \sigma_i \gg \lambda \quad\text{the true inverse}\\[2pt]
-\sigma_i/\lambda^2 \to 0 & \sigma_i \ll \lambda \quad\text{switched off}\end{cases}$$
+$${\color{#3b7dd8}{\Delta q}} = V\,\underbrace{(\Sigma^2 + {\color{#e8743b}{\lambda^2}} I)^{-1}\Sigma}_{\text{diagonal}}\;U^{\mathsf T}{\color{#c0392b}{\mathbf{e}}}$$
 
-$\lambda$ is a **threshold**: directions the Jacobian barely moves are ignored
-rather than amplified. That is the whole trick.
+so direction $i$ is scaled by
+
+$$\frac{\sigma_i}{\sigma_i^2 + {\color{#e8743b}{\lambda^2}}}
+\approx \begin{cases} {\color{#2e8b57}{1/\sigma_i}} & \sigma_i \gg {\color{#e8743b}{\lambda}} \quad{\color{#2e8b57}{\text{the true inverse}}}\\[2pt]
+{\color{#c0392b}{\sigma_i/\lambda^2 \to 0}} & \sigma_i \ll {\color{#e8743b}{\lambda}} \quad{\color{#c0392b}{\text{switched off}}}\end{cases}$$
+
+${\color{#e8743b}{\lambda}}$ is a **threshold**: directions the Jacobian barely moves are
+<span style="color:#c0392b">ignored</span> rather than amplified; the others get <span style="color:#2e8b57">the true inverse</span>. That is the whole trick.
 
 ```{python}
 lam = 1e-3
@@ -465,10 +465,10 @@ for a in (ax0, ax1):
 fig.tight_layout(); plt.show()
 ```
 
-Read the orange line left to right. Undamped, the straight leg asks for tens of
+Read the <span style="color:#e8743b">orange line</span> (straight leg) left to right. Undamped, the straight leg asks for tens of
 thousands of radians and lowers the foot 22 mm of the 50 requested; by
 $\lambda = 10^{-4}$ it asks for a sensible 4 rad and delivers **nothing** — there
-is no direction to deliver it in. The blue line delivers the full 50 mm for
+is no direction to deliver it in. The <span style="color:#3b7dd8">blue line</span> (crouch) delivers the full 50 mm for
 any $\lambda$ up to $10^{-3}$ and only fades past $10^{-2}$. That fade is the
 trade: at $\lambda = 1$ the crouched leg moves 0.4 mm per step.
 

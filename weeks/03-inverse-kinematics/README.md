@@ -58,8 +58,8 @@ uv run weeks/03-inverse-kinematics/lab_ik.py
 The G1 frozen in the crouch, a **red** target sphere moved with the arrow keys
 (`,` and `.` for sideways), a **green** sphere at the left foot site, and a
 large translucent sphere centred on the hip showing the leg's reach, measured
-from the model (thigh 0.3409 + shin 0.3000 = 0.6409 m). Physics is never
-stepped and the pelvis never moves.
+from the model (thigh 0.3409 + shin 0.3000 + ankle-to-site 0.0176 = 0.6585 m).
+Physics is never stepped and the pelvis never moves.
 
 ```
 arrows / , .   move the target          [ ]      lambda ten times smaller / larger
@@ -88,10 +88,10 @@ Eight experiments in the docstring, each with the numbers it should produce
 | # | Do | See |
 | --- | --- | --- |
 | 1 | dls, up arrow ×5 | residual 4e-6 after one frame, 1e-10 after two; at 1 it/frame 1.4e-2 then 5e-4 |
-| 2 | `M` inverse, `S` straight leg, arrow down | \|dq\| = 1.1e4 rad; the clamp is all that stops it; hip and knee slam to 2.88 rad, foot 0.7 m off |
-| 3 | dls, straight leg, `[` to 1e-6 then `]` to 1e-1 | the same fold at 1e-6; at 1e-1 \|dq\| = 1e-4 and the foot never moves: no $\lambda$ brings it down |
+| 2 | `M` inverse, `S` straight leg, arrow **up** (1 cm: bend the knee) | \|dq\| = 1.1e4 rad; the clamp is all that stops it; the leg folds onto its limits and never recovers |
+| 3 | dls, straight leg, sweep $\lambda$ | 1e-6 folds like the inverse; 1e-3 and 1e-2 take a tiny first step then blow up as the knee leaves zero (60 rad by iteration 10); 1e-1 creeps the knee the *wrong* way to its backward limit; 1 never moves. No $\lambda$ brings the foot up: bend the knee first |
 | 4 | `M` transpose, up ×5 | creeps: 8 mm of 50 left after 100 iterations; at the straight leg \|dq\| = 1.5e-5, nothing explodes |
-| 5 | right arrow ×30 | hip→target 0.69 m of 0.64 m reach; residual hovers at 5–6 cm, knee and ankle on their limits; `O` and 0.25 m pins at exactly 6.8e-3 |
+| 5 | right arrow ×30 | hip→target 0.69 m of 0.66 m reach; residual hovers at 5–6 cm, knee and ankle on their limits; `O` and 0.25 m pins at exactly 6.8e-3 |
 | 6 | `I` to 1/frame, `]` to $\lambda = 1$ | 3.1 cm of 5 left after 50 frames; 0.3 closes in 50, 0.1 in 10 |
 | 7 | `O`, `.` ×15 and up ×5 | foot tilts 16° with 3 rows, ankle roll stays 0; 0.2° with 6 rows, ankle roll −0.26 rad |
 | 8 | two new `TARGETS`, one unreachable | the prediction is right before SPACE is pressed |
@@ -103,6 +103,39 @@ iterations).
 
 `SOC4180_AUTOCLOSE=4 uv run weeks/03-inverse-kinematics/lab_ik.py` closes the
 window after four seconds, which is how the script is smoke-tested.
+
+### `reach.py`: the pipeline as a script you read top to bottom
+
+```bash
+uv run weeks/03-inverse-kinematics/reach.py --target 0.10 0 0.05
+uv run weeks/03-inverse-kinematics/reach.py --leg right --target 0 -0.1 0 --target 0.1 -0.1 0.1
+uv run weeks/03-inverse-kinematics/reach.py --target 0 0 0.01 --seed straight --solver inverse --trace
+uv run weeks/03-inverse-kinematics/reach.py --target 0.3 0 0 --trace --jacobian --no-viewer
+```
+
+Where `lab_ik.py` is interactive, `reach.py` is linear: give it one or more
+targets (offsets from the foot's start, metres, x forward / y left / z up), it
+solves them one after another, prints what happened, then opens the simulator
+and animates the leg through the solved poses. `--trace` prints every
+iteration (residual, |dq|, the six angles), `--jacobian` prints $J$ and its
+singular values at the seed, `--no-viewer` skips the window (what Colab or an
+autograder sees). Six numbered steps, each calling MuJoCo where MuJoCo is
+needed and numpy where it is not:
+
+| Step | Code | MuJoCo / package call |
+| --- | --- | --- |
+| 1 | load the robot, pick the seed pose | `soc4180.load_g1()`, `WalkingController.initial_data()`, `mj_forward` |
+| 2 | find the leg's numbers: `qpos` slice, `qvel` slice, foot site, joint limits | `kin.leg_qpos_indices`, `kin.leg_dof_indices`, `kin.foot_site_id`, `model.jnt_range` |
+| 3 | per iteration: error → Jacobian → step → clip → forward | `kin.pose_error`, `mj_jacSite`, `dls_step`/`inverse_step`, `np.clip`, `mj_forward` |
+| 4 | report: foot, residual, tilt, angles, limits hit | `site_xpos`, `site_xmat` |
+| 5 | stop here without a window | |
+| 6 | animate pose to pose in the passive viewer | `soc4180.launch_viewer(passive=True)`, `viewer.sync()` |
+
+The first example converges in five iterations (1.6 ms) with a residual of
+6e-10 m; the third shows the inverse at the singularity asking for 1.1e4 rad
+and folding the leg; the fourth shows a target 0.69 m from the hip against a
+0.66 m reach and the residual it leaves. Both scripts are in the same
+directory on purpose: read `reach.py` first, then use `lab_ik.py` to play.
 
 ## Rebuild
 

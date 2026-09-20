@@ -23,8 +23,9 @@ could never balance in and the pelvis never moves.
 
 Three spheres. The RED one is the target you move. The GREEN one is the left
 foot site, where the leg actually is. The big TRANSLUCENT one is the reach of
-the leg -- thigh plus shin, measured from the model -- centred on the hip. When
-the red sphere leaves it, no solver in the world can put the green one on it.
+the leg -- thigh plus shin plus the ankle-to-site drop, measured from the
+model -- centred on the hip. When the red sphere leaves it, no solver in the
+world can put the green one on it.
 
 Everything in this file is complete and explained; nothing is left blank. The
 three solver functions in section 2 are the lecture's mathematics, each a few
@@ -44,24 +45,33 @@ Experiments, in order, and what to show the instructor:
    problem is nonlinear and each step solves a linearised copy of it.
 2. The plain inverse. Press `M` once. Crouched, it converges like dls (1.5e-2,
    then 5e-4 after three iterations: this is Newton's method). Now press `S`
-   for the straight leg and the down arrow once, a 1 cm request. The first
-   iteration asks for |dq| = 1.1e4 rad. Only the clamp to the joint limits
-   stops it: hip and knee pitch slam to +2.88 rad, the ankle to -0.87, the leg
-   folds, and the foot ends 0.7 m from a target 1 cm away. `S` back to the
-   crouch and the same target is answered at once.
+   for the straight leg and the UP arrow once: 1 cm up, which only needs the
+   knee to bend -- a target any bent leg reaches instantly. The first iteration
+   asks for |dq| = 1.1e4 rad, because that direction has sigma = 9e-7. Only
+   the clamp to the joint limits stops it: the leg folds onto its limits and
+   never recovers (residual 1.2 m after 300 iterations). `S` back to the
+   crouch and the same 1 cm is answered at once.
 3. Damped least squares at the singularity. `M` to dls, `S` to the straight
-   leg, `[` down to lambda = 1e-6, down arrow: the same fold (|dq| = 5e3).
-   `]` up to lambda = 1e-1: |dq| is 1e-4 and the foot stays exactly where it is,
-   frame after frame -- dls asks for nothing in the direction a straight leg
-   cannot move. In between, at 1e-2, it jitters a millimetre either way. No
-   lambda brings the foot down: too small blows up, large enough asks for
-   nothing. Bending the knee (`S`) is the only fix.
+   leg, up arrow once, and sweep lambda with `[` and `]`:
+     1e-6        the same fold as the inverse (|dq| = 5e3).
+     1e-3, 1e-2  a tiny first step (1e-4 rad), then as the knee leaves zero the
+                 lost direction comes back with a gain of 1/(2 lambda) and it
+                 blows up anyway: |dq| = 60 rad by the tenth iteration, a
+                 garbage pose on the limits, residual 4.5 cm for ever.
+     1e-1        |dq| ~ 1e-5: the foot creeps 0.6 mm in 300 iterations, and the
+                 knee creeps to its BACKWARD limit (-0.087). At exactly zero the
+                 linearisation cannot tell knee-forward from knee-back -- both
+                 raise the foot only at second order -- and it picks the wrong
+                 sign. The lecture's "no direction" made visible.
+     1           nothing moves at all: the direction is switched off.
+   No lambda brings the foot up from a straight leg. Bending the knee first
+   (`S`) is the only fix, and it is what week 4's walker does with every step.
 4. The Jacobian transpose. `M` twice, crouch, up arrow five times. It creeps:
    after 100 iterations 8 mm of the 50 remain (press `I` for 10 per frame to
    speed it up). At the straight leg it asks for |dq| = 1.5e-5 and nothing
    happens -- it never divides by anything, so it cannot blow up; it just stops.
 5. Reach. Right arrow thirty times (0.3 m forward): the red sphere leaves the
-   translucent one, and ENTER prints hip->target 0.69 m of a 0.64 m reach. The
+   translucent one, and ENTER prints hip->target 0.69 m of a 0.66 m reach. The
    residual stops shrinking and hovers around 5-6 cm; the angles show the knee
    on its lower limit (-0.087) and the ankle on its upper (0.524): the leg is as
    long as it gets. Press `O` for position only and pull back to 0.25 m: the
@@ -193,19 +203,22 @@ SOLVERS = [("dls", dls_step), ("inverse", inverse_step), ("transpose", transpose
 # --- 3. two helpers ----------------------------------------------------------------
 
 def leg_lengths(model, data):
-    """Thigh and shin, measured between joint anchors -- not from |body_pos|.
+    """Thigh, shin and the ankle-to-site drop, measured between joint anchors.
 
     The hip is three separate bodies whose offsets accumulate, so the distance
     from the pelvis to `knee_link` is not the thigh. Measure between the points
     the joints actually pivot about: a joint's world anchor is its body's
-    origin plus the joint's own offset, rotated into the world.
-    Returns (hip anchor, thigh length, shin length); thigh + shin is the reach.
+    origin plus the joint's own offset, rotated into the world. The foot site
+    sits 0.0176 m below the ankle joint, so the farthest the SITE can be from
+    the hip is thigh + shin + that drop: 0.3409 + 0.3000 + 0.0176 = 0.6585 m.
+    Returns (hip anchor, thigh, shin, drop).
     """
     def anchor(body):
         b = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, body)
         return data.xpos[b] + data.xmat[b].reshape(3, 3) @ model.jnt_pos[model.body_jntadr[b]]
     hip, knee, ankle = (anchor(f"{SIDE}_{n}_link") for n in ("hip_pitch", "knee", "ankle_pitch"))
-    return hip, np.linalg.norm(knee - hip), np.linalg.norm(ankle - knee)
+    site = data.site_xpos[kin.foot_site_id(model, SIDE)]
+    return hip, np.linalg.norm(knee - hip), np.linalg.norm(ankle - knee), np.linalg.norm(site - ankle)
 
 
 def sphere(geom, pos, rgba, radius):
@@ -312,8 +325,8 @@ def main() -> int:
 
     leg = Leg(model, data)
     slider_qpos = model.jnt_qposadr[model.actuator_trnid[:, 0]]   # for the viewer's sliders
-    hip0, l1, l2 = leg_lengths(model, data)
-    reach = l1 + l2
+    hip0, l1, l2, drop = leg_lengths(model, data)
+    reach = l1 + l2 + drop
 
     foot0 = leg.foot.copy()
     # Everything the keys change lives in one dict, so the key callback (which
@@ -321,7 +334,7 @@ def main() -> int:
     state = {"target": foot0.copy(), "lam": 1e-2, "seed": "crouch", "i": 0,
              "solver": 0, "iters": 1, "orientation": True, "print": False, "moved": True}
 
-    print(f"thigh {l1:.4f} m + shin {l2:.4f} m = reach {reach:.4f} m from the hip")
+    print(f"thigh {l1:.4f} + shin {l2:.4f} + ankle-to-site {drop:.4f} = reach {reach:.4f} m from the hip")
     print(f"foot site starts at {foot0.round(4)}")
 
     def on_key(keycode):

@@ -205,7 +205,7 @@ commands for it.
 | --- | --- | --- | --- |
 | 00 | `lab_stack.py` | `my_controller` (29 servo targets) | keys `1/0/2/3/4/G` switch layers on and off; contact-force arrows on the floor |
 | 01 | `lab_mjcf.py` | the MJCF string and `TARGET` | the compiler's own errors; droop, `BADQACC` count on ENTER |
-| 03 | `lab_ik.py` | **none — complete**: `dls_step`, `inverse_step`, `transpose_step` all shipped and explained; `M` swaps them | the green foot chases the red target inside a translucent reach sphere; the inverse folds the straight leg |
+| 03 | `lab_ik.py`, `reach.py` | **none — complete**: `dls_step`, `inverse_step`, `transpose_step` all shipped and explained; `M` swaps them. `reach.py --target dx dy dz` is the same pipeline as a linear script that prints and then animates | the green foot chases the red target inside a translucent reach sphere; the inverse folds the straight leg |
 | 04 | `lab_walk.py` | `predict_com` (LIPM closed form) | blue dots inside the white commanded-CoM dots; yellow ZMP sphere |
 | 05 | `lab_servo.py` | `torque_from_pd` | joints colour by torque; `H` makes the student's law *the* servo |
 | 06 | `lab_imu.py` | `my_filter` (complementary) | three "down" arrows; the green one vertical |
@@ -257,16 +257,22 @@ Facts these scripts and the new figures established, each measured:
   and knee sinusoids, amplitude 0 → 1) scores *less* than standing at every
   amplitude — first effort, then falling. The reward's optimum is real and no
   route in that family climbs to it.
-- Week 3's lab, measured with its own functions: the plain inverse at the
-  straight leg asks for 1.1e4 rad for a 1 cm request and the joint-limit clamp
-  is all that stops it (hip and knee pitch to +2.88, ankle −0.87, foot 0.7 m
-  off); DLS there at $\lambda \le 10^{-6}$ does the same, at $10^{-2}$ jitters
-  a millimetre, at $\ge 3 \times 10^{-2}$ never moves the foot at all — no
-  $\lambda$ brings a straight leg down. Out of reach with six rows the residual
-  *hovers* (5–6 cm for a 0.3 m request) with the knee and ankle on their
-  limits; position-only at 0.25 m pins at exactly 6.8e-3. Position-only lets a
-  15 cm sideways target tilt the foot 16°. The transpose method leaves 8 mm of
-  50 after 100 iterations and cannot blow up.
+- Week 3's lab, measured with its own functions. **Test the singularity with
+  a target 1 cm *above* the straight foot** (bend the knee); 1 cm below is
+  unreachable by geometry and proves nothing. From the exactly straight leg:
+  the plain inverse asks 1.1e4 rad and folds the leg onto its limits for good;
+  DLS at $\lambda \le 10^{-6}$ does the same; at $10^{-3}$–$10^{-2}$ it takes
+  a 1e-4 rad first step, then blows up as the knee leaves zero (gain
+  $1/2\lambda$; 60 rad by iteration 10, garbage pose, residual 4.5 cm for
+  ever); at $10^{-1}$ it creeps the knee to its *backward* limit — at zero the
+  linearisation cannot tell knee-forward from knee-back; at 1 nothing moves.
+  The transpose stays put. No solver and no $\lambda$ lifts a straight foot:
+  the seed is the fix. The lab's reach must include the ankle-to-site drop
+  (0.3409 + 0.3000 + 0.0176 = 0.6585 m), or a straight leg reads as "outside".
+  Out of reach with six rows the residual *hovers* (5–6 cm for a 0.3 m
+  request) with the knee and ankle on their limits; position-only at 0.25 m
+  pins at exactly 6.8e-3. Position-only lets a 15 cm sideways target tilt the
+  foot 16°. The transpose leaves 8 mm of 50 after 100 iterations.
 - **Multi-robot scenes work through `MjSpec`**: `frame = spec.worldbody.add_frame();
   frame.attach_body(child.worldbody.first_body(), "r0_", "")` per robot, then
   `compile()`. Names get the prefix; actuators and `qpos` are contiguous per

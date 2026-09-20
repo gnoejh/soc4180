@@ -880,8 +880,8 @@ all measured with the script's own functions before they were written:
 | # | Do | Right looks like |
 | --- | --- | --- |
 | 1 | dls, up arrow ×5 | residual 4e-6 after one frame |
-| 2 | `M` inverse, `S` straight leg, arrow down | $\|\Delta q\| = 10^4$ rad; the leg folds onto its joint limits |
-| 3 | dls, straight leg, `]` to $\lambda = 0.1$ | $\|\Delta q\| = 10^{-4}$ and the foot never moves: no $\lambda$ helps |
+| 2 | `M` inverse, `S` straight leg, arrow **up** | $\|\Delta q\| = 10^4$ rad; the leg folds onto its joint limits |
+| 3 | dls, straight leg, sweep $\lambda$ | small $\lambda$ folds; $10^{-2}$ blows up as the knee leaves zero; $10^{-1}$ creeps the knee the *wrong* way; no $\lambda$ helps |
 | 4 | `M` transpose | creeps, never explodes |
 | 5 | right arrow ×30 | hip distance > reach; residual stops shrinking |
 | 6 | `]` to $\lambda = 1$ | 3 cm of 5 left after a second: find the largest $\lambda$ that still tracks |
@@ -889,6 +889,30 @@ all measured with the script's own functions before they were written:
 
 Then break a solver on purpose (`-dq`; the transpose without its step length)
 and explain what you see.
+
+---
+
+## Lab class: `reach.py`, the pipeline you read {.smaller}
+
+```bash
+uv run weeks/03-inverse-kinematics/reach.py --target 0.10 0 0.05
+uv run weeks/03-inverse-kinematics/reach.py --target 0 0 0.01 --seed straight --solver inverse --trace
+uv run weeks/03-inverse-kinematics/reach.py --target 0.3 0 0 --trace --jacobian --no-viewer
+```
+
+`lab_ik.py` is for playing; `reach.py` is for reading. Targets on the command
+line, the solution printed (`--trace`: every iteration; `--jacobian`: $J$ and
+its singular values), then the simulator animates the leg through it
+(`--no-viewer` is what Colab sees). Six numbered steps:
+
+| Step | Does | Calls |
+| --- | --- | --- |
+| 1 | load the robot, pick the seed pose | `load_g1`, `initial_data`, `mj_forward` |
+| 2 | the leg's numbers: `qpos` slice, `qvel` slice, foot site, limits | `leg_qpos_indices`, `leg_dof_indices`, `foot_site_id`, `jnt_range` |
+| 3 | per iteration: error → Jacobian → step → clip → forward | `pose_error`, `mj_jacSite`, `dls_step`, `np.clip`, `mj_forward` |
+| 4 | report foot, residual, tilt, angles, limits hit | `site_xpos`, `site_xmat` |
+| 6 | animate pose to pose | `launch_viewer(passive=True)`, `sync` |
+
 
 ---
 

@@ -295,6 +295,49 @@ solver commands joint velocities no motor could produce.
 
 ---
 
+## The obvious answer: $\Delta q = J^{-1}\mathbf{e}$ {.smaller}
+
+Six equations, six unknowns: for one leg $J$ is $6 \times 6$, so if it is
+invertible the system $J\,\Delta q = \mathbf{e}$ has exactly one solution,
+
+$$\Delta q = J^{-1}\,\mathbf{e}.$$
+
+$J$ maps joint motion to foot motion; $J^{-1}$ runs that map backwards. Hand it
+the foot motion you want and it returns the joint motion that produces it —
+exactly, so that $J\,\Delta q = \mathbf{e}$ holds to machine precision.
+
+What the inverse *costs* shows in the singular value decomposition. With
+$J = U\Sigma V^{\mathsf T}$, $J^{-1} = V\Sigma^{-1}U^{\mathsf T}$: each direction
+the foot can move is **divided by its own $\sigma_i$**. A direction the leg
+barely moves (small $\sigma_i$) needs $1/\sigma_i$ of joint motion; at a
+singularity $\sigma_i = 0$ and no solution exists — and just beside it, a huge one.
+
+```{python}
+jac_p, jac_r = np.zeros((3, model.nv)), np.zeros((3, model.nv))
+mujoco.mj_jacSite(model, data, jac_p, jac_r, kin.foot_site_id(model, "left"))
+J = np.vstack([jac_p, jac_r])[:, kin.leg_dof_indices(model, "left")]   # at stand
+
+crouch = soc4180.WalkingController(model).nominal        # the week 4 crouch
+bent = mujoco.MjData(model); bent.qpos[:] = crouch; mujoco.mj_forward(model, bent)
+mujoco.mj_jacSite(model, bent, jac_p, jac_r, kin.foot_site_id(model, "left"))
+J_crouch = np.vstack([jac_p, jac_r])[:, kin.leg_dof_indices(model, "left")]
+
+err = np.array([0.0, 0.0, -0.05, 0, 0, 0])       # ask to lower the foot 5 cm
+for name, Jp in (("crouch", J_crouch), ("stand", J)):
+    dq = np.linalg.solve(Jp, err)                # dq = J^{-1} e, no damping
+    sigma_min = np.linalg.svd(Jp, compute_uv=False).min()
+    print(f"  {name:7} sigma_min = {sigma_min:.1e}   |dq| = {np.linalg.norm(dq):10.4g} rad"
+          f"   |J dq - e| = {np.linalg.norm(Jp @ dq - err):.0e}")
+```
+
+Crouched, the inverse is a fine answer: half a radian, shared by hip, knee and
+ankle. Standing — the straight leg, $\sigma_{\min} \approx 10^{-6}$ — the same
+5 cm request costs **tens of thousands of radians**, and the residual is still
+zero: the algebra *succeeded* and commanded the impossible. That is what the
+next slide damps.
+
+---
+
 ## Damped least squares {.smaller}
 
 Instead of demanding an exact solution, ask for a compromise: reduce the error
@@ -307,12 +350,7 @@ matters; near one it is the difference between a smooth motion and a violent
 lunge.
 
 ```{python}
-jac_p, jac_r = np.zeros((3, model.nv)), np.zeros((3, model.nv))
-mujoco.mj_jacSite(model, data, jac_p, jac_r, kin.foot_site_id(model, "left"))
-J = np.vstack([jac_p, jac_r])[:, kin.leg_dof_indices(model, "left")]
-
-err = np.array([0.0, 0.0, -0.05, 0, 0, 0])       # ask to lower the foot 5 cm
-for lam in (0.0, 1e-3, 1e-2, 1e-1):
+for lam in (0.0, 1e-3, 1e-2, 1e-1):                 # same J at stand, same 5 cm request
     M = J @ J.T + lam**2 * np.eye(6)
     dq = J.T @ np.linalg.solve(M, err)
     print(f"  lambda={lam:<6}  |dq| = {np.linalg.norm(dq):10.2f} rad")
@@ -347,11 +385,6 @@ rather than amplified. That is the whole trick.
 
 ```{python}
 #| fig-align: center
-crouch = soc4180.WalkingController(model).nominal        # the week 4 crouch
-bent = mujoco.MjData(model); bent.qpos[:] = crouch; mujoco.mj_forward(model, bent)
-mujoco.mj_jacSite(model, bent, jac_p, jac_r, kin.foot_site_id(model, "left"))
-J_crouch = np.vstack([jac_p, jac_r])[:, kin.leg_dof_indices(model, "left")]
-
 lams = np.logspace(-6, 1, 29)
 fig, (ax0, ax1) = plt.subplots(1, 2, figsize=(9.6, 3.8))
 for Jp, label, col in ((J, "stand: straight leg", "#e8743b"),

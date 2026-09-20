@@ -520,7 +520,7 @@ starting pose, not a different $\lambda$.
 
 ---
 
-## That table is a singularity {.smaller}
+## The condition number {.smaller}
 
 Those numbers are not a quirk of the example. The `stand` keyframe has **every
 leg joint at exactly zero** — a perfectly straight leg.
@@ -528,14 +528,79 @@ leg joint at exactly zero** — a perfectly straight leg.
 ```{python}
 print("stand pose:", np.round(data.qpos[kin.leg_qpos_indices(model, "left")], 4))
 sv = np.linalg.svd(J, compute_uv=False)
-print(f"singular values      : {np.round(sv, 5)}")
-print(f"smallest             : {sv[-1]:.2e}   <- effectively zero")
-print(f"condition number     : {sv[0]/sv[-1]:.3e}")
+sv_crouch = np.linalg.svd(J_crouch, compute_uv=False)
+print(f"singular values, stand : {np.round(sv, 5)}")
+print(f"smallest               : {sv[-1]:.2e}   <- effectively zero")
+for name, s_ in (("stand", sv), ("crouch", sv_crouch)):
+    kappa = s_[0] / s_[-1]
+    print(f"condition number {name:6} : sigma_max/sigma_min = {s_[0]:.3f} / {s_[-1]:.2e} "
+          f"= {kappa:.2e}   (log10 = {np.log10(kappa):.1f} digits lost)")
 ```
 
-A straight leg has **no direction that shortens it**. The Jacobian has lost a
-rank, undamped IK divides by nearly zero, and no amount of iteration helps —
-the information simply is not there.
+**What the condition number is.** $J$ sends every unit-length joint motion
+($\|\dot q\| = 1$, a sphere in joint space) to a foot motion. The image is an
+**ellipsoid** whose semi-axes are the singular values $\sigma_1 \ge \dots \ge
+\sigma_6$, each along its own direction $u_i$ of foot space. The condition number
+is that ellipsoid's aspect ratio:
+
+$$\kappa(J) = \frac{\sigma_{\max}}{\sigma_{\min}} \qquad (1 \le \kappa \le \infty)$$
+
+---
+
+## Reading $\kappa$ three ways {.smaller}
+
+- **Sensitivity.** One radian of joint motion buys $\sigma_{\max}$ metres of foot
+  motion in the best direction and $\sigma_{\min}$ in the worst. Backwards, one
+  millimetre of foot request costs $1/\sigma_{\min}$ of joint motion in the worst
+  direction — **$\kappa$ times more** than in the best.
+- **Error amplification.** For $\Delta q = J^{-1}\mathbf{e}$, a relative error in
+  $\mathbf{e}$ becomes at most $\kappa$ times that relative error in $\Delta q$:
+  $\|\delta\Delta q\|/\|\Delta q\| \le \kappa\,\|\delta\mathbf{e}\|/\|\mathbf{e}\|$.
+  At $\kappa = 2 \times 10^6$, a target known to 0.1 mm in 50 mm (0.2 %) can come
+  back as joint angles wrong by 4000 times their own size.
+- **Digits.** $\log_{10}\kappa$ is roughly the number of significant digits the
+  inverse can lose. $\kappa = 1$ is a pure rotation and loses none; the crouch,
+  $\kappa \approx 20$, loses one of double precision's sixteen; the straight leg
+  loses six; $\kappa = \infty$ is a singular matrix — a rank gone, which is what
+  $9 \times 10^{-7}$ is up to round-off.
+
+---
+
+## The ellipse the Jacobian draws {.smaller}
+
+```{python}
+#| fig-align: center
+fig, axes = plt.subplots(1, 2, figsize=(9.6, 3.5))
+t = np.linspace(0, 2 * np.pi, 400)
+for ax, (name, Jp, col) in zip(axes, (("crouch: bent knee", J_crouch, "#3b7dd8"),
+                                       ("stand: straight leg", J, "#e8743b"))):
+    U, sig, Vt = np.linalg.svd(Jp)
+    # every unit joint motion in the plane of the best and worst joint directions ...
+    Q = np.outer(Vt[0], np.cos(t)) + np.outer(Vt[-1], np.sin(t))       # 6 x 400, |q| = 1
+    X = Jp @ Q                                                          # ... and its foot motion
+    a, b = U[:, 0] @ X, U[:, -1] @ X                                    # read along u_max, u_min
+    ax.plot(np.cos(t), np.sin(t), ":", color="0.5", label="unit joint motion (1 rad)")
+    ax.plot(a, b, lw=2, color=col, label=r"its foot motion $J\,\dot q$")
+    ax.annotate("", (sig[0], 0), (0, 0), arrowprops=dict(arrowstyle="->", color=col, lw=1.5))
+    ax.annotate("", (0, sig[-1]), (0, 0), arrowprops=dict(arrowstyle="->", color=col, lw=1.5))
+    ax.text(sig[0] / 2, -0.42, r"$\sigma_{\max}$ = " + f"{sig[0]:.2f} m/rad (long axis)", ha="center", fontsize=8, color=col)
+    ax.text(0.08, 0.36, r"$\sigma_{\min}$ = " + f"{sig[-1]:.1e} m/rad (short axis)", fontsize=8, color=col)
+    ax.set_aspect("equal"); ax.set_xlim(-2.1, 2.1); ax.set_ylim(-1.3, 1.3)
+    ax.set_title(name + r":  $\kappa = \sigma_{\max}/\sigma_{\min}$ = " + f"{sig[0] / sig[-1]:.1e}", fontsize=10)
+    ax.set_xlabel(r"foot motion along $u_{\max}$"); ax.set_ylabel(r"along $u_{\min}$")
+    ax.legend(fontsize=7, loc="upper left"); ax.grid(alpha=0.3)
+fig.tight_layout(); plt.show()
+```
+
+The dotted circle is every joint motion of one radian, taken in the plane of the
+best and the worst joint directions; the coloured curve is where $J$ sends it.
+<span style="color:#3b7dd8">Crouched</span>, the ellipse is squashed about 20:1 — long
+along $u_{\max}$, short but *there* along $u_{\min}$, so a request in the short
+direction costs 20 times more joint motion and is still answerable.
+<span style="color:#e8743b">Standing</span>, the ellipse has collapsed to a line: the axis
+that would shorten the leg is $10^{-6}$ long. A straight leg has **no direction
+that shortens it**. The Jacobian has lost a rank, undamped IK divides by nearly
+zero, and no amount of iteration helps — the information simply is not there.
 
 ---
 
@@ -544,7 +609,6 @@ the information simply is not there.
 
 ```{python}
 #| fig-align: center
-sv_crouch = np.linalg.svd(J_crouch, compute_uv=False)
 fig, ax = plt.subplots(figsize=(8.4, 3.4))
 x = np.arange(6)
 ax.bar(x - 0.2, sv, 0.4, color="#e8743b", label="stand (straight leg)")

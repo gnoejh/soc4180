@@ -55,7 +55,11 @@ def main(argv: list[str]) -> int:
         if cell["cell_type"] != "code":
             continue
         src = "".join(cell["source"])
-        src = "\n".join(l for l in src.split("\n") if not l.lstrip().startswith(("%", "!")))
+        # a magic becomes `pass` at the same indentation, so an `if` or `except`
+        # whose whole body is a %pip line still compiles
+        src = "\n".join(l[: len(l) - len(l.lstrip())] + "pass"
+                        if l.lstrip().startswith(("%", "!")) else l
+                        for l in src.split("\n"))
         compile(src, f"cell{k}", "exec")
     print("compile-check: every code cell OK")
     if cmd == "compile":

@@ -51,8 +51,8 @@ if importlib.util.find_spec("google.colab") is not None:
 
 import numpy as np
 import matplotlib.pyplot as plt
+import soc4180          # first: it selects the GL backend before mujoco loads
 import mujoco
-import soc4180
 from soc4180 import bodies as B
 
 model = soc4180.load_g1()

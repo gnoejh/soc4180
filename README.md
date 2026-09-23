@@ -151,6 +151,21 @@ uv run scripts/check_notebook.py run    weeks/04-walking/lab.ipynb   # execute e
 uv run scripts/check_notebook.py images weeks/04-walking/lab.ipynb _figs   # dump the PNGs
 ```
 
+### Answer files
+
+Reference answers live in `weeks/*/instructor/`, which is gitignored: this
+repository is public. They are pushed only encrypted, as
+`instructor.tar.gz.gpg`:
+
+```bash
+uv run scripts/instructor.py open    # passphrase -> restores weeks/*/instructor/
+uv run scripts/instructor.py seal    # after editing an answer; then commit the .gpg
+```
+
+`open` refuses to overwrite a local answer file that differs from the archive
+(`--force` to override). The passphrase is kept outside the repository; without
+it the archive cannot be opened.
+
 ### Prerequisite
 
 [Quarto](https://quarto.org) ≥ 1.10 must be installed separately — it is a
@@ -254,7 +269,9 @@ src/soc4180/     shared helpers, installed as a package
   seeding.py     reproducibility
   checkpoints.py pre-trained policy loading (the RL-week safety net)
 weeks/NN-*/     slides.qmd (source) -> slides.html + lab.ipynb; lab_*.py (laptop lab)
-scripts/         view.py (viewer), check_notebook.py (execute / compile / dump figures), build_site.py
+scripts/         view.py (viewer), check_notebook.py (execute / compile / dump figures), build_site.py,
+                 check_labs.py (run every lab script), instructor.py (seal / open the answers)
+instructor.tar.gz.gpg   the encrypted weeks/*/instructor/ answers
 _quarto.yml      shared deck theme and execution settings
 ```
 

@@ -194,6 +194,7 @@ uv run python -c "import soc4180"              # smoke test
 uv run scripts/view.py --walk                  # interactive viewer (laptop/desktop)
 quarto render weeks/01-intro/slides.qmd        # -> slides.html + lab.ipynb
 uv run python scripts/build_site.py            # rendered decks -> _site/ for Pages
+uv run scripts/instructor.py open|seal         # encrypted answers <-> weeks/*/instructor/
 ```
 
 There is no test suite or linter configured. Add the tooling before inventing
@@ -252,7 +253,9 @@ gpg that ships with Git for Windows; no new dependency, so `uv.lock` is
 untouched). `open` restores them and refuses to overwrite a local file that
 differs unless `--force` is given. The passphrase lives only with the
 instructor. Never `git add -f` a plain answer file, and re-seal after
-editing one.
+editing one. **The archive is committed** (`53b7eee`, week 3's
+`moves_solution.py`); Claude cannot seal, because it cannot type the
+passphrase, so sealing is always the instructor's step.
 
 Measured while building the pipeline scripts (2026-09-20), beyond the
 per-week READMEs:

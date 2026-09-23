@@ -237,5 +237,6 @@ _site/
 # lab.ipynb itself is generated and committed; a personal copy is not.
 weeks/**/lab_*work*.ipynb
 
-# Instructor answers for week 3 lab_connected.py: never published.
-weeks/03-inverse-kinematics/instructor/
+# Instructor answers, any week: never published in the clear. They are pushed
+# only as instructor.tar.gz.gpg, via scripts/instructor.py seal.
+weeks/*/instructor/

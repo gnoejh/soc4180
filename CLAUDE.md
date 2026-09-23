@@ -245,6 +245,15 @@ own blanks and names their lines. Do not go back to a numeric placeholder:
 360 m IK request. **Any edit to `lab_connected.py` changes the scorer code**
 (a hash of the file) that the instructor writes on the board.
 
+**Instructor answers are pushed only encrypted.** The repo is public, so
+`weeks/*/instructor/` is gitignored and `scripts/instructor.py seal` packs
+every such folder into `instructor.tar.gz.gpg` (gpg symmetric AES-256, the
+gpg that ships with Git for Windows; no new dependency, so `uv.lock` is
+untouched). `open` restores them and refuses to overwrite a local file that
+differs unless `--force` is given. The passphrase lives only with the
+instructor. Never `git add -f` a plain answer file, and re-seal after
+editing one.
+
 Measured while building the pipeline scripts (2026-09-20), beyond the
 per-week READMEs:
 

@@ -395,6 +395,12 @@ foreground while focus sits elsewhere. Still unexplained: `lab_viewer.py`
 (09-16) worked and `lab_body.py` (09-17) does not, with `sim.py` and `uv.lock`
 unchanged between them -- run the older script as the control before theorising.
 
+**Digit keys 0–5 are the viewer's own geom-group toggles**, and the passive
+viewer applies them even when `key_callback` also handles the key. The G1's
+meshes are group 2, so a lab that binds `2` makes the robot vanish (only
+`user_scn` markers remain). Any lab that binds digits sets
+`viewer.opt.geomgroup[:3] = 1` before each `viewer.sync()`.
+
 `scripts/keyprobe.py` is the diagnostic. It opens the viewer and, per key press,
 prints whether Windows saw the key at all (`GetAsyncKeyState`, focus-independent),
 which window was foreground, and whether `key_callback` fired -- which separates

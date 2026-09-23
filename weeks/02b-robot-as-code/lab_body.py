@@ -215,6 +215,9 @@ def main() -> int:
                     report(model, data, "sliders", state["chain"], previous)
                     previous = {c: landmark(model, data, c) for c in B.CHAINS}
                 markers(viewer, data)
+            # MuJoCo's viewer also treats digit keys 0-5 as 'toggle geom group'. The
+            # robot's meshes are group 2, so a '2' pressed for this lab would hide it.
+            viewer.opt.geomgroup[:3] = 1
             viewer.sync()
             time.sleep(0.02)
     return 0

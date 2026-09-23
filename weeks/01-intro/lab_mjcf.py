@@ -184,6 +184,9 @@ def main() -> int:
             mujoco.mj_step(model, data)                      # servo torques, gravity, integrate
             if state["print"]:
                 state["print"] = False; report()
+            # MuJoCo's viewer also treats digit keys 0-5 as 'toggle geom group'. The
+            # robot's meshes are group 2, so a '2' pressed for this lab would hide it.
+            viewer.opt.geomgroup[:3] = 1
             viewer.sync()
             lag = model.opt.timestep - (time.time() - wall)
             if lag > 0:

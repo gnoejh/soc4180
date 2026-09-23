@@ -39,7 +39,7 @@ agentic content returns only where it attaches to the robot, in weeks 14–15.
 | 01 | The five-layer robot stack; MuJoCo and MJCF | `00`, `01` | built; `lab_stack.py` + `stack.py`, `lab_mjcf.py` + `mjcf_run.py` (complete, explained, 2026-09-21); Pages-green; **not yet Colab-tested** |
 | 02 | Transforms and forward kinematics | `02` | built, Colab-verified before 2026-09-20; `lab_viewer.py` (both FKs complete) + `fk.py`; lecture class only — the lab class is `02b` |
 | 02b | The robot as code: body tree, `qpos` map, the package | `02b` | built; `lab_body.py` + `anatomy.py`; Pages-green since the import-order fix; **not yet Colab-tested** |
-| 03 | Inverse kinematics | `03` | built; 29 slides with colour-coded maths (2026-09-20); `lab_ik.py` (three solvers) + `reach.py`; **not re-tested on Colab since** |
+| 03 | Inverse kinematics | `03` | built; 29 slides with colour-coded maths (2026-09-20); `lab_ik.py` (three solvers) + `reach.py`; `lab_connected.py` + `moves.py`, a ten-problem graded game (2026-09-24, reference 10/10 in gitignored `instructor/`); **not re-tested on Colab since** |
 | 04 | Contact, balance, analytic walking (LIPM/ZMP) | `04` | built; `lab_walk.py` + `walk.py`; **not re-tested on Colab since 2026-09-20** |
 | 05 | Actuation, PD control, and CPG gaits | `05` | built; `lab_servo.py` + `servo.py`; **not re-tested on Colab since 2026-09-20** |
 | 06 | Sensing, state estimation, observation design | `06` | built; `lab_imu.py` + `imu.py`; **not re-tested on Colab since 2026-09-20** |

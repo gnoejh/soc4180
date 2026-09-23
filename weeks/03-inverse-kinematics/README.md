@@ -137,6 +137,46 @@ and folding the leg; the fourth shows a target 0.69 m from the hip against a
 0.66 m reach and the residual it leaves. Both scripts are in the same
 directory on purpose: read `reach.py` first, then use `lab_ik.py` to play.
 
+### `lab_connected.py`: the lab game, scored out of 10
+
+```bash
+uv run weeks/03-inverse-kinematics/lab_connected.py            # play; students edit moves.py only
+uv run weeks/03-inverse-kinematics/lab_connected.py --joints   # the 29 joint names, ranges, stand angles
+uv run weeks/03-inverse-kinematics/lab_connected.py --grade --no-viewer   # the same referee, headless
+```
+
+Ten problems (wave, sway, twist, squat, bow, clap, both hands up, squat-wave,
+twist-wave, boss). Students answer each with a **move** in `moves.py`: a list of
+`(seconds, pose)` steps, played under physics. A pose names joints in degrees,
+or uses **IK**: `"pelvis": [0, 0, -0.2]` lowers the body 20 cm while
+`ik_legs` keeps both feet planted. It passes if the goal is reached, the robot
+never falls, and it ends standing.
+
+How they solve it by looking, not guessing: `E` freezes the robot and the joint
+sliders pose it, `ENTER` prints the pose as a dict to paste, `K` steps through
+the current move frozen, and `1`–`0` play a problem with a live gauge
+("left hand 1.12 m, need > 1.20"). `moves.py` is re-read on every key press.
+
+**Grading.** Students press `G` whenever they like; all ten play in about 45 s
+and the score stays on screen: name, `SCORE n / 10`, `O`/`X` per problem, a
+four-letter **scorer code** and the time. The instructor walks the room reading
+screens. The scorer code is a hash of `lab_connected.py`; if it differs from the
+one on the board, the referee was edited. `moves.py` is parsed as data, never
+executed, so it cannot change the rules. Mouse pushes are zeroed while a move
+plays.
+
+What it teaches, measured with its own `--grade` before it was written: every
+pose here is one IK solves perfectly, and half of them fall over under gravity.
+Both arms up at once falls forward; one arm, then the other, reaches 1.36 m. A
+clap needs the pelvis 4 cm back as a counterweight. A bow needs the pelvis
+pushed back while the hips bend. The boss needs the robot to stand up *before*
+lowering its arms. One-foot balance is left out on purpose: 72 open-loop
+attempts all fell.
+
+Reference answers (10/10) are in `instructor/moves_solution.py`, which is
+gitignored. Check them with
+`--grade --moves weeks/03-inverse-kinematics/instructor/moves_solution.py`.
+
 ## Rebuild
 
 ```bash

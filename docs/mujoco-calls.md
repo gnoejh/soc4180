@@ -99,6 +99,7 @@ Two conventions run through everything:
 | The interactive window (lab scripts only, never a notebook cell) | `soc4180.launch_viewer(model, data, passive=True, key_callback=fn)`; `viewer.sync()`, `viewer.is_running()`, `viewer.lock()` | every lab |
 | Keys from the terminal too | `soc4180.terminal_keys(fn)` feeds the same callback | every lab |
 | Markers | `viewer.user_scn.geoms[i]` with `mujoco.mjv_initGeom(geom, mjGEOM_SPHERE / BOX / ARROW, size, pos, mat, rgba)`; `mju_quatZ2Vec` for an arrow's direction | 00, 03, 04, 06, 07 |
+| Text on screen (HUD, scoreboard) | `viewer.set_texts([(mujoco.mjtFont.mjFONT_BIG, mujoco.mjtGridPos.mjGRID_TOPLEFT, left, right), ...])` | 03 `lab_connected.py` |
 | Close by itself (the smoke test) | `SOC4180_AUTOCLOSE=<seconds>` | `scripts/check_labs.py` |
 | Replay a recorded motion | write `qpos`, `mj_forward`, `sync()` — no physics re-run | every pipeline script's last step |
 | Video for the notebook | `soc4180.render_rollout(...)`, `render_poses(...)` (EGL / OSMesa chosen at import) | the decks |

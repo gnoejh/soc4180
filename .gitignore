@@ -236,3 +236,6 @@ _site/
 # Students' own working copies of a lab notebook (File > Save Notebook As...).
 # lab.ipynb itself is generated and committed; a personal copy is not.
 weeks/**/lab_*work*.ipynb
+
+# Instructor answers for week 3 lab_connected.py: never published.
+weeks/03-inverse-kinematics/instructor/

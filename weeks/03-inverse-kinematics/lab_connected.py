@@ -15,7 +15,7 @@ time you press a key, so save the file and press the key again; no restart.
     K              (edit mode) show the next pose of the current problem's
                    move, frozen, with the sliders set to it -- then tweak
     ENTER          (edit mode) print the pose as a dict to paste into moves.py
-    G              GRADE: all ten problems, one after another (~45 s), then
+    G              GRADE: all ten problems, one after another, then
                    the final score stays on screen for the instructor
     left-drag / right-drag / wheel   orbit / pan / zoom
     Keys go to the MuJoCo window -- click it first. If no key works there,
@@ -35,8 +35,11 @@ a robot. That gap is weeks 4 and 5, and you will meet it here first.
 Things measured with this file's own code before it was written (--grade):
 
 - Standing at `stand`: pelvis 0.79 m, hands hanging at 0.72 m.
-- Problem 1's starting move ("left_shoulder_pitch": -90, elbow still bent
-  as in `stand`) puts the left hand at 1.12 m: a near miss. -70 gives 0.99.
+- moves.py ships every move written out with its key numbers left as `...`,
+  a blank; it grades 0 / 10, each problem naming the lines still blank.
+  Problem 1's left arm with pitch, roll, yaw and elbow all 0 puts the
+  hand at 0.88 m. "left_shoulder_pitch": -90 alone, elbow still bent as in
+  `stand`, gives 1.12 m: a near miss. -70 gives 0.99.
 - A squat by IK to "pelvis": [0, 0, -0.20] bottoms out at 0.57 m and stands
   back up. [0, 0, -0.25] asks for 0.54 m and the robot sits down for good.
 - Raising BOTH arms overhead at once (shoulder pitch -150) throws the robot
@@ -87,7 +90,7 @@ HERE = Path(__file__).resolve().parent
 # --- 1. the rules -----------------------------------------------------------------------
 
 HOLD = 1.5          # seconds the last pose is held after the move ends
-MAX_SECONDS = 8.0   # longest move allowed
+                    # (a move may be as long as you like: slow is often what balances)
 FALL_Z = 0.45       # pelvis below this at any moment: fallen
 STAND_Z = 0.70      # at the end the pelvis must be above this ...
 STAND_TILT = 15.0   # ... and the torso within this many degrees of upright
@@ -206,8 +209,43 @@ class MovesError(Exception):
     pass
 
 
+class Blank:
+    """A `...` in moves.py: a number the student has not written yet.
+
+    It is kept as a value, not raised as an error, because a blank inside a
+    named pose (LEFT_UP = {...}) is read before MOVES and would otherwise
+    break every problem. Only the problems that USE the blank fail, and they
+    name its line.
+    """
+
+    def __init__(self, lineno):
+        self.lineno = lineno
+
+
+def _blank_lines(obj) -> list:
+    """Line numbers of every `...` inside a move or pose."""
+    if isinstance(obj, Blank):
+        return [obj.lineno]
+    if isinstance(obj, dict):
+        obj = list(obj.values())
+    if isinstance(obj, (list, tuple)):
+        return sorted({n for v in obj for n in _blank_lines(v)})
+    return []
+
+
+def _refuse_blanks(obj, what):
+    lines = _blank_lines(obj)
+    if lines:
+        where = ", ".join(str(n) for n in lines)
+        many = len(lines) > 1
+        raise MovesError(f"{what} is not filled in yet: replace the ... on line{'s' * many} "
+                         f"{where} of moves.py with {'numbers' if many else 'a number'}")
+
+
 def _value(node, env):
     if isinstance(node, ast.Constant):
+        if node.value is Ellipsis:                      # ... = a blank to fill in
+            return Blank(node.lineno)
         return node.value
     if isinstance(node, ast.Name):
         if node.id not in env:
@@ -226,9 +264,16 @@ def _value(node, env):
         return out
     if isinstance(node, ast.UnaryOp) and isinstance(node.op, (ast.USub, ast.UAdd)):
         v = _value(node.operand, env)
+        if isinstance(v, Blank):                        # -... is still a blank
+            return v
         return -v if isinstance(node.op, ast.USub) else +v
+    if isinstance(node, ast.Set):                       # {0} -- an easy slip for {}
+        raise MovesError(f"line {node.lineno}: {{...}} with no ':' is a set, not a pose -- "
+                         f"write {{}} for stand, or {{\"joint\": degrees}}")
     if isinstance(node, ast.BinOp) and isinstance(node.op, (ast.Add, ast.Sub, ast.Mult, ast.Div)):
         a, b = _value(node.left, env), _value(node.right, env)
+        if isinstance(a, Blank) or isinstance(b, Blank):
+            return a if isinstance(a, Blank) else b
         ops = {ast.Add: a.__add__, ast.Sub: a.__sub__, ast.Mult: a.__mul__, ast.Div: a.__truediv__}
         return ops[type(node.op)](b)
     raise MovesError(f"line {node.lineno}: only numbers, lists, dicts and names are allowed here")
@@ -246,7 +291,21 @@ def read_moves(path: Path):
     for node in tree.body:
         if isinstance(node, ast.Expr) and isinstance(node.value, ast.Constant):
             continue                                    # the docstring
-        if isinstance(node, ast.Assign) and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name):
+        if (isinstance(node, ast.Assign) and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name)
+                and node.targets[0].id == "MOVES" and isinstance(node.value, ast.Dict)):
+            # One problem at a time: a mistake in MOVES[4] fails problem 4 and
+            # nothing else. The error is stored in place of the move, and
+            # Attempt raises it when that problem is played.
+            env["MOVES"] = {}
+            for k, v in zip(node.value.keys, node.value.values):
+                if k is None:
+                    raise MovesError(f"line {v.lineno}: no ** inside MOVES -- give each problem its own line")
+                key = _value(k, env)
+                try:
+                    env["MOVES"][key] = _value(v, env)
+                except MovesError as e:
+                    env["MOVES"][key] = e
+        elif isinstance(node, ast.Assign) and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name):
             env[node.targets[0].id] = _value(node.value, env)
         else:
             raise MovesError(f"line {node.lineno}: only lines of the form  NAME = value  are allowed")
@@ -309,6 +368,7 @@ class Robot:
         m, q, notes = self.model, self.stand.copy(), []
         if not isinstance(pose, dict):
             raise MovesError(f"a pose must be a dict, got {pose!r}")
+        _refuse_blanks(pose, "this pose")
         ik = {k: np.asarray(pose[k], float) for k in ("pelvis", "left_foot", "right_foot") if k in pose}
         if ik:
             base = self.stand[:3] + ik.get("pelvis", np.zeros(3))
@@ -376,10 +436,13 @@ class Attempt:
         self.robot, self.number, self.data = robot, number, data
         self.title, self.text, self.plane, self.update = PROBLEMS[number]
         self.notes = []
+        if isinstance(move, MovesError):                # read_moves could not read this entry
+            raise MovesError(f"problem {number}, {move}")
         if not isinstance(move, (list, tuple)) or not move:
             raise MovesError(f"problem {number} has no move yet -- add steps to MOVES[{number}] in moves.py")
+        _refuse_blanks(move, f"problem {number}")
         dt = robot.model.opt.timestep
-        self.segments, total = [], 0.0
+        self.segments = []
         for i, step in enumerate(move):
             if not (isinstance(step, (list, tuple)) and len(step) == 2):
                 raise MovesError(f"problem {number}, step {i + 1}: write it as (seconds, {{pose}})")
@@ -389,9 +452,6 @@ class Attempt:
             ctrl, _, notes = robot.resolve(pose)
             self.notes += [f"step {i + 1}: {n}" for n in notes]
             self.segments.append((ctrl, max(1, round(secs / dt))))
-            total += secs
-        if total > MAX_SECONDS:
-            raise MovesError(f"problem {number}: the move lasts {total:.1f} s; the limit is {MAX_SECONDS:.0f} s")
         self.segments.append((self.segments[-1][0], round(HOLD / dt)))
         self.total_steps = sum(n for _, n in self.segments)
 
@@ -665,6 +725,8 @@ def run_viewer(robot: Robot, path: Path) -> int:
                     try:
                         _, moves = read_moves(path)
                         move = moves.get(state["number"]) or []
+                        if isinstance(move, MovesError):
+                            raise move
                         if not move:
                             raise MovesError(f"problem {state['number']} has no move yet")
                         state["kf"] = (state["kf"] + 1) % len(move)
@@ -703,6 +765,9 @@ def run_viewer(robot: Robot, path: Path) -> int:
             met = bool(att is not None and att.st["met"])
             draw_markers(viewer, robot, data, None if state["mode"] == "final" else state["number"], met)
             viewer.set_texts(hud())
+            # MuJoCo's viewer also treats digit keys 0-5 as 'toggle geom group'. The
+            # robot's meshes are group 2, so a '2' pressed for this lab would hide it.
+            viewer.opt.geomgroup[:3] = 1
             viewer.sync()
             time.sleep(0.01)
     return 0

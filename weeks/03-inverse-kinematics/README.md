@@ -150,15 +150,26 @@ twist-wave, boss). Students answer each with a **move** in `moves.py`: a list of
 `(seconds, pose)` steps, played under physics. A pose names joints in degrees,
 or uses **IK**: `"pelvis": [0, 0, -0.2]` lowers the body 20 cm while
 `ik_legs` keeps both feet planted. It passes if the goal is reached, the robot
-never falls, and it ends standing.
+never falls, and it ends standing. There is no time limit on a move: slow
+motions are often the ones that balance, so students may take as long as they
+need.
+
+**What students start from.** `moves.py` ships every move written out, with
+its key numbers left as `...` (nine blanks: shoulder pitches, waist pitch and
+yaw, and the pelvis offsets). The task is to fill each `...` with a number.
+Until then the problem shows "not filled in yet" and names the lines, so the
+shipped file scores 0 / 10. The blanks sit in named poses (`LEFT_UP`, `SQUAT`,
+`TURN`, ...) shared by several problems, so one answer fills several
+problems. The other numbers are given, and students may change them. Joints
+are in degrees, `"pelvis"` offsets in metres.
 
 How they solve it by looking, not guessing: `E` freezes the robot and the joint
 sliders pose it, `ENTER` prints the pose as a dict to paste, `K` steps through
 the current move frozen, and `1`–`0` play a problem with a live gauge
 ("left hand 1.12 m, need > 1.20"). `moves.py` is re-read on every key press.
 
-**Grading.** Students press `G` whenever they like; all ten play in about 45 s
-and the score stays on screen: name, `SCORE n / 10`, `O`/`X` per problem, a
+**Grading.** Students press `G` whenever they like; all ten play back to back
+(about 45 s for the reference answers, longer for slower moves) and the score stays on screen: name, `SCORE n / 10`, `O`/`X` per problem, a
 four-letter **scorer code** and the time. The instructor walks the room reading
 screens. The scorer code is a hash of `lab_connected.py`; if it differs from the
 one on the board, the referee was edited. `moves.py` is parsed as data, never

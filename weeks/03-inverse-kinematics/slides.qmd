@@ -5,21 +5,8 @@ author: "Hong Jeong"
 format:
   revealjs:
     output-file: slides.html
-  ipynb:
-    output-file: lab.ipynb
 jupyter: python3
 ---
-
-::: {.content-visible when-format="ipynb"}
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gnoejh/soc4180/blob/main/weeks/03-inverse-kinematics/lab.ipynb)
-
-**Before you start, two things:**
-
-1. **Runtime → Change runtime type → T4 GPU.** Not for training — MuJoCo renders
-   video through EGL on Colab, and that needs the GPU runtime.
-2. **File → Save a copy in Drive.** This notebook is opened from GitHub and is
-   *not* saved. Without a copy, your work disappears when you close the tab.
-:::
 
 ## Reversing last week
 
@@ -857,62 +844,46 @@ model**, and the robot walks.
 ## Lab class: on your laptop {.smaller}
 
 ```bash
-uv run weeks/03-inverse-kinematics/lab_ik.py
+uv run weeks/03-inverse-kinematics/lab_connected.py
 ```
 
-The G1 in the crouch, a **red** target you move with the arrow keys, a **green**
-sphere at the foot, and a translucent sphere showing the leg's reach. Nothing is
-simulated; the pelvis never moves.
+**Ten problems, one score out of 10.** Wave, sway, twist, squat, bow, clap,
+both hands up, squat-wave, twist-wave, and a boss. You edit **only
+`moves.py`**: each answer is a *move*, a list of `(seconds, pose)` steps the
+G1 blends through **under real physics**.
 
-**The code is complete and explained.** Section 2 of the script is this
-lecture in three functions — `dls_step`, `inverse_step`, `transpose_step` —
-each commented against the slide it comes from; `M` swaps them live. Section 4
-explains what the script does around a solver: `qpos` vs `qvel` indices,
-`mj_jacSite`, `pose_error`, the clip to joint limits, `mj_forward`.
+A pose names joints in degrees, or uses this lecture's solver:
+`"pelvis": [0, 0, -0.2]` lowers the body 20 cm and `ik_legs` finds the twelve
+leg angles that keep both feet planted.
+
+| Key | Does |
+| --- | --- |
+| `1` … `9`, `0` | play a problem, with a live gauge ("left hand 1.12 m, need > 1.20") |
+| `E`, then `K` / `ENTER` | freeze and pose by slider; step through your move; print the pose to paste |
+| `G` | grade all ten; the score and a 4-letter scorer code stay on screen |
+
+`moves.py` ships with its key numbers left as `...` — fill them in. It is
+re-read on every key press: save, press again, no restart.
 
 ---
 
-## Lab class: the experiments {.smaller}
+## Lab class: what the game teaches {.smaller}
 
-Eight experiments in the docstring, each with the numbers it should produce,
-all measured with the script's own functions before they were written:
+Every pose in the game is one IK solves perfectly — frozen. **Under gravity,
+half of them fall over.** Measured with the game's own `--grade`:
 
-| # | Do | Right looks like |
+| Problem | The naive answer | What works |
 | --- | --- | --- |
-| 1 | dls, up arrow ×5 | residual 4e-6 after one frame |
-| 2 | `M` inverse, `S` straight leg, arrow **up** | $\|\Delta q\| = 10^4$ rad; the leg folds onto its joint limits |
-| 3 | dls, straight leg, sweep $\lambda$ | small $\lambda$ folds; $10^{-2}$ blows up as the knee leaves zero; $10^{-1}$ creeps the knee the *wrong* way; no $\lambda$ helps |
-| 4 | `M` transpose | creeps, never explodes |
-| 5 | right arrow ×30 | hip distance > reach; residual stops shrinking |
-| 6 | `]` to $\lambda = 1$ | 3 cm of 5 left after a second: find the largest $\lambda$ that still tracks |
-| 7 | `O`, `.` ×15 | the foot tilts 16° with 3 rows, levels with 6 |
+| Hands up | both arms at once: falls on its face | one arm, then the other: 1.36 m |
+| Clap | arms forward: falls forward | pelvis 4 cm back as a counterweight |
+| Bow | hips −30°, waist +30°: topples | push the pelvis back and down while bending |
+| Boss | lower the arms, then stand: falls on its back | stand up *first*, arms still up |
 
-Then break a solver on purpose (`-dq`; the transpose without its step length)
-and explain what you see.
+**Kinematics places a pose; it does not balance a robot.** The order of the
+poses is part of the answer. That gap is weeks 4 and 5.
 
----
-
-## Lab class: `reach.py`, the pipeline you read {.smaller}
-
-```bash
-uv run weeks/03-inverse-kinematics/reach.py --target 0.10 0 0.05
-uv run weeks/03-inverse-kinematics/reach.py --target 0 0 0.01 --seed straight --solver inverse --trace
-uv run weeks/03-inverse-kinematics/reach.py --target 0.3 0 0 --trace --jacobian --no-viewer
-```
-
-`lab_ik.py` is for playing; `reach.py` is for reading. Targets on the command
-line, the solution printed (`--trace`: every iteration; `--jacobian`: $J$ and
-its singular values), then the simulator animates the leg through it
-(`--no-viewer` is what Colab sees). Six numbered steps:
-
-| Step | Does | Calls |
-| --- | --- | --- |
-| 1 | load the robot, pick the seed pose | `load_g1`, `initial_data`, `mj_forward` |
-| 2 | the leg's numbers: `qpos` slice, `qvel` slice, foot site, limits | `leg_qpos_indices`, `leg_dof_indices`, `foot_site_id`, `jnt_range` |
-| 3 | per iteration: error → Jacobian → step → clip → forward | `pose_error`, `mj_jacSite`, `dls_step`, `np.clip`, `mj_forward` |
-| 4 | report foot, residual, tilt, angles, limits hit | `site_xpos`, `site_xmat` |
-| 6 | animate pose to pose | `launch_viewer(passive=True)`, `sync` |
-
+A pass needs three things: the goal reached, no fall on the way, and the robot
+ends standing. Take as long as you like — slow moves often balance.
 
 ---
 

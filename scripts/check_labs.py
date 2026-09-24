@@ -4,7 +4,7 @@
     uv run scripts/check_labs.py --no-viewer   # pipelines only (what a headless machine can run)
     uv run scripts/check_labs.py --only 03 07  # a subset, by week prefix
 
-Each week's pipeline script (`stack.py`, `reach.py`, `walk.py`, ...) runs with
+Each week's pipeline script (`stack.py`, `walk.py`, ...) runs with
 `--no-viewer` and the smallest arguments that exercise it; each interactive lab
 (`lab_*.py`) runs with `SOC4180_AUTOCLOSE=4`, which closes its window after
 four seconds. A script passes if it exits 0 within its time limit. Failures
@@ -30,7 +30,6 @@ PIPELINES = [
     ("01", "weeks/01-intro/mjcf_run.py --seconds 1"),
     ("02", "weeks/02-transforms/fk.py"),
     ("02b", "weeks/02b-robot-as-code/anatomy.py --nudge waist"),
-    ("03", "weeks/03-inverse-kinematics/reach.py --target 0.05 0 0.05"),
     ("03", "weeks/03-inverse-kinematics/lab_connected.py --grade --problem 1 4"),
     ("04", "weeks/04-walking/walk.py --steps 2"),
     ("05", "weeks/05-actuation/servo.py --seconds 0.3"),
@@ -46,7 +45,6 @@ LABS = [
     ("01", "weeks/01-intro/lab_mjcf.py"),
     ("02", "weeks/02-transforms/lab_viewer.py"),
     ("02b", "weeks/02b-robot-as-code/lab_body.py"),
-    ("03", "weeks/03-inverse-kinematics/lab_ik.py"),
     ("03", "weeks/03-inverse-kinematics/lab_connected.py"),
     ("04", "weeks/04-walking/lab_walk.py"),
     ("05", "weeks/05-actuation/lab_servo.py"),

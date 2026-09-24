@@ -24,7 +24,7 @@ Two conventions run through everything:
 | The state arrays | `data.qpos` (nq), `data.qvel` (nv), `data.ctrl` (nu) | 02b `anatomy.py` prints the map |
 | Which slot is which joint | `model.jnt_qposadr[j]`, `model.jnt_dofadr[j]`, `mj_name2id(model, mjOBJ_JOINT, name)` | 02b `anatomy.py`, 01 `mjcf_run.py` |
 | An actuator's joint | `model.actuator_trnid[:, 0]`, then `jnt_qposadr` of it | 02 `lab_viewer.py` (sliders), 05 `servo.py` |
-| Joint limits | `model.jnt_range[j]` | 03 `reach.py` (the clip) |
+| Joint limits | `model.jnt_range[j]` | 03 `lab_connected.py --joints` (ranges in degrees) |
 | Physics options | `model.opt.timestep`, `model.opt.gravity`, `model.opt.disableflags` | 00 `stack.py`, 01 `mjcf_run.py` |
 | Switch every servo off | `model.opt.disableflags \|= mjDSBL_ACTUATION` | 00 `stack.py --layer limp` |
 | Many robots in one model | `MjSpec.from_string`, `MjSpec.from_file(str)`, `worldbody.add_frame()`, `frame.attach_body(child.worldbody.first_body(), "r0_", "")`, `compile()` | 10 `many.py`, `lab_many.py` |
@@ -36,7 +36,7 @@ Two conventions run through everything:
 | Forward kinematics (MuJoCo's) | `mujoco.mj_forward(model, data)`: `qpos` → `xpos`, `xmat`, `site_xpos`, `site_xmat` | 02 `fk.py` step 1 |
 | Forward kinematics (by hand) | `model.body_pos`, `model.body_quat`, `model.jnt_axis`, `model.jnt_pos`, `model.site_pos`; `mju_quat2Mat`, `mju_axisAngle2Quat` | 02 `fk.py` step 2, `lab_viewer.py chain_fk` |
 | Where the foot is | `data.site_xpos[kin.foot_site_id(model, "left")]` | 02, 03 |
-| Which way the foot faces | `data.site_xmat[site].reshape(3, 3)` | 03 `reach.py` (the level-foot target) |
+| Which way the foot faces | `data.site_xmat[site].reshape(3, 3)` | 03 `lab_connected.py` (the planted feet IK holds) |
 | Pose a named part | `soc4180.set_pose(model, data, left_elbow=1.2)`; chains in `bodies.CHAINS` | 02b `anatomy.py`, `lab_body.py` |
 | Mirror a pose | `soc4180.mirror(dict)`: roll and yaw flip sign, pitch does not | 02b |
 
@@ -44,10 +44,10 @@ Two conventions run through everything:
 
 | Idea | Call / array | Week, script |
 | --- | --- | --- |
-| The site Jacobian | `mujoco.mj_jacSite(model, data, jac_p, jac_r, site)` writes into two 3 × nv arrays; pick the leg's columns with `kin.leg_dof_indices` | 03 `reach.py` step 3, `lab_ik.py Leg.jacobian` |
+| The site Jacobian | `mujoco.mj_jacSite(model, data, jac_p, jac_r, site)` writes into two 3 × nv arrays; pick the leg's columns with `kin.leg_dof_indices` | 03 deck; `soc4180.kinematics.ik_legs`, which `lab_connected.py` calls |
 | The pose error a step must close | `kin.pose_error(data, site, target_pos, target_mat)`: 3 metres + 3 radians (a rotation vector) | 03 |
-| One damped step | `J.T @ np.linalg.solve(J @ J.T + lam**2 * I, err)` | 03 `dls_step` |
-| Singular values, condition number | `np.linalg.svd(J, compute_uv=False)` | 03 `reach.py --jacobian` |
+| One damped step | `J.T @ np.linalg.solve(J @ J.T + lam**2 * I, err)` | 03 deck; `ik_legs` |
+| Singular values, condition number | `np.linalg.svd(J, compute_uv=False)` | 03 deck (the singularity cell) |
 | Apply the step, inside the limits | `data.qpos[idx] = np.clip(data.qpos[idx] + dq, lo, hi)`; then `mj_forward` | 03 |
 
 ## Dynamics: forces, contacts, servos

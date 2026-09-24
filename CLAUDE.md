@@ -39,7 +39,7 @@ agentic content returns only where it attaches to the robot, in weeks 14–15.
 | 01 | The five-layer robot stack; MuJoCo and MJCF | `00`, `01` | built; `lab_stack.py` + `stack.py`, `lab_mjcf.py` + `mjcf_run.py` (complete, explained, 2026-09-21); Pages-green; **not yet Colab-tested** |
 | 02 | Transforms and forward kinematics | `02` | built, Colab-verified before 2026-09-20; `lab_viewer.py` (both FKs complete) + `fk.py`; lecture class only — the lab class is `02b` |
 | 02b | The robot as code: body tree, `qpos` map, the package | `02b` | built; `lab_body.py` + `anatomy.py`; Pages-green since the import-order fix; **not yet Colab-tested** |
-| 03 | Inverse kinematics | `03` | built; 29 slides with colour-coded maths (2026-09-20); `lab_ik.py` (three solvers) + `reach.py`; `lab_connected.py` + `moves.py`, a ten-problem graded game (2026-09-24, reference 10/10 in gitignored `instructor/`; students fill nine `...` blanks, scorer code `40B6`); **not re-tested on Colab since** |
+| 03 | Inverse kinematics | `03` | built; slides with colour-coded maths (2026-09-20); **deck only, no `lab.ipynb`**; the lab is `lab_connected.py` + `moves.py`, a ten-problem graded game (2026-09-24, reference 10/10 in gitignored `instructor/`; students fill nine `...` blanks, scorer code `40B6`). `lab_ik.py`, `reach.py` and the notebook were removed 2026-09-24 as uninteresting |
 | 04 | Contact, balance, analytic walking (LIPM/ZMP) | `04` | built; `lab_walk.py` + `walk.py`; **not re-tested on Colab since 2026-09-20** |
 | 05 | Actuation, PD control, and CPG gaits | `05` | built; `lab_servo.py` + `servo.py`; **not re-tested on Colab since 2026-09-20** |
 | 06 | Sensing, state estimation, observation design | `06` | built; `lab_imu.py` + `imu.py`; **not re-tested on Colab since 2026-09-20** |
@@ -213,7 +213,7 @@ one-fill-in-returning-`None` convention is gone. What replaced it:
 | 01 | `lab_mjcf.py` (XML annotated tag by tag) | `mjcf_run.py --kp --timestep --servos --xml` | droop vs kp (−0.080 … −0.858), `BADQACC` at dt 0.02 |
 | 02 | `lab_viewer.py` (`chain_fk` 1.8e-16, `paper_fk` 2.2e-6, `F` switches) | `fk.py --angles` | the chain printed body by body vs `site_xpos` |
 | 02b | `lab_body.py` | `anatomy.py --nudge CHAIN --pose --mirror` | the qpos/qvel map; one heat-map row live |
-| 03 | `lab_ik.py` (dls, inverse, transpose; `M` swaps) | `reach.py --target --solver --seed --trace --jacobian` | residual per iteration; the singularity |
+| 03 | `lab_connected.py` (graded game; students edit `moves.py`) | — (`lab_connected.py --grade --no-viewer` is its headless mode) | score out of 10; which poses fall under gravity |
 | 04 | `lab_walk.py` (`predict_com` complete) | `walk.py --step-time --double-support --gravity --friction` | one row per step: x, pelvis z, ZMP range, IK error |
 | 05 | `lab_servo.py` (`torque_from_pd` complete, `H` hands over) | `servo.py --joint --kp-scale --kv-scale --limit --walk` | ζ from `mj_fullM`, rise time, overshoot, peak torque; sag and falls |
 | 06 | `lab_imu.py` (`my_filter` complete) | `imu.py --walk --noise --alpha --sweep` | three estimators' error per second; the α sweep |
@@ -236,8 +236,8 @@ which call it uses. Pipeline scripts follow one shape: compute, print, then
 replay the recorded `qpos` in the passive viewer (`mj_forward` + `sync`, no
 physics re-run) — and none of them is a notebook cell.
 
-**Week 3's `lab_connected.py` is the one exception, a graded game, and its
-blanks are `...`.** `moves.py` is parsed with `ast`, never run, so `...`
+**Week 3's `lab_connected.py` is a graded game, the model for new labs, and
+its blanks are `...`.** Week 3 has no pipeline script and no notebook. `moves.py` is parsed with `ast`, never run, so `...`
 parses. The reader turns each `...` into a `Blank(lineno)` value and does not
 raise on it, because a blank in a named pose such as `LEFT_UP` is read before
 `MOVES` and raising there would break every problem. Each problem refuses its
@@ -471,7 +471,9 @@ The pipeline is proven; follow it rather than improvising.
    they should see on screen when it is right.
 7. Add the two lab-class scripts under the week, using only what `uv.lock`
    installs (plus `--extra rl` from week 7). They may open the viewer;
-   `lab.ipynb` may not. Follow week 3 (`lab_ik.py` and `reach.py`): an
+   `lab.ipynb` may not. **Model new labs on week 3's `lab_connected.py`** (the
+   instructor's preferred shape since 2026-09-24: problems, a live gauge, a
+   score, a scorer code, answers in `instructor/`). Otherwise: an
    interactive `lab_*.py` with a list at the top, keys in the docstring, a
    complete and explained function students change, and a visible difference
    on screen between right and wrong; and a linear pipeline script with flags

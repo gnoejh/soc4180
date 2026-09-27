@@ -38,11 +38,12 @@ Experiments, in order, and show the instructor:
    than the body count.
 2. Press P. Read the four numbers. At how many processes does it stop
    scaling, and how many cores does this laptop have (`os.cpu_count()`)?
-3. Take your best rate from step 2. How many hours is 150 million steps?
+3. Take your best rate from step 2. How many hours is 150 million training
+   steps? Careful: one training step is one decision at 50 Hz, ten physics steps.
    How many laptops would you need to do it in one lecture? (The deck's
    answer is a different kind of processor, not more laptops.)
 4. Press F. The robots now differ slightly in friction and mass and drift
-   apart within a few steps. This is week 11 in one key: say what a policy
+   apart within a few steps. This is week 12 in one key: say what a policy
    trained on all of them at once would have to learn that one robot cannot
    teach it.
 5. Bring N up until the window drops below 0.25x real time. Say what an
@@ -221,7 +222,7 @@ def main() -> int:
         print(f"  {scene.n} robots in one process: {measured:8,.0f} robot-steps/s measured"
               f"   vs {pred:8,.0f} predicted (COST_EXPONENT {COST_EXPONENT})"
               f"   window at {sim_per_wall:.2f}x real time")
-        print(f"  150M steps at this rate: {150e6 / measured / 3600:6.1f} hours"
+        print(f"  150M training steps (x10 physics) at this rate: {150e6 * 10 / measured / 3600:6.1f} hours"
               f"   nq = {scene.model.nq}, nbody = {scene.model.nbody}, contacts now {scene.data.ncon}")
 
     print("\n\n".join(__doc__.split("\n\n")[2:4]))

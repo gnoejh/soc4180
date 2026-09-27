@@ -32,14 +32,41 @@ Walking is worth 1250. The robot is choosing 780.
 
 Today: why, and whether the reward can be rewritten to make it choose otherwise.
 
-The answer is more interesting than yes or no.
+1. A reward is a **weighted sum** of terms — each behaviour's value computed and drawn.
+2. **Dense vs sparse**: why a reward that says nothing until the end gives a gradient of exactly zero.
+3. The **valley**: the ranking is right, the route is missing. An ablation that failed, and why.
+4. What a **real** locomotion reward adds — and what that does to our robot.
+5. **Potential-based shaping**: the one kind of extra reward that provably cannot change the answer — derived.
+
+This is **Layer 5** — learning — and the part of it a human writes.
 
 ---
 
-## A reward is a ranking {.smaller}
+## Colour code for the week {.smaller}
 
-Before any training, ask the simplest question: **does the reward prefer what I
-prefer?** Our reward is five terms, so evaluate it by hand.
+The same colours mean the same things in every equation and every drawing:
+
+| symbol | meaning | colour |
+| --- | --- | --- |
+| ${\color{#3b7dd8}{w_i}}$ | the **weight** of term $i$ — the designer's knob | <span style="color:#3b7dd8">blue</span> |
+| ${\color{#e8743b}{\phi_i}}$ | the **term** itself: a number measured from the robot this step (speed, tilt, effort …) | <span style="color:#e8743b">orange</span> |
+| ${\color{#2a9d5c}{r_t}}$, ${\color{#2a9d5c}{G}}$ | the **reward** of one step, and the **return** of an episode (the sum of rewards) | <span style="color:#2a9d5c">green</span> |
+| ${\color{#8e44ad}{\Phi(s)}}$ | a **potential**: any score of a *state* ("how far along is the robot") | <span style="color:#8e44ad">purple</span> |
+| ${\color{#c0392b}{F}}$ | a **shaping** term: extra reward added on top of the original | <span style="color:#c0392b">red</span> |
+
+Plain black: $s_t$ the state at step $t$, $\gamma = 0.99$ the discount, $T$ the number of steps in an episode
+(500 = 10 s at 50 Hz if the robot never falls), $v$ the pelvis's forward speed in m/s.
+
+---
+
+## A reward is a weighted sum {.smaller}
+
+Every locomotion reward in practice has this shape:
+
+$${\color{#2a9d5c}{r_t}} = \sum_i {\color{#3b7dd8}{w_i}}\;{\color{#e8743b}{\phi_i}}(s_t, a_t)$$
+
+- ${\color{#e8743b}{\phi_i}}$ — one measurement, chosen so that "bigger" means "more of *this*" (faster, more upright, more effort)
+- ${\color{#3b7dd8}{w_i}}$ — how much the designer cares, and in which direction: $+$ pays, $-$ charges
 
 ```{python}
 try:
@@ -51,8 +78,70 @@ except ImportError:
 
 import time, warnings
 import numpy as np
+import matplotlib.pyplot as plt
+from soc4180.envs import G1WalkEnv, DEFAULT_REWARD
 warnings.filterwarnings("ignore")
 
+formula = {"tracking": "exp(-(v - 0.5)^2 / 0.25)   1 at the target speed", "upright": "-g_z (cos tilt)          1 when vertical",
+           "effort": "sum of a_i^2 (12 joints)", "smooth": "sum of (a_i - a_prev,i)^2", "alive": "1 every step",
+           "stand_still": "1 if |v| < 0.1 m/s", "air_time": "number of feet off the floor"}
+for name, w in DEFAULT_REWARD.items():
+    print(f"  w = {w:+6.2f}   phi_{name:12s} = {formula[name]}")
+```
+
+Seven terms, **five switched on** — `stand_still` and `air_time` exist in the environment with weight 0; they come back later today.
+
+---
+
+## One standing episode, term by term {.smaller}
+
+The return is a sum over steps of a sum over terms, and sums can be swapped:
+
+$${\color{#2a9d5c}{G}} = \sum_{t=0}^{T-1}{\color{#2a9d5c}{r_t}} = \sum_t\sum_i {\color{#3b7dd8}{w_i}}\,{\color{#e8743b}{\phi_i}}(s_t,a_t) = \sum_i {\color{#3b7dd8}{w_i}}\,\Big(\sum_t {\color{#e8743b}{\phi_i}}(s_t,a_t)\Big)$$
+
+So an episode's value is **each weight times that term's total**. Measured, holding the crouch (action 0) for a whole episode:
+
+```{python}
+#| fig-align: center
+env = G1WalkEnv()
+obs, _ = env.reset(seed=0); totals = dict.fromkeys(DEFAULT_REWARD, 0.0); steps = 0
+while True:
+    obs, r, terminated, truncated, info = env.step(np.zeros(12, dtype=np.float32)); steps += 1
+    for name in totals:
+        totals[name] += info[name]                  # the raw term, summed over the episode
+    if terminated or truncated:
+        break
+for name, w in DEFAULT_REWARD.items():
+    print(f"  {name:12s} total {totals[name]:7.1f}  x w {w:+5.2f} = {w * totals[name]:+7.1f}")
+print(f"  {steps} steps;  return = {sum(DEFAULT_REWARD[n] * totals[n] for n in totals):.1f}")
+```
+
+---
+
+## Reading the standing episode {.smaller}
+
+- **tracking** earns about 0.55 per step though the robot does not move: $1.5\,e^{-(0-0.5)^2/0.25} = 1.5\,e^{-1} = 0.55$.
+  A Gaussian never reaches zero, so **standing still collects over a third of the tracking reward.**
+- **upright** and **alive** pay 0.5 each, every step, for being vertical and not fallen.
+- **effort** and **smooth** are *exactly* zero: the action was zero every step, so there was nothing to charge.
+- **stand_still** counted every step (the robot's speed stayed below 0.1 m/s) — but its weight is 0, so it cost nothing.
+  Hold on to that total: it is the bill standing would pay if the weight were switched on.
+
+The three positive terms add up to about 774: the "hold-the-crouch baseline" from weeks 7 and 8, now itemised.
+
+---
+
+## A reward is a ranking {.smaller}
+
+Before any training, ask the simplest question: **does the reward prefer what I
+prefer?** For a behaviour that holds speed $v$, stays vertical, and survives $T$ steps, every step pays the same:
+
+$${\color{#2a9d5c}{G}}(v, T) = T\,\Big[\,1.5\,e^{-(v-0.5)^2/0.25} + 0.5\cdot 1 + 0.5\,\Big]$$
+
+(tracking + upright + alive. Effort and smoothness are dropped: $0.01\sum a_i^2$ and $0.05\sum(\Delta a_i)^2$ are a few
+hundredths per step or less for actions of a few tenths, and exactly 0 on the standing episode.)
+
+```{python}
 def episode_return(velocity, steps, upright=1.0, target=0.5):
     per_step = (1.5 * np.exp(-((velocity - target) ** 2) / 0.25)
                 + 0.5 * upright + 0.5)
@@ -70,6 +159,118 @@ The reward is not lying about what we want.
 
 ---
 
+## Where each behaviour's value comes from, drawn {.smaller}
+
+```{python}
+#| fig-align: center
+behaviours = [("walk at\ntarget", 0.5, 500), ("walk\nslowly", 0.2, 500), ("stand\nstill", 0.0, 500), ("lunge,\nfall at 46", 1.3, 46)]
+fig, (ax0, ax1) = plt.subplots(1, 2, figsize=(10.4, 3.5), gridspec_kw={"width_ratios": [1, 1.25]})
+x = np.arange(len(behaviours)); bottom = np.zeros(len(behaviours))
+for name, per_step, col in (("tracking", lambda v: 1.5 * np.exp(-((v - 0.5) ** 2) / 0.25), "#3b7dd8"),
+                            ("upright", lambda v: 0.5, "#2a9d5c"), ("alive", lambda v: 0.5, "0.6")):
+    part = np.array([per_step(v) * n for _, v, n in behaviours])
+    ax0.bar(x, part, bottom=bottom, color=col, label=name); bottom += part
+for xi, total in zip(x, bottom):
+    ax0.text(xi, total + 15, f"{total:.0f}", ha="center", fontsize=8)
+ax0.set_xticks(x, [b[0] for b in behaviours], fontsize=8); ax0.set_ylabel("episode return")
+ax0.set_ylim(0, 1400); ax0.legend(fontsize=8, loc="upper right"); ax0.set_title("each bar split by term", fontsize=10)
+V, T = np.meshgrid(np.linspace(-0.5, 1.5, 201), np.linspace(0, 500, 201))
+Z = episode_return(V, T)
+im = ax1.contourf(V, T, Z, levels=np.arange(0, 1301, 100), cmap="Greens")
+cs = ax1.contour(V, T, Z, levels=[episode_return(0.0, 500)], colors="#c0392b", linewidths=2)
+ax1.text(1.0, 300, "red curve:\nsame return as\nstanding (776)", color="#c0392b", fontsize=8)
+offsets = [((6, -14), "left"), ((4, -24), "left"), ((-6, -14), "right"), ((-8, 6), "right")]
+for (label, v, n), mk, (xy, ha) in zip(behaviours, "o^sX", offsets):
+    ax1.plot(v, n, mk, color="k", ms=7, clip_on=False, zorder=5)
+    ax1.annotate(label.replace("\n", " "), (v, n), xytext=xy, textcoords="offset points", fontsize=7.5, ha=ha)
+ax1.set_xlabel("forward speed $v$ (m/s)"); ax1.set_ylabel("steps survived $T$")
+ax1.set_title("return for every (speed, survival) pair", fontsize=10); fig.colorbar(im, ax=ax1, label="return")
+fig.tight_layout(); plt.show()
+print(f"walking at the target must survive {episode_return(0.0, 500) / episode_return(0.5, 1):.0f} steps "
+      f"({episode_return(0.0, 500) / episode_return(0.5, 1) / 50:.1f} s) just to tie with standing for 500")
+```
+
+Left: **alive and upright are the same for every behaviour that survives** — only the tracking slice
+distinguishes walking from standing. Right: every (speed, survival) pair *inside* the red curve beats standing; everything outside loses to it.
+A walk at the perfect speed that falls halfway through the episode (250 steps) is *worse* than standing still.
+
+---
+
+## What PPO maximises: the discounted sum {.smaller}
+
+The returns above are plain sums — what `evaluate_policy` reports. PPO optimises the **discounted** return
+(week 7), with $\gamma = 0.99$. For a constant reward $\bar r$ per step over $T$ steps:
+
+**Step 1 — write it out:** ${\color{#2a9d5c}{G}}_\gamma = \bar r\,(1 + \gamma + \gamma^2 + \dots + \gamma^{T-1})$.
+**Step 2 — multiply by $\gamma$ and subtract:** the sum $S = 1 + \dots + \gamma^{T-1}$ and $\gamma S = \gamma + \dots + \gamma^{T}$ share every
+term but two, so $S - \gamma S = 1 - \gamma^T$, i.e. $S = \dfrac{1-\gamma^T}{1-\gamma}$:
+
+$${\color{#2a9d5c}{G}}_\gamma = \bar r\;\frac{1-\gamma^{T}}{1-\gamma}$$
+
+```{python}
+gamma = 0.99
+for label, v, n in (("walk at the target", 0.5, 500), ("walk slowly", 0.2, 500),
+                    ("stand still", 0.0, 500), ("lunge, fall at 46", 1.3, 46)):
+    rbar = episode_return(v, 1)
+    print(f"  {label:22s} per step {rbar:.3f}   plain sum {rbar * n:7.1f}   discounted {rbar * (1 - gamma**n) / (1 - gamma):6.1f}")
+print(f"gamma^500 = {gamma**500:.4f}: step 500 counts {gamma**500:.1%} as much as step 0")
+```
+
+Same order — the ranking survives discounting. Read the numbers as: with $\gamma = 0.99$ the policy effectively looks
+about $1/(1-\gamma) = 100$ steps (2 s) ahead, so the discounted values are close to "per step × 100".
+
+---
+
+## Dense versus sparse {.smaller}
+
+- A **sparse** reward pays only when the goal is reached: ${\color{#2a9d5c}{r_t}} = 1$ on the step the pelvis first passes $x = 1$ m, else 0.
+- A **dense** reward pays a little on every step for progress toward it: our tracking term.
+
+Both can rank behaviours correctly. They are not equally **learnable**. From week 8, with a baseline:
+
+$$\nabla_\theta J \approx \frac1N\sum_{\text{episodes}}\ \sum_t \nabla_\theta\log\pi_\theta(a_t\mid s_t)\,\big({\color{#2a9d5c}{G}} - b\big)$$
+
+**Step 1** — suppose no sampled episode reaches the goal. Then every ${\color{#2a9d5c}{G}} = 0$.
+**Step 2** — the baseline is the average return, so $b = 0$ too, and every factor ${\color{#2a9d5c}{G}} - b = 0$.
+**Step 3** — so the estimate is **exactly zero**. Not small, not noisy: zero. No batch contains a single hint of which way is better.
+
+A dense reward differs between episodes even when none succeeds (one fell later, one moved forward a little) — and
+*differences* are all the gradient needs. The price: the designer must decide what "a little progress" means, and
+that decision is exactly what can go wrong (reward hacking, below).
+
+---
+
+## Sparse, measured on the G1 {.smaller}
+
+What does PPO's first batch look like? Sample 20 episodes from an untrained policy with each of week 8's two noise widths:
+
+```{python}
+#| fig-align: center
+fig, ax = plt.subplots(figsize=(9, 2.8))
+for sd, col in ((1.0, "#e8743b"), (np.exp(-2.0), "#3b7dd8")):
+    rng = np.random.default_rng(0); reach, dense = [], []
+    for ep in range(20):
+        obs, _ = env.reset(seed=ep); total, far = 0.0, 0.0
+        while True:
+            a = np.clip(rng.normal(0.0, sd, 12), -1, 1).astype(np.float32)
+            obs, r, terminated, truncated, _ = env.step(a); total += r; far = max(far, env.data.qpos[0])
+            if terminated or truncated:
+                break
+        reach.append(far); dense.append(total)
+    sparse = [1.0 if f >= 1.0 else 0.0 for f in reach]
+    ax.plot(reach, dense, "o", color=col, label=f"std {sd:.3f}")
+    print(f"std {sd:.3f}: furthest any episode got {max(reach):.2f} m;  sparse returns {sorted(set(sparse))};  "
+          f"dense returns {min(dense):.0f} to {max(dense):.0f}")
+ax.axvline(1.0, color="#2a9d5c", ls="--"); ax.text(0.98, 50, "sparse goal: x = 1 m", ha="right", color="#2a9d5c", fontsize=8)
+ax.set_xlabel("furthest forward the pelvis got (m)"); ax.set_ylabel("dense return"); ax.set_xlim(-0.05, 1.1)
+ax.legend(fontsize=8, loc="upper left"); ax.grid(alpha=0.3); fig.tight_layout(); plt.show()
+```
+
+Forty episodes, **not one** reaches 1 m, so the sparse reward is 0 in all of them and the gradient is zero. The
+dense returns spread widely — each point is different, and that spread is the signal.
+
+---
+
 ## The ranking, and the valley in front of it {.smaller}
 
 The ranking says where the top is. It says nothing about the *path*. Walk a
@@ -78,9 +279,6 @@ score each one in the real environment:
 
 ```{python}
 #| fig-align: center
-import matplotlib.pyplot as plt
-from soc4180.envs import G1WalkEnv
-
 def open_loop_return(amplitude, env=G1WalkEnv()):
     obs, _ = env.reset(seed=0); total, k = 0.0, 0
     while True:
@@ -106,9 +304,10 @@ ax1.set_title("one family of routes out of standing: every step down", fontsize=
 fig.tight_layout(); plt.show()
 ```
 
-Standing is 776. Every open-loop attempt to step scores **less** — first
-because effort and smoothness cost a little, then because it falls. Walking
-at 1250 is real, but nothing on this path leads up to it.
+The family: hip pitch swings as $A\sin(4t)$ on one leg and $-A\sin(4t)$ on the other, each knee bends on its
+leg's forward half-swing; $A$ is the amplitude in action units. Standing is 776. Every open-loop attempt to step
+scores **less** — first because effort and smoothness cost a little, then because it falls. Walking at 1250 is
+real, but nothing on this path leads up to it.
 
 ---
 
@@ -126,6 +325,9 @@ almost nothing.
 This is a **local optimum**, and it is the single most common failure in
 locomotion RL. Nothing in a learning curve announces it: the return rises,
 flattens at 776, and stays there looking healthy.
+
+Policy gradient only ever sees the **slope** near its current policy (week 8: the surrogate is trustworthy only
+near ${\pi_{\text{old}}}$). At standing, every small change of the policy scores lower, so every step points back to standing.
 
 ---
 
@@ -151,10 +353,35 @@ one** — and it tells us the missing ingredient is not among the terms we had.
 
 ---
 
+## Why the ablation could not work, by hand {.smaller}
+
+Setting ${\color{#3b7dd8}{w_i}} = 0$ removes ${\color{#3b7dd8}{w_i}}\times(\text{term total})$ from every behaviour. Price all six variants:
+
+```{python}
+def value(v, n, w):
+    """Hand model: tracking, upright (vertical) and alive; effort/smooth taken as 0."""
+    return n * (w["tracking"] * np.exp(-((v - 0.5) ** 2) / 0.25) + w["upright"] * 1.0 + w["alive"] * 1.0)
+
+variants = {"full reward": {}, "no alive bonus": {"alive": 0}, "no upright term": {"upright": 0},
+            "no effort penalty": {"effort": 0}, "no smoothness": {"smooth": 0},
+            "tracking only": {"upright": 0, "alive": 0, "effort": 0, "smooth": 0}}
+print(f"  {'variant':18s} {'walk':>7s} {'stand':>7s} {'lunge':>7s}   stand / walk")
+for name, change in variants.items():
+    w = {**DEFAULT_REWARD, **change}
+    walk, stand, lunge = value(0.5, 500, w), value(0.0, 500, w), value(1.3, 46, w)
+    print(f"  {name:18s} {walk:7.1f} {stand:7.1f} {lunge:7.1f}   {stand / walk:.2f}")
+```
+
+In **every** variant walking is still first and standing still second. Removing a term moved the numbers, not the
+**order** — and standing is still what you get by doing nothing from the crouch. No ablation of these five terms
+can make standing worse than something nearby, so none could move the robot.
+
+---
+
 ## What a real locomotion reward looks like {.smaller}
 
-This is the actual G1 reward from **MuJoCo Playground**, fetched from source —
-not a simplification:
+This is the actual G1 reward from **MuJoCo Playground** (`locomotion/g1/joystick.py`,
+`reward_config.scales`), read from the installed source — not a simplification:
 
 | group | terms |
 | --- | --- |
@@ -164,9 +391,9 @@ not a simplification:
 | joints | `joint_deviation_hip` −0.25, `joint_deviation_knee` −0.1, `dof_pos_limits` −1.0 |
 | safety | `termination` **−100.0**, `collision` −0.1, `contact_force` −0.01 |
 | **anti-idling** | **`stand_still` −1.0** |
-| switched off | `torques`, `action_rate`, `energy`, `dof_acc`, `base_height`, `alive` |
+| switched off (0.0) | `alive`, `torques`, `action_rate`, `energy`, `dof_acc`, `base_height`, `lin_vel_z`, `feet_clearance`, `feet_height` |
 
-Twenty-four terms. Ours had five. Two differences matter most.
+Twenty-four terms, fifteen switched on. Ours had seven, five switched on. Two differences matter most.
 
 ---
 
@@ -179,13 +406,14 @@ playground = {"tracking_lin_vel": 1.0, "tracking_ang_vel": 0.75, "feet_air_time"
               "joint_deviation_hip": -0.25, "joint_deviation_knee": -0.1, "dof_pos_limits": -1.0,
               "collision": -0.1, "contact_force": -0.01, "stand_still": -1.0, "termination": -100.0,
               "alive": 0.0, "torques": 0.0, "action_rate": 0.0, "energy": 0.0, "dof_acc": 0.0,
-              "base_height": 0.0}
+              "base_height": 0.0, "lin_vel_z": 0.0, "feet_clearance": 0.0, "feet_height": 0.0}
 ours = {"tracking": 1.5, "upright": 0.5, "alive": 0.5, "effort": -0.01, "smooth": -0.05}
-fig, (ax0, ax1) = plt.subplots(1, 2, figsize=(10, 4.2), gridspec_kw={"width_ratios": [2.2, 1]})
+print(f"{len(playground)} playground terms, {sum(w != 0 for w in playground.values())} non-zero")
+fig, (ax0, ax1) = plt.subplots(1, 2, figsize=(10, 4.4), gridspec_kw={"width_ratios": [2.2, 1]})
 names = sorted(playground, key=lambda k: -playground[k])
 vals = np.array([playground[k] for k in names])
 ax0.barh(names, vals, color=np.where(vals > 0, "#2a9d5c", "#c0392b")); ax0.invert_yaxis()
-ax0.set_xscale("symlog", linthresh=0.1); ax0.axvline(0, color="k", lw=0.8)
+ax0.set_xscale("symlog", linthresh=0.1); ax0.axvline(0, color="k", lw=0.8); ax0.tick_params(axis="y", labelsize=7)
 ax0.set_title("MuJoCo Playground's G1 reward (symlog axis)", fontsize=10); ax0.grid(axis="x", alpha=0.3)
 ax1.barh(list(ours), list(ours.values()), color=["#2a9d5c" if v > 0 else "#c0392b" for v in ours.values()])
 ax1.invert_yaxis(); ax1.axvline(0, color="k", lw=0.8); ax1.set_title("ours", fontsize=10); ax1.grid(axis="x", alpha=0.3)
@@ -194,7 +422,7 @@ fig.tight_layout(); plt.show()
 
 Two shapes to notice. Theirs has a large one-off **termination** cost and no
 alive bonus; ours has the reverse. And theirs pays for a foot in the air and
-charges for standing still; ours mentions neither.
+charges for standing still; ours mentions neither. (*symlog*: linear near zero, logarithmic beyond ±0.1, so −100 fits on the same axis as −0.01.)
 
 ---
 
@@ -216,13 +444,31 @@ per-step bonus is exactly what makes *standing* profitable.
 
 ---
 
+## The two terms, priced on the standing episode {.smaller}
+
+Our environment has both terms, at weight 0. Switch them on and re-price the **measured** standing episode from
+earlier (same term totals, new weights — the sum-swap from that slide):
+
+```{python}
+for name, change in (("ours, unchanged", {}), ("+ stand_still -1.0", {"stand_still": -1.0}),
+                     ("+ feet air_time +2.0", {"air_time": 2.0}), ("+ both", {"stand_still": -1.0, "air_time": 2.0})):
+    w = {**DEFAULT_REWARD, **change}
+    print(f"  {name:22s} standing is worth {sum(w[n] * totals[n] for n in totals):6.1f}")
+print(f"(stand_still fired on {totals['stand_still']:.0f} of {steps} steps; feet off the floor: {totals['air_time']:.0f} foot-steps)")
+```
+
+- **stand_still** takes 1 off every standing step: standing drops from about 774 to about 274 — below a slow walk.
+- **air_time** changes nothing for standing (no foot ever leaves the floor), but pays **+2 per foot per step** in the
+  air to anything that steps: over 500 steps, a walk with one foot up a fraction $f$ of the time gains $1000f$.
+
+---
+
 ## Test it {.smaller}
 
 Add those two terms to our environment and retrain, changing nothing else.
 
 ```{python}
 from stable_baselines3 import PPO
-from soc4180.envs import G1WalkEnv
 
 def train_and_probe(weights, steps=40_000, seed=0):
     env = G1WalkEnv(reward_weights=weights)
@@ -253,6 +499,8 @@ for name, w in (("ours, unchanged",            {}),
     print(f"{name:32} {L:6.0f} {D:8.3f} {A:8.2f}   ({time.time()-t0:.0f}s)")
 ```
 
+`feet up` is the average number of feet off the floor per step (0 = both planted every step).
+
 ---
 
 ## The same table, as a picture {.smaller}
@@ -276,13 +524,15 @@ fig.tight_layout(); plt.show()
 
 **Either term alone changes nothing.** The robot still stands for all 500 steps
 with both feet planted. One penalty, or one bounty, is not enough to make the
-valley worth crossing.
+valley worth crossing. (With `stand_still` alone, standing is worth only ~274 — and the robot *still* stands,
+because every nearby policy scores even less.)
 
 **Together, they break the optimum.** The robot leaves the standing pose, lifts
 its feet — and falls, having travelled *backwards*.
 
 That is progress, and it is not success. We replaced a comfortable local optimum
-with a worse one.
+with a worse one: `shape.py` (lab slide below) scores that policy **260.4 on its own reward**, below the ~274
+that standing still would have earned under the same weights.
 
 > Shaping decides **which** optimum you land in. It does not buy you the search
 > needed to find a good one.
@@ -297,7 +547,7 @@ noise — Week 11 requires three seeds for a reason.)*
 The failure mode everyone warns about is the opposite of ours: a policy that
 scores *brilliantly* while doing something useless.
 
-Classic locomotion examples:
+Classic locomotion examples (reported widely; not runs from this course):
 
 - reward forward velocity of the **torso** → the robot dives forward and belly-slides
 - reward foot **clearance** → it stands on one leg waving the other
@@ -311,31 +561,134 @@ from the reward number** — the number looks great. You have to watch the video
 
 ---
 
-## Potential-based shaping {.smaller}
+## Potential-based shaping: the telescope {.smaller}
 
-Is there a *safe* way to add guidance? Yes, and it is worth knowing precisely.
+Is there a *safe* way to add guidance? Choose any score of a state, a **potential** ${\color{#8e44ad}{\Phi(s)}}$ — for example
+"how far forward the pelvis is", ${\color{#8e44ad}{\Phi(s)}} = x$ — and add, on every step, the shaping reward
 
-If the extra reward has the form
+$${\color{#c0392b}{F_t}} = \gamma\,{\color{#8e44ad}{\Phi(s_{t+1})}} - {\color{#8e44ad}{\Phi(s_t)}} \qquad \text{(roughly: "how much the potential went up this step")}$$
 
-$$F(s, s') = \gamma\,\Phi(s') - \Phi(s)$$
+**Step 1 — sum it, discounted, over an episode:**
+$\sum_{t=0}^{T-1}\gamma^t{\color{#c0392b}{F_t}} = \sum_{t=0}^{T-1}\big[\gamma^{t+1}{\color{#8e44ad}{\Phi(s_{t+1})}} - \gamma^{t}{\color{#8e44ad}{\Phi(s_t)}}\big]$.
 
-for any function $\Phi$ of state, then the **optimal policy is unchanged**. The
-reason is one line: along any trajectory the extra terms telescope,
+**Step 2 — write the first terms out:**
+$\big[\gamma{\color{#8e44ad}{\Phi_1}} - {\color{#8e44ad}{\Phi_0}}\big] + \big[\gamma^2{\color{#8e44ad}{\Phi_2}} - \gamma{\color{#8e44ad}{\Phi_1}}\big] + \big[\gamma^3{\color{#8e44ad}{\Phi_3}} - \gamma^2{\color{#8e44ad}{\Phi_2}}\big] + \dots$
+— each positive term is cancelled by the next bracket's negative one, like the sections of a collapsing telescope.
 
-$$\sum_{t=0}^{T-1} \gamma^t\big[\gamma\,\Phi(s_{t+1}) - \Phi(s_t)\big]
-= \gamma^{T}\Phi(s_T) - \Phi(s_0),$$
+**Step 3 — only the two ends survive:**
 
-which depends only on where the trajectory starts and ends — not on the
-actions that got it there. Such shaping can only speed up learning, never
-redirect it.
+$$\sum_{t=0}^{T-1}\gamma^t{\color{#c0392b}{F_t}} = \gamma^{T}{\color{#8e44ad}{\Phi(s_T)}} - {\color{#8e44ad}{\Phi(s_0)}}$$
 
-Our added terms are *not* of this form — `feet_air_time` is a bounty on a state,
-not a difference of potentials, so it genuinely changes what is optimal. That is
-why it can produce foot-waving.
+- ${\color{#8e44ad}{\Phi(s_0)}}$ — the start: fixed before the policy does anything
+- $\gamma^{T}{\color{#8e44ad}{\Phi(s_T)}}$ — the end: the theorem needs it to vanish — ${\color{#8e44ad}{\Phi}} = 0$ at a terminal state, or $\gamma^T$ small
+
+---
+
+## Why the best policy cannot move {.smaller}
+
+**Step 4 — do Step 3 from any state $s$ onwards.** Start at $s$, take action $a$, then follow any policy. The shaped
+return is the original return plus the telescoped shaping, which (end term zero) is just $-{\color{#8e44ad}{\Phi(s)}}$:
+
+$$Q_{\text{shaped}}(s, a) = Q(s, a) - {\color{#8e44ad}{\Phi(s)}}$$
+
+- $Q(s,a)$ — the expected original return after taking $a$ in $s$ (week 8's advantage slide)
+
+**Step 5 — compare actions.** The best action in $s$ is the one with the largest $Q$. Subtracting the *same*
+number ${\color{#8e44ad}{\Phi(s)}}$ from every action's $Q$ cannot change which one is largest. So in every state the best
+action — the optimal policy — is **unchanged**, whatever ${\color{#8e44ad}{\Phi}}$ is (Ng, Harada & Russell, 1999).
+
+**What it can change** is the path: ${\color{#c0392b}{F}}$ pays *immediately* for raising ${\color{#8e44ad}{\Phi}}$, so a policy gradient sees a slope
+where the original reward was flat. **What it cannot change** is the destination. It steers the search, never the answer.
+
+The fine print, from Step 3: the end term must vanish. The lab's `extra_reward` does not zero ${\color{#8e44ad}{\Phi}}$ at a fall; its
+end term is $\gamma^T x_T$, small while the robot stays within centimetres of where it started.
+
+---
+
+## The telescope, on the G1 {.smaller}
+
+One real episode (the valley's open-loop stepper at amplitude 0.3, which falls), with ${\color{#8e44ad}{\Phi(s)}} = x$, the pelvis's forward position:
+
+```{python}
+#| fig-align: center
+env_t = G1WalkEnv(); obs, _ = env_t.reset(seed=0); xs = [env_t.data.qpos[0]]
+while True:
+    tt = env_t.data.time; a = np.zeros(12, dtype=np.float32)
+    a[0], a[6] = 0.3 * np.sin(4 * tt), -0.3 * np.sin(4 * tt)
+    a[3], a[9] = 0.3 * max(0.0, np.sin(4 * tt)), 0.3 * max(0.0, -np.sin(4 * tt))
+    obs, r, terminated, truncated, _ = env_t.step(a); xs.append(env_t.data.qpos[0])
+    if terminated or truncated:
+        break
+xs = np.array(xs); T = len(xs) - 1; disc = gamma ** np.arange(T)
+F = gamma * xs[1:] - xs[:-1]                   # potential-based, Phi = x
+vel = 5.0 * (xs[1:] - xs[:-1])                 # the lab's "velocity" bonus, for contrast
+print(f"{T} steps. potential-based:  sum of gamma^t F_t = {np.sum(disc * F):+.12f}")
+print(f"                          gamma^T x_T - x_0  = {gamma**T * xs[-1] - xs[0]:+.12f}")
+print(f"velocity bonus 5*dx:      sum of gamma^t 5dx = {np.sum(disc * vel):+.4f}   vs 5 (x_T - x_0) = {5 * (xs[-1] - xs[0]):+.4f}")
+fig, ax = plt.subplots(figsize=(9, 2.4))
+ax.plot(np.cumsum(disc * F), color="#c0392b", lw=2, label=r"running $\sum \gamma^t F_t$")
+ax.plot(gamma ** np.arange(1, T + 1) * xs[1:] - xs[0], "k:", lw=2, label=r"$\gamma^{t+1}\Phi(s_{t+1}) - \Phi(s_0)$")
+ax.set_xlabel("step $t$"); ax.set_ylabel("m"); ax.legend(fontsize=8); ax.grid(alpha=0.3); fig.tight_layout(); plt.show()
+```
+
+The shaped sum and the two-end formula agree to the last printed digit, at every step (the two curves lie on top of
+each other). The velocity bonus is **not** of this form under discounting — its sum is not the ends' difference —
+so it *can* move the optimum. That is the lab's contrast.
+
+---
+
+## A world small enough to solve exactly {.smaller}
+
+A corridor of 7 cells. Start anywhere, step left, stay, or right; reaching cell 6 pays **10** and ends the episode;
+$\gamma = 0.9$. Solve it exactly (value iteration: repeat $V(s) \leftarrow \max_a [r + \gamma V(s')]$ until nothing changes), three ways:
+
+```{python}
+#| fig-align: center
+N, GOAL, g9 = 7, 6, 0.9
+def solve(bonus=None, phi=None):
+    V = np.zeros(N)
+    for _ in range(300):
+        Q = np.zeros((N - 1, 3))
+        for s in range(N - 1):
+            for k, step in enumerate((-1, 0, +1)):
+                s2 = min(max(s + step, 0), N - 1)
+                r = 10.0 if s2 == GOAL else 0.0
+                if bonus is not None: r += bonus[s2]                                   # a bounty on a state
+                if phi is not None: r += g9 * (0.0 if s2 == GOAL else phi[s2]) - phi[s]  # potential-based
+                Q[s, k] = r + (0.0 if s2 == GOAL else g9 * V[s2])
+        V = np.r_[Q.max(1), 0.0]
+    return Q.argmax(1), V
+bump = np.zeros(N); bump[2] = 1.0
+cases = [("original: +10 at the goal", {}), ("+1 bounty every step in cell 2", {"bonus": bump}),
+         ("potential with a bump of 5 at cell 2", {"phi": 5 * bump})]
+fig, axs = plt.subplots(3, 1, figsize=(9, 3.4))
+for ax, (title, kw) in zip(axs, cases):
+    pol, V = solve(**kw)
+    for s in range(N):
+        ax.add_patch(plt.Rectangle((s, 0), 0.95, 1, color="#2a9d5c" if s == GOAL else "0.92"))
+        if s < GOAL:
+            ax.text(s + 0.47, 0.5, ("←", "stay", "→")[pol[s]], ha="center", va="center", fontsize=14, color="#3b7dd8")
+            ax.text(s + 0.9, 0.12, f"V={V[s]:.2f}", ha="right", fontsize=7, color="0.3")
+    if "bump" in title or "bounty" in title:
+        ax.add_patch(plt.Rectangle((2, 0), 0.95, 1, fill=False, ec="#c0392b" if "bounty" in title else "#8e44ad", lw=2.5))
+    ax.set_xlim(-0.05, N); ax.set_ylim(0, 1); ax.axis("off"); ax.set_title(title, fontsize=9, loc="left")
+fig.tight_layout(); plt.show()
+```
+
+---
+
+## Reading the corridor {.smaller}
+
+- **Original:** every cell points right (→). The values fall by $\times 0.9$ per cell from the goal: 10, 9, 8.1, …
+- **A bounty of +1 per step in cell 2** — a state bonus like `feet_air_time`: cell 2 now says **stay** and cell 3
+  points *back* to it. Staying forever is worth $1/(1-0.9) = 10$ — more than walking on to a goal that, discounted,
+  pays less. **The optimum moved.** This is exactly the kind of term that can produce a foot-waver.
+- **The same bump written as a potential**, ${\color{#8e44ad}{\Phi}} = 5$ at cell 2 and 0 elsewhere: every arrow still points right. Only
+  cell 2's value changed, by exactly $-5$ — the $Q_{\text{shaped}} = Q - {\color{#8e44ad}{\Phi(s)}}$ of Step 4.
 
 **Potential-based shaping is safe and weak; arbitrary shaping is powerful and
-dangerous.** Real locomotion rewards are firmly in the second category, which is
-why they are tuned so carefully.
+dangerous.** Real locomotion rewards — `feet_air_time`, `stand_still` — are firmly in the second category, which
+is why they are tuned so carefully.
 
 ---
 
@@ -409,11 +762,13 @@ on *and* on the original — the honest number — and replays it.
    termination penalty, as playground does. Does standing still remain optimal?
 4. **Hack it deliberately.** Reward torso $x$-velocity with no orientation term
    and train. Describe what it learns. Watch the video before writing.
-5. **Potential-based.** Add $\Phi(s) = $ (distance travelled) as a potential-based
+5. **Potential-based.** Add $\Phi(s)$ = distance travelled as a potential-based
    term. Verify empirically that the ranking of standing versus walking is
    unchanged.
 6. **Three seeds.** Re-run the "+ both" configuration with seeds 0, 1, 2. How
    much of the effect survives?
+7. **On paper.** In the corridor, what is the smallest per-step bounty in cell 2 that makes staying optimal? Check it
+   with `solve`. Then show the potential version never does, for any bump size.
 
 ---
 

@@ -31,38 +31,244 @@ Deliberately, **we do not start with the humanoid.** We start with a cart and a
 pole, because you need to know what a *healthy* learning curve looks like before
 you can diagnose a sick one.
 
-By the end of the lecture we will point PPO at the G1 — and watch it get
-**worse**. That is the intended result, and it names next week.
+1. The **policy gradient**: derived, step by step, from one line of calculus.
+2. The **Gaussian policy**: what "the log-probability of an action" is, written out.
+3. **Baselines and advantage**: why subtracting a number changes nothing and helps a lot.
+4. **PPO**: the probability ratio, and why it is clipped — derived and drawn.
+5. The G1: PPO makes it **worse**. We find out why, with numbers.
+
+This is **Layer 5** — learning — for the first time doing the job itself.
 
 ---
 
-## The idea
+## Colour code for the week {.smaller}
 
-We want $\theta$ maximising $J(\theta) = \mathbb{E}_{\tau\sim\pi_\theta}[R(\tau)]$.
+The same colours mean the same things in every equation and every drawing:
 
-The problem: the environment is not differentiable. We cannot backpropagate
-through contact, friction, or a physics engine.
+| symbol | meaning | colour |
+| --- | --- | --- |
+| ${\color{#3b7dd8}{\theta}}$, ${\color{#3b7dd8}{\pi_\theta}}$ | the **policy**: its parameters (network weights) and the distribution they define — *the only thing learning changes* | <span style="color:#3b7dd8">blue</span> |
+| ${\color{#e8743b}{a_t}}$ | the **action** taken at step $t$ (sampled from ${\color{#3b7dd8}{\pi_\theta}}$) | <span style="color:#e8743b">orange</span> |
+| ${\color{#2a9d5c}{G_t}}$, ${\color{#2a9d5c}{A_t}}$ | the **score**: return from step $t$ on, and advantage (return minus what was expected) | <span style="color:#2a9d5c">green</span> |
+| ${\color{#c0392b}{b(s)}}$, ${\color{#c0392b}{V(s)}}$ | the **baseline** / **value**: what return we *expected* from state $s$ | <span style="color:#c0392b">red</span> |
+| ${\color{#8e44ad}{\rho_t}}$, ${\color{#8e44ad}{\epsilon}}$ | PPO's **probability ratio** new/old, and its clip width | <span style="color:#8e44ad">purple</span> |
 
-The **policy gradient theorem** goes around it:
+Plain black: $s_t$ the state (observation), $r_t$ the one-step reward, $\gamma$
+the discount (week 7), $\tau$ a whole trajectory $(s_0, a_0, r_0, s_1, a_1, r_1, \dots)$.
 
-$$\nabla_\theta J(\theta) = \mathbb{E}\left[\sum_t \nabla_\theta \log \pi_\theta(a_t\mid s_t)\; R_t\right]$$
+Week 7's return: ${\color{#2a9d5c}{G_t}} = r_t + \gamma r_{t+1} + \gamma^2 r_{t+2} + \dots = \sum_{k\ge 0}\gamma^k r_{t+k}$.
+**Careful:** the PPO paper writes the ratio as $r_t$. We use ${\color{#8e44ad}{\rho_t}}$ so it cannot be confused with the reward.
+
+---
+
+## The idea {.smaller}
+
+We want the parameters ${\color{#3b7dd8}{\theta}}$ that maximise the expected return
+
+$$J({\color{#3b7dd8}{\theta}}) = \mathbb{E}_{\tau\sim{\color{#3b7dd8}{\pi_\theta}}}\big[{\color{#2a9d5c}{G(\tau)}}\big]$$
+
+- ${\color{#2a9d5c}{G(\tau)}} = {\color{#2a9d5c}{G_0}}$ — the discounted return of one whole episode $\tau$
+- $\mathbb{E}_{\tau\sim{\color{#3b7dd8}{\pi_\theta}}}$ — averaged over all the episodes the policy could produce (the policy is random, and so is the world)
+- $J$ — one number per ${\color{#3b7dd8}{\theta}}$: "how good is this network, on average"
+
+Gradient ascent wants $\nabla_{\color{#3b7dd8}{\theta}} J$. **The problem:** ${\color{#2a9d5c}{G}}$ is produced by MuJoCo —
+contact, friction, a solver — and we cannot backpropagate through it.
+
+The **policy gradient theorem** goes around it (derived on the next three slides):
+
+$$\nabla_{\color{#3b7dd8}{\theta}} J = \mathbb{E}\Big[\sum_t \nabla_{\color{#3b7dd8}{\theta}} \log {\color{#3b7dd8}{\pi_\theta}}({\color{#e8743b}{a_t}}\mid s_t)\; {\color{#2a9d5c}{G_t}}\Big]$$
 
 Read it as an instruction: **make the actions that preceded high return more
 likely.** The gradient touches only the policy network, never the simulator.
 
 ---
 
-## The idea, in one dimension {.smaller}
-
-A Gaussian policy over a single action, $\pi_\theta(a) = \mathcal N(\mu, \sigma^2)$,
-so $\nabla_\mu \log\pi(a) = (a-\mu)/\sigma^2$: **the gradient points from the
-mean toward each sample**. Weight those pointers by return and add them up.
+## What an episode's probability is made of {.smaller}
 
 ```{python}
 #| fig-align: center
+try:
+    import soc4180
+    import torch
+except ImportError:
+    %pip install -q "soc4180[rl] @ git+https://github.com/gnoejh/soc4180.git"
+    import soc4180, torch
+
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib.patches import FancyBboxPatch
 
+fig, ax = plt.subplots(figsize=(10, 2.6)); ax.axis("off"); ax.set_xlim(0, 10.4); ax.set_ylim(0, 2.6)
+def node(x, text, col):
+    ax.add_patch(FancyBboxPatch((x, 1.0), 1.1, 0.7, boxstyle="round,pad=0.08", color=col, alpha=0.95))
+    ax.text(x + 0.55, 1.35, text, ha="center", va="center", fontsize=10, color="w")
+xs = [0.1, 1.6, 3.1, 4.6, 6.1, 7.6]
+labels = [("$s_0$", "0.45"), (r"$a_0$", "#e8743b"), ("$s_1$", "0.45"), (r"$a_1$", "#e8743b"), ("$s_2$", "0.45"), (r"$a_2$", "#e8743b")]
+for x, (t, c) in zip(xs, labels):
+    node(x, t, c)
+for k in range(5):
+    x0, x1 = xs[k] + 1.2, xs[k + 1] - 0.1
+    blue = k % 2 == 0
+    ax.annotate("", xy=(x1, 1.35), xytext=(x0, 1.35), arrowprops=dict(arrowstyle="->", lw=2, color="#3b7dd8" if blue else "0.45"))
+    ax.text((x0 + x1) / 2, 1.95 if blue else 0.55, r"$\pi_\theta(a\mid s)$" if blue else r"$P(s'\mid s,a)$",
+            ha="center", fontsize=10, color="#3b7dd8" if blue else "0.35")
+ax.text(9.1, 1.35, "...", fontsize=16, va="center")
+ax.text(5.2, 0.08, "blue arrows: the network (we know it, it depends on θ);  grey arrows: MuJoCo (unknown formula, no θ inside)",
+        ha="center", fontsize=8.5, color="0.35")
+ax.text(0.1, 2.45, "sketch — one episode as a chain of random choices", fontsize=9, color="0.35")
+fig.tight_layout(); plt.show()
+```
+
+$$p_{\color{#3b7dd8}{\theta}}(\tau) = p(s_0)\;\prod_{t} {\color{#3b7dd8}{\pi_\theta}}({\color{#e8743b}{a_t}}\mid s_t)\; P(s_{t+1}\mid s_t, {\color{#e8743b}{a_t}})$$
+
+- $p(s_0)$ — how the episode starts (`reset`: the crouch plus a little noise)
+- ${\color{#3b7dd8}{\pi_\theta}}({\color{#e8743b}{a_t}}\mid s_t)$ — the chance the network picks this action here
+- $P(s_{t+1}\mid s_t,{\color{#e8743b}{a_t}})$ — the chance MuJoCo lands in this next state (week 7's transition)
+
+The probability of a sequence of independent-given-the-past choices is the **product** of each choice's probability.
+
+---
+
+## Deriving the policy gradient: Steps 1–3 {.smaller}
+
+**Step 1 — write the expectation out.** An average over episodes is a sum over
+episodes weighted by their probability:
+$J({\color{#3b7dd8}{\theta}}) = \sum_\tau p_{\color{#3b7dd8}{\theta}}(\tau)\,{\color{#2a9d5c}{G(\tau)}}$
+(an integral for continuous actions; the steps are identical).
+
+**Step 2 — differentiate.** ${\color{#2a9d5c}{G(\tau)}}$ is just the score written on episode $\tau$; it
+has no ${\color{#3b7dd8}{\theta}}$ in it. Only the *probabilities* depend on ${\color{#3b7dd8}{\theta}}$:
+
+$$\nabla_{\color{#3b7dd8}{\theta}} J = \sum_\tau \nabla_{\color{#3b7dd8}{\theta}}\, p_{\color{#3b7dd8}{\theta}}(\tau)\;{\color{#2a9d5c}{G(\tau)}} .$$
+
+This is no longer an average (there is no $p$ in front), so we cannot estimate it by sampling. Step 3 puts $p$ back.
+
+**Step 3 — the log-derivative identity.** The chain rule on $\log$ gives
+$\nabla \log p = \dfrac{\nabla p}{p}$, so multiply both sides by $p$:
+
+$$\nabla_{\color{#3b7dd8}{\theta}}\, p_{\color{#3b7dd8}{\theta}}(\tau) = p_{\color{#3b7dd8}{\theta}}(\tau)\,\nabla_{\color{#3b7dd8}{\theta}} \log p_{\color{#3b7dd8}{\theta}}(\tau)
+\quad\Longrightarrow\quad
+\nabla_{\color{#3b7dd8}{\theta}} J = \sum_\tau p_{\color{#3b7dd8}{\theta}}(\tau)\,\nabla_{\color{#3b7dd8}{\theta}} \log p_{\color{#3b7dd8}{\theta}}(\tau)\,{\color{#2a9d5c}{G(\tau)}}
+= \mathbb{E}_{\tau\sim{\color{#3b7dd8}{\pi_\theta}}}\big[\nabla_{\color{#3b7dd8}{\theta}} \log p_{\color{#3b7dd8}{\theta}}(\tau)\,{\color{#2a9d5c}{G(\tau)}}\big].$$
+
+It is an average again — so **run episodes, compute the bracket for each, average**. That is all "the log-derivative trick" means.
+
+---
+
+## Deriving the policy gradient: Steps 4–5 {.smaller}
+
+**Step 4 — the simulator drops out.** Take the log of the product (the log of a product is the sum of the logs):
+
+$$\log p_{\color{#3b7dd8}{\theta}}(\tau) = \log p(s_0) + \sum_t \log {\color{#3b7dd8}{\pi_\theta}}({\color{#e8743b}{a_t}}\mid s_t) + \sum_t \log P(s_{t+1}\mid s_t,{\color{#e8743b}{a_t}}).$$
+
+The first and last sums contain no ${\color{#3b7dd8}{\theta}}$, so their gradient is **zero**:
+
+$$\nabla_{\color{#3b7dd8}{\theta}} \log p_{\color{#3b7dd8}{\theta}}(\tau) = \sum_t \nabla_{\color{#3b7dd8}{\theta}} \log {\color{#3b7dd8}{\pi_\theta}}({\color{#e8743b}{a_t}}\mid s_t).$$
+
+**MuJoCo's $P$ has vanished.** We never need its formula, only its samples. That is why RL works on a physics engine.
+
+**Step 5 — an action cannot change the past.** Rewards collected *before* step $t$
+are already fixed when ${\color{#e8743b}{a_t}}$ is chosen; their product with $\nabla\log{\color{#3b7dd8}{\pi_\theta}}({\color{#e8743b}{a_t}}\mid s_t)$ averages to
+zero (it is the baseline argument, proved later in the deck). So each action is weighted only by the reward that came *after* it:
+
+$$\boxed{\;\nabla_{\color{#3b7dd8}{\theta}} J = \mathbb{E}\Big[\sum_t \nabla_{\color{#3b7dd8}{\theta}} \log {\color{#3b7dd8}{\pi_\theta}}({\color{#e8743b}{a_t}}\mid s_t)\;{\color{#2a9d5c}{G_t}}\Big]\;}$$
+
+- $\nabla_{\color{#3b7dd8}{\theta}} \log {\color{#3b7dd8}{\pi_\theta}}({\color{#e8743b}{a_t}}\mid s_t)$ — the direction in weight space that makes ${\color{#e8743b}{a_t}}$ more likely
+- ${\color{#2a9d5c}{G_t}}$ — how much to push that way: the return that followed (week 7's "reward-to-go")
+
+---
+
+## Checking the identity with numbers {.smaller}
+
+A one-action problem we can solve on paper: $a\sim\mathcal N(\mu, \sigma^2)$ with $\mu = 0,\ \sigma = 0.5$, and
+score ${\color{#2a9d5c}{G(a)}} = 10 - (a-1)^2$. Then $J(\mu) = 10 - (\mu-1)^2 - \sigma^2$, so the **exact** gradient is
+$dJ/d\mu = -2(\mu - 1) = 2$ at $\mu=0$. The estimator only sees samples and their scores:
+
+```{python}
+#| fig-align: center
+rng = np.random.default_rng(0)
+mu0, sd0 = 0.0, 0.5                 # a toy policy: mean and std
+score = lambda a: 10 - (a - 1.0) ** 2
+exact = -2 * (mu0 - 1.0)
+Ns = np.unique(np.logspace(1, 5, 25).astype(int))
+est = [np.mean((a - mu0) / sd0**2 * score(a)) for a in (rng.normal(mu0, sd0, n) for n in Ns)]
+fig, ax = plt.subplots(figsize=(8.5, 2.9))
+ax.semilogx(Ns, est, "o-", color="#3b7dd8", ms=4, label=r"estimate: mean of $\nabla_\mu\log\pi(a)\cdot G(a)$")
+ax.axhline(exact, color="#2a9d5c", lw=2, label=f"exact derivative = {exact:.1f}")
+ax.set_xlabel("samples used"); ax.set_ylabel(r"$dJ/d\mu$"); ax.grid(alpha=0.3); ax.legend(fontsize=8)
+fig.tight_layout(); plt.show()
+for n, e in list(zip(Ns, est))[::12]:
+    print(f"  {n:6d} samples: estimate {e:6.3f}   (exact {exact:.1f})")
+```
+
+It converges to the true derivative — **without ever differentiating ${\color{#2a9d5c}{G}}$**. But look how
+wild it is with a few samples: that noise is the whole second half of this lecture.
+
+---
+
+## The Gaussian policy, written out {.smaller}
+
+A robot's action is continuous: twelve numbers for the G1's leg joints. The network outputs a **mean**
+${\color{#3b7dd8}{\mu_i}}(s)$ for each joint $i$, and a learned **spread** ${\color{#3b7dd8}{\sigma_i}}$; the action is drawn from a normal
+distribution around the mean. With the joints independent, the density is a product, and its log is a sum:
+
+$$\log{\color{#3b7dd8}{\pi_\theta}}({\color{#e8743b}{a}}\mid s) = \sum_{i=1}^{12}\Big[-\frac{({\color{#e8743b}{a_i}} - {\color{#3b7dd8}{\mu_i}})^2}{2{\color{#3b7dd8}{\sigma_i}}^2} - \log{\color{#3b7dd8}{\sigma_i}} - \tfrac12\log 2\pi\Big]$$
+
+- ${\color{#e8743b}{a_i}} - {\color{#3b7dd8}{\mu_i}}$ — how far this sample landed from the mean; divided by ${\color{#3b7dd8}{\sigma_i}}$ it is "how many standard deviations"
+- $-\log{\color{#3b7dd8}{\sigma_i}}$ — a wide distribution spreads its probability thin
+- SB3 stores ${\color{#3b7dd8}{\ell_i}} = \log{\color{#3b7dd8}{\sigma_i}}$ (so ${\color{#3b7dd8}{\sigma_i}} = e^{\ell_i} > 0$ always) — that is `log_std`, and `log_std_init` is its starting value
+
+Differentiate one bracket (Step 1: the square's derivative; Step 2: $\sigma^{-2} = e^{-2\ell}$):
+
+$$\frac{\partial \log\pi}{\partial {\color{#3b7dd8}{\mu_i}}} = \frac{{\color{#e8743b}{a_i}} - {\color{#3b7dd8}{\mu_i}}}{{\color{#3b7dd8}{\sigma_i}}^2},
+\qquad
+\frac{\partial \log\pi}{\partial {\color{#3b7dd8}{\ell_i}}} = \frac{({\color{#e8743b}{a_i}} - {\color{#3b7dd8}{\mu_i}})^2}{{\color{#3b7dd8}{\sigma_i}}^2} - 1 .$$
+
+**Mean:** points from the mean toward the sample. **Spread:** positive when the sample landed more than one ${\color{#3b7dd8}{\sigma}}$
+away (widen), negative inside one ${\color{#3b7dd8}{\sigma}}$ (narrow). Multiplied by ${\color{#2a9d5c}{G_t}}$: good far samples widen the policy, good near ones narrow it.
+
+---
+
+## The formula against the library {.smaller}
+
+The same numbers, from the PPO policy we will train on the G1 — its action distribution is exactly this formula:
+
+```{python}
+import warnings
+warnings.filterwarnings("ignore")
+from stable_baselines3 import PPO
+from soc4180.envs import G1WalkEnv
+
+check_env = G1WalkEnv()
+check = PPO("MlpPolicy", check_env, verbose=0, seed=0, device="cpu")
+obs, _ = check_env.reset(seed=0)
+dist = check.policy.get_distribution(torch.as_tensor(obs)[None])
+mean, std = dist.distribution.mean[0], dist.distribution.stddev[0]
+a = dist.sample()[0]
+by_hand = torch.sum(-(a - mean) ** 2 / (2 * std**2) - torch.log(std) - 0.5 * np.log(2 * np.pi))
+print(f"action dimension     : {a.numel()}   (twelve leg joints)")
+print(f"initial std          : {std.mean().item():.3f}   (log_std_init = 0 -> e^0 = 1)")
+print(f"log pi, SB3          : {dist.log_prob(a[None]).item():+.6f}")
+print(f"log pi, by the slide : {by_hand.item():+.6f}")
+
+mu_ = torch.zeros(12, requires_grad=True); ell = torch.zeros(12, requires_grad=True)
+torch.distributions.Normal(mu_, ell.exp()).log_prob(a).sum().backward()
+print(f"autograd d/dmu  vs (a-mu)/sigma^2       : max diff {(mu_.grad - a).abs().max().item():.1e}")
+print(f"autograd d/dell vs (a-mu)^2/sigma^2 - 1 : max diff {(ell.grad - (a**2 - 1)).abs().max().item():.1e}")
+```
+
+The last two lines check the two derivatives at ${\color{#3b7dd8}{\mu}}=0,\ {\color{#3b7dd8}{\sigma}}=1$ against PyTorch's automatic differentiation.
+In PPO nobody writes these derivatives by hand — `loss.backward()` does it — but this is what it computes.
+
+---
+
+## One REINFORCE step, drawn {.smaller}
+
+Back to one action, $\pi_\theta(a) = \mathcal N(\mu, \sigma^2)$: the mean-gradient $(a-\mu)/\sigma^2$
+**points from the mean toward each sample**. Weight those pointers by (centred) return and add them up.
+
+```{python}
+#| fig-align: center
 rng = np.random.default_rng(0)
 mu, sigma, a_star = -0.8, 0.6, 0.9
 samples = rng.normal(mu, sigma, 25)
@@ -87,27 +293,18 @@ fig.tight_layout(); plt.show()
 print(f"mean moved from {mu:+.2f} to {mu + step:+.2f}, toward the best action at {a_star:+.2f}")
 ```
 
-No derivative of $R$ was taken. The environment only *scored* the samples.
+No derivative of $R$ was taken. The environment only *scored* the samples. (0.6 is the learning rate.)
 
 ---
 
 ## REINFORCE, in full {.smaller}
 
-That equation is about twenty lines of code.
+That boxed equation is about twenty lines of code.
 
 ```{python}
-try:
-    import soc4180
-    import torch
-except ImportError:
-    %pip install -q "soc4180[rl] @ git+https://github.com/gnoejh/soc4180.git"
-    import soc4180, torch
-
-import time, warnings
-import numpy as np
+import time
 import torch.nn as nn
 import gymnasium as gym
-warnings.filterwarnings("ignore")
 
 torch.manual_seed(0); np.random.seed(0)
 env = gym.make("CartPole-v1")
@@ -132,6 +329,24 @@ def discounted(rewards, gamma=0.99):
         R = r + gamma * R; out.append(R)
     return torch.tensor(list(reversed(out)), dtype=torch.float32)
 ```
+
+---
+
+## The code is the equation {.smaller}
+
+| in the boxed equation | in the code |
+| --- | --- |
+| ${\color{#3b7dd8}{\pi_\theta}}(\cdot\mid s)$ | `Categorical(logits=policy(obs))` — CartPole has 2 actions (push left, push right), so the policy is a table of two probabilities, $\mathrm{softmax}$ of the network's two outputs |
+| $\log{\color{#3b7dd8}{\pi_\theta}}({\color{#e8743b}{a_t}}\mid s_t)$ | `dist.log_prob(action)`, one per step, kept with its gradient |
+| ${\color{#2a9d5c}{G_t}} = r_t + \gamma\,{\color{#2a9d5c}{G_{t+1}}}$ | `discounted`: runs **backwards**, `R = r + gamma * R` — the recursion form of week 7's sum |
+| $\mathbb{E}[\dots]$ | the mean over every step of 8 episodes |
+| gradient **ascent** on $J$ | `loss = -(lp * ret).mean()` — optimisers *minimise*, so minimise the negative |
+
+For two actions the log-probability is $\log{\color{#3b7dd8}{\pi}}(a\mid s) = z_a - \log(e^{z_0} + e^{z_1})$, with $z_0, z_1$ the
+network's two outputs (the "logits"). Same role as the Gaussian formula, different distribution.
+
+The backward recursion is the definition rearranged:
+${\color{#2a9d5c}{G_t}} = r_t + \gamma\,(r_{t+1} + \gamma r_{t+2} + \dots) = r_t + \gamma\,{\color{#2a9d5c}{G_{t+1}}}$, with ${\color{#2a9d5c}{G}} = 0$ after the last step.
 
 ---
 
@@ -162,15 +377,14 @@ for k in (100, 300, 500, len(history)):
 Two details carry this. **Returns are centred** — subtracting the mean is a
 *baseline*, and without it the thing barely moves. And updates use a **batch of
 eight episodes**: with one episode per update the variance is so large that
-training frequently goes nowhere at all.
+training frequently goes nowhere at all. CartPole pays 1 per step the pole stays
+up, capped at 500 steps — so **500 is a perfect episode**, and 60 means the pole falls in about a second.
 
 ---
 
 ## Look at the curve, not the last number {.smaller}
 
 ```{python}
-import matplotlib.pyplot as plt
-
 smooth = np.convolve(history, np.ones(20)/20, mode="valid")
 fig, ax = plt.subplots(figsize=(9, 3.2))
 ax.plot(history, lw=0.6, alpha=0.4, label="episode return")
@@ -192,11 +406,11 @@ algorithm is correct; the estimator is just terrible.
 
 Three fixes, in the order the field found them:
 
-1. **Baseline.** Subtract $b(s)$ from the return. It does not bias the gradient
+1. **Baseline.** Subtract ${\color{#c0392b}{b(s)}}$ from the return. It does not bias the gradient
    and cuts variance sharply. We used the batch mean; a learned value function
-   $V(s)$ is better.
-2. **Advantage.** With $V(s)$ learned, use $A_t = R_t - V(s_t)$: "was this action
-   better than average *from here*?" That is **actor-critic**.
+   ${\color{#c0392b}{V(s)}}$ is better.
+2. **Advantage.** With ${\color{#c0392b}{V(s)}}$ learned, use ${\color{#2a9d5c}{A_t}} = {\color{#2a9d5c}{G_t}} - {\color{#c0392b}{V(s_t)}}$: "was this action
+   better than average *from here*?" That is **actor-critic** — the *actor* is ${\color{#3b7dd8}{\pi_\theta}}$, the *critic* is ${\color{#c0392b}{V}}$.
 3. **Reuse the data.** REINFORCE throws each trajectory away after one gradient
    step. That is wasteful when each step costs a physics simulation.
 
@@ -205,35 +419,191 @@ data that was collected. **PPO exists to make that reuse safe.**
 
 ---
 
-## Why a baseline is free {.smaller}
+## Why a baseline is free: the proof {.smaller}
 
-Subtracting any $b(s)$ from the return changes nothing in expectation:
+Claim: for **any** function ${\color{#c0392b}{b(s)}}$ of the state alone, $\;\mathbb E_{{\color{#e8743b}{a}}\sim{\color{#3b7dd8}{\pi_\theta}}}\big[\nabla_{\color{#3b7dd8}{\theta}} \log{\color{#3b7dd8}{\pi_\theta}}({\color{#e8743b}{a}}\mid s)\; {\color{#c0392b}{b(s)}}\big] = 0$.
 
-$$\mathbb E_{a\sim\pi}\big[\nabla_\theta \log\pi_\theta(a\mid s)\; b(s)\big]
-= b(s)\,\nabla_\theta \sum_a \pi_\theta(a\mid s)
-= b(s)\,\nabla_\theta 1 = 0 .$$
+**Step 1 — ${\color{#c0392b}{b(s)}}$ does not depend on the action**, so it leaves the average over actions:
+$\;= {\color{#c0392b}{b(s)}}\sum_{\color{#e8743b}{a}} {\color{#3b7dd8}{\pi_\theta}}({\color{#e8743b}{a}}\mid s)\,\nabla_{\color{#3b7dd8}{\theta}}\log{\color{#3b7dd8}{\pi_\theta}}({\color{#e8743b}{a}}\mid s)$.
 
-So the gradient estimate stays **unbiased**, while its variance drops — because
-$\nabla\log\pi \cdot (R - b)$ is small whenever $R$ is close to $b$, which is
-most of the time. The best $b(s)$ is the expected return from $s$, i.e. the
-value function; the batch mean we used on CartPole is the poor man's version.
+**Step 2 — undo the log-derivative identity** ($\pi\,\nabla\log\pi = \nabla\pi$):
+$\;= {\color{#c0392b}{b(s)}}\sum_{\color{#e8743b}{a}} \nabla_{\color{#3b7dd8}{\theta}}\,{\color{#3b7dd8}{\pi_\theta}}({\color{#e8743b}{a}}\mid s) = {\color{#c0392b}{b(s)}}\,\nabla_{\color{#3b7dd8}{\theta}}\sum_{\color{#e8743b}{a}}{\color{#3b7dd8}{\pi_\theta}}({\color{#e8743b}{a}}\mid s)$.
 
-The advantage $A_t = R_t - V(s_t)$ is this idea taken seriously, and it is the
-quantity PPO's objective is written in.
+**Step 3 — probabilities always sum to one**, whatever ${\color{#3b7dd8}{\theta}}$ is:
+$\;= {\color{#c0392b}{b(s)}}\,\nabla_{\color{#3b7dd8}{\theta}}\,1 = 0 .$
+
+So replacing ${\color{#2a9d5c}{G_t}}$ by ${\color{#2a9d5c}{G_t}} - {\color{#c0392b}{b(s_t)}}$ leaves the average gradient **unchanged (unbiased)**.
+What changes is the spread: without a baseline, when every return is large and positive (as the G1's 774 is), every
+sampled action gets pushed *up* and only the differences in *how much* carry information. Centring removes the
+common part. The best ${\color{#c0392b}{b(s)}}$ is close to the expected return from $s$ — the value function.
+
+Step 5 of the derivation is the same argument: a reward earned *before* ${\color{#e8743b}{a_t}}$ is a constant as far as ${\color{#e8743b}{a_t}}$ is concerned.
 
 ---
 
-## PPO in one slide
+## The baseline, measured {.smaller}
 
-Let $r_t(\theta) = \dfrac{\pi_\theta(a_t\mid s_t)}{\pi_{\theta_{\text{old}}}(a_t\mid s_t)}$ — how much the new policy has changed its mind.
+Same one-action problem ($\mu=0,\ \sigma=0.5$, ${\color{#2a9d5c}{G(a)}} = 10-(a-1)^2$, exact gradient 2). Estimate it 20 000
+times from batches of **8** samples, with and without a baseline. Each sample's baseline is the mean score of the
+*other seven* (the batch mean would include the sample itself and shrink the estimate by $7/8$).
 
-$$L = \mathbb{E}\left[\min\left(r_t A_t,\;\ \text{clip}(r_t, 1-\epsilon, 1+\epsilon)\,A_t\right)\right]$$
+```{python}
+#| fig-align: center
+rng = np.random.default_rng(1)
+plain, based = [], []
+for _ in range(20000):
+    a = rng.normal(mu0, sd0, 8); g = score(a)
+    b = (g.sum() - g) / 7                        # leave-one-out baseline
+    plain.append(np.mean((a - mu0) / sd0**2 * g))
+    based.append(np.mean((a - mu0) / sd0**2 * (g - b)))
+plain, based = np.array(plain), np.array(based)
+fig, ax = plt.subplots(figsize=(8.5, 2.8))
+bins = np.linspace(-20, 24, 89)
+ax.hist(plain, bins, color="0.6", alpha=0.7, label="no baseline")
+ax.hist(based, bins, color="#c0392b", alpha=0.7, label="with baseline")
+ax.axvline(exact, color="#2a9d5c", lw=2, label="exact = 2")
+ax.set_xlabel(r"one batch's estimate of $dJ/d\mu$"); ax.set_yticks([]); ax.legend(fontsize=8)
+fig.tight_layout(); plt.show()
+```
 
-The clip removes any incentive to push $r_t$ beyond $1\pm\epsilon$: once an action
-is far enough more likely, making it *more* likely buys nothing.
+---
 
-**Small, safe steps, taken many times.** That is the entire idea, and it is why
-PPO is the default for locomotion.
+## The baseline, read {.smaller}
+
+```{python}
+for name, est_ in (("no baseline  ", plain), ("with baseline", based)):
+    print(f"{name}: mean {est_.mean():5.2f} +- {2 * est_.std() / np.sqrt(len(est_)):.2f} (sampling noise),"
+          f"  spread (std) {est_.std():5.2f}")
+print(f"batches pointing the WRONG way (estimate < 0): {np.mean(plain < 0):.0%} without, {np.mean(based < 0):.0%} with")
+```
+
+- **Both means are 2** within their sampling noise (the ± is two standard errors of 20 000 batches): unbiased, as the proof said.
+- **The spread is what changes.** Every score here is around 10, so without a baseline every sample pushes the mean
+  *toward itself* with weight ≈ 10, and only small differences between those big pushes carry the information.
+  With the baseline each sample's weight is its score *minus what the others scored*: positive for better-than-usual
+  samples, negative for worse.
+- A batch that points the **wrong way** makes the policy worse for that update. That is the ragged CartPole curve,
+  in miniature — and the G1's returns sit near 774, a large common offset, so it needs a baseline even more.
+
+---
+
+## Advantage: better than expected, from here {.smaller}
+
+Three quantities, all averages over what the policy might do next:
+
+- ${\color{#c0392b}{V(s)}}$ — the **value**: expected return starting from $s$ and following ${\color{#3b7dd8}{\pi_\theta}}$
+- $Q(s, {\color{#e8743b}{a}})$ — the expected return if we take ${\color{#e8743b}{a}}$ first, *then* follow ${\color{#3b7dd8}{\pi_\theta}}$
+- ${\color{#2a9d5c}{A(s, {\color{#e8743b}{a}})}} = Q(s, {\color{#e8743b}{a}}) - {\color{#c0392b}{V(s)}}$ — the **advantage**: how much better ${\color{#e8743b}{a}}$ is than the policy's average
+
+Its sign is the instruction: ${\color{#2a9d5c}{A}}>0$ — do this more; ${\color{#2a9d5c}{A}}<0$ — less. We never know $Q$, so we estimate:
+
+$${\color{#2a9d5c}{A_t}} \approx {\color{#2a9d5c}{G_t}} - {\color{#c0392b}{V(s_t)}}
+\qquad\text{or, one step at a time,}\qquad
+\delta_t = r_t + \gamma\,{\color{#c0392b}{V(s_{t+1})}} - {\color{#c0392b}{V(s_t)}} .$$
+
+- ${\color{#2a9d5c}{G_t}} - {\color{#c0392b}{V(s_t)}}$ — uses the real rewards to the end: right on average, noisy (every later random choice adds noise)
+- $\delta_t$, the **TD error** — one real reward, then trust ${\color{#c0392b}{V}}$ for the rest: quiet, but wrong wherever ${\color{#c0392b}{V}}$ is wrong
+
+${\color{#c0392b}{V}}$ is a second network (the critic), trained by regression to make ${\color{#c0392b}{V(s_t)}} \approx {\color{#2a9d5c}{G_t}}$.
+
+---
+
+## GAE: between the two (optional) {.smaller}
+
+**Step 1 — add up $k$ TD errors.** Write out two and the ${\color{#c0392b}{V(s_{t+1})}}$ terms cancel (they *telescope*):
+
+$$\delta_t + \gamma\,\delta_{t+1}
+= \big[r_t + \gamma{\color{#c0392b}{V(s_{t+1})}} - {\color{#c0392b}{V(s_t)}}\big] + \gamma\big[r_{t+1} + \gamma{\color{#c0392b}{V(s_{t+2})}} - {\color{#c0392b}{V(s_{t+1})}}\big]
+= r_t + \gamma r_{t+1} + \gamma^2{\color{#c0392b}{V(s_{t+2})}} - {\color{#c0392b}{V(s_t)}}$$
+
+Two real rewards, then trust ${\color{#c0392b}{V}}$. In general $\sum_{l=0}^{k-1}\gamma^l\delta_{t+l}$ is "$k$ real rewards, then ${\color{#c0392b}{V}}$", and with
+$k$ = the rest of the episode (and ${\color{#c0392b}{V}} = 0$ after the end) it is exactly ${\color{#2a9d5c}{G_t}} - {\color{#c0392b}{V(s_t)}}$.
+
+**Step 2 — do not pick $k$; blend all of them**, giving each further TD error a weight smaller by a factor $\lambda$
+($0 \le \lambda \le 1$). That is **Generalised Advantage Estimation**:
+
+$${\color{#2a9d5c}{\hat A_t}} = \sum_{l\ge 0} (\gamma\lambda)^l\,\delta_{t+l},
+\qquad \lambda = 0:\ {\color{#2a9d5c}{\hat A_t}} = \delta_t, \qquad \lambda = 1:\ {\color{#2a9d5c}{\hat A_t}} = {\color{#2a9d5c}{G_t}} - {\color{#c0392b}{V(s_t)}} .$$
+
+- $\lambda$ — one dial between "trust the critic" (0, quiet, biased) and "trust the rewards" (1, unbiased, noisy)
+- $(\gamma\lambda)^l$ — how much the TD error $l$ steps ahead still counts
+
+---
+
+## GAE, checked and drawn {.smaller}
+
+```{python}
+#| fig-align: center
+import inspect
+rng = np.random.default_rng(2)
+T, gamma = 60, 0.99
+r, V = rng.normal(1, 0.3, T), rng.normal(50, 5, T + 1); V[T] = 0.0     # episode ends: nothing after
+delta = r + gamma * V[1:] - V[:-1]
+def gae(lam):
+    out, acc = np.zeros(T), 0.0
+    for t in reversed(range(T)):
+        acc = delta[t] + gamma * lam * acc; out[t] = acc
+    return out
+G = np.array([sum(gamma**k * r[t + k] for k in range(T - t)) for t in range(T)])
+print(f"lambda = 1 vs G_t - V(s_t): max difference {np.abs(gae(1.0) - (G - V[:-1])).max():.1e}")
+print(f"lambda = 0 vs delta_t     : max difference {np.abs(gae(0.0) - delta).max():.1e}")
+defaults = {k: v.default for k, v in inspect.signature(PPO.__init__).parameters.items() if v.default is not inspect._empty}
+g_l = gamma * defaults["gae_lambda"]
+print(f"SB3 PPO default: gamma = {defaults['gamma']}, lambda = {defaults['gae_lambda']}  ->  weight halves every "
+      f"{np.log(0.5) / np.log(g_l):.1f} steps = {np.log(0.5) / np.log(g_l) / 50:.2f} s at 50 Hz")
+fig, ax = plt.subplots(figsize=(8.5, 1.9)); l = np.arange(60)
+for lam_, col in ((0.0, "#c0392b"), (defaults["gae_lambda"], "#2a9d5c"), (1.0, "0.5")):
+    ax.plot(l, (gamma * lam_) ** l, "o-", ms=2.5, color=col, label=rf"$\lambda = {lam_:g}$")
+ax.set_xlabel(r"$l$: how many steps ahead the TD error $\delta_{t+l}$ is"); ax.set_ylabel("weight")
+ax.legend(fontsize=8, ncol=3); ax.grid(alpha=0.3); fig.tight_layout(); plt.show()
+```
+
+Random numbers, not a robot: both limits hold to rounding error, which checks Step 1. SB3's default
+$\lambda$ halves a TD error's weight about every quarter-second at the G1's 50 Hz, then trusts the critic.
+
+---
+
+## Reusing data: the probability ratio {.smaller}
+
+We collected a batch with the **old** policy ${\color{#3b7dd8}{\pi_{\text{old}}}}$ and want to improve to a new ${\color{#3b7dd8}{\pi_\theta}}$ *several times* on the
+same batch. The samples came from the wrong distribution — so reweight them.
+
+**Step 1 — importance sampling.** For any function $f$, an average under $\pi$ equals a reweighted average under $\pi_{\text{old}}$:
+$\mathbb E_{a\sim\pi}[f(a)] = \sum_a \pi(a) f(a) = \sum_a \pi_{\text{old}}(a)\,\frac{\pi(a)}{\pi_{\text{old}}(a)}\,f(a) = \mathbb E_{a\sim\pi_{\text{old}}}\!\big[\tfrac{\pi(a)}{\pi_{\text{old}}(a)} f(a)\big]$.
+The factor is the **probability ratio**:
+
+$${\color{#8e44ad}{\rho_t}}({\color{#3b7dd8}{\theta}}) = \frac{{\color{#3b7dd8}{\pi_\theta}}({\color{#e8743b}{a_t}}\mid s_t)}{{\color{#3b7dd8}{\pi_{\text{old}}}}({\color{#e8743b}{a_t}}\mid s_t)}
+\qquad
+L({\color{#3b7dd8}{\theta}}) = \mathbb E_{\text{old batch}}\big[{\color{#8e44ad}{\rho_t}}({\color{#3b7dd8}{\theta}})\;{\color{#2a9d5c}{A_t}}\big]$$
+
+- ${\color{#8e44ad}{\rho_t}} = 1$ — the new policy likes ${\color{#e8743b}{a_t}}$ exactly as much as the old one did; $1.2$ — 20 % more; $0.8$ — 20 % less
+- $L$ — the **surrogate objective**: a prediction, from old data, of how much better the new policy is
+
+**Step 2 — at the start it *is* the policy gradient.** $\nabla{\color{#8e44ad}{\rho_t}} = {\color{#8e44ad}{\rho_t}}\,\nabla\log{\color{#3b7dd8}{\pi_\theta}}({\color{#e8743b}{a_t}}\mid s_t)$ (the same identity again),
+and at ${\color{#3b7dd8}{\theta}} = {\color{#3b7dd8}{\theta_{\text{old}}}}$ the ratio is 1, so $\nabla L = \mathbb E[\nabla\log{\color{#3b7dd8}{\pi_\theta}}\,{\color{#2a9d5c}{A_t}}]$ — the boxed gradient with ${\color{#2a9d5c}{A_t}}$ for ${\color{#2a9d5c}{G_t}}$.
+
+**Step 3 — the catch:** the batch only contains actions ${\color{#3b7dd8}{\pi_{\text{old}}}}$ happened to try, so $L$ is only trustworthy *near* ${\color{#3b7dd8}{\theta_{\text{old}}}}$.
+Maximise it with no limit and the optimiser will happily walk to where the batch knows nothing.
+
+---
+
+## PPO: the clipped objective {.smaller}
+
+$$L^{\text{CLIP}}({\color{#3b7dd8}{\theta}}) = \mathbb{E}\Big[\min\big({\color{#8e44ad}{\rho_t}}\,{\color{#2a9d5c}{A_t}},\;\ \text{clip}({\color{#8e44ad}{\rho_t}}, 1-{\color{#8e44ad}{\epsilon}}, 1+{\color{#8e44ad}{\epsilon}})\,{\color{#2a9d5c}{A_t}}\big)\Big],\qquad {\color{#8e44ad}{\epsilon}} = 0.2$$
+
+- $\text{clip}(x, lo, hi)$ — $x$ forced into $[lo, hi]$
+- $\min(\cdot,\cdot)$ — take the **smaller** (more pessimistic) of the two predictions
+
+Four cases, one action at a time:
+
+| | ${\color{#8e44ad}{\rho_t}} < 1-{\color{#8e44ad}{\epsilon}}$ (made much *less* likely) | ${\color{#8e44ad}{\rho_t}} > 1+{\color{#8e44ad}{\epsilon}}$ (made much *more* likely) |
+| --- | --- | --- |
+| ${\color{#2a9d5c}{A_t}} > 0$ (good action) | $\min$ picks ${\color{#8e44ad}{\rho}}{\color{#2a9d5c}{A}}$: gradient on — **undo the mistake** | $\min$ picks $(1+{\color{#8e44ad}{\epsilon}}){\color{#2a9d5c}{A}}$: flat — **enough, stop** |
+| ${\color{#2a9d5c}{A_t}} < 0$ (bad action) | $\min$ picks $(1-{\color{#8e44ad}{\epsilon}}){\color{#2a9d5c}{A}}$: flat — **enough, stop** | $\min$ picks ${\color{#8e44ad}{\rho}}{\color{#2a9d5c}{A}}$: gradient on — **undo the mistake** |
+
+Between $1-{\color{#8e44ad}{\epsilon}}$ and $1+{\color{#8e44ad}{\epsilon}}$ both terms are equal and it is the plain surrogate. The clip removes any incentive to
+move an action's probability by more than ±20 % per batch **in the direction the advantage wants** — and never
+blocks a move back toward the old policy. **Small, safe steps, taken many times.**
 
 ---
 
@@ -247,20 +617,114 @@ for ax, A, title in ((ax0, +1.0, "advantage $A > 0$: make this action more likel
                      (ax1, -1.0, "advantage $A < 0$: make it less likely")):
     unclipped = r * A
     clipped = np.minimum(r * A, np.clip(r, 1 - eps, 1 + eps) * A)
-    ax.plot(r, unclipped, color="0.6", ls="--", lw=1.5, label=r"$r_t A_t$ (plain ratio)")
-    ax.plot(r, clipped, color="#3b7dd8", lw=2.5, label=r"$L^{\mathrm{CLIP}}$")
+    ax.plot(r, unclipped, color="0.6", ls="--", lw=1.5, label=r"$\rho_t A_t$ (plain ratio)")
+    ax.plot(r, clipped, color="#8e44ad", lw=2.5, label=r"$L^{\mathrm{CLIP}}$")
     ax.axvline(1 - eps, color="0.7", ls=":"); ax.axvline(1 + eps, color="0.7", ls=":")
     ax.axvline(1, color="k", lw=0.8)
-    ax.set_xlabel(r"probability ratio $r_t(\theta)$"); ax.set_title(title, fontsize=9)
+    ax.set_xlabel(r"probability ratio $\rho_t(\theta)$"); ax.set_title(title, fontsize=9)
     ax.grid(alpha=0.3); ax.legend(fontsize=8, loc="upper left" if A > 0 else "lower left")
 ax0.set_ylabel("objective")
 fig.tight_layout(); plt.show()
 ```
 
-Left: once the action is $1+\epsilon$ times more likely than it was, the
+Left: once the action is $1+{\color{#8e44ad}{\epsilon}}$ times more likely than it was, the
 objective goes **flat** — no gradient, no incentive to keep pushing. Right: the
 mirror image. In both plots the flat part is on the side the update would move
 toward, which is exactly the side that needs a brake.
+
+---
+
+## The surrogate, measured against the truth {.smaller}
+
+The one-action problem again: 64 samples from ${\color{#3b7dd8}{\pi_{\text{old}}}} = \mathcal N(0, 0.5^2)$, best action at 1. Move the mean to
+$\mu'$ and compare what the old batch *predicts* with the exact improvement $J(\mu') - J(0) = 1 - (\mu'-1)^2$:
+
+```{python}
+#| fig-align: center
+rng = np.random.default_rng(0); eps = 0.2
+logp = lambda x, m: -(x - m) ** 2 / (2 * sd0**2)            # + terms that cancel in the ratio
+def surrogate(a, A, m_new, m_old, clipped):
+    rho = np.exp(logp(a, m_new) - logp(a, m_old))
+    return np.mean(np.minimum(rho * A, np.clip(rho, 1 - eps, 1 + eps) * A)) if clipped else np.mean(rho * A)
+a = rng.normal(0.0, sd0, 64); A = score(a) - score(a).mean()
+mus = np.linspace(-0.5, 3.0, 351)
+plain_s = np.array([surrogate(a, A, m, 0.0, False) for m in mus])
+clip_s = np.array([surrogate(a, A, m, 0.0, True) for m in mus])
+truth = 1.0 - (mus - 1.0) ** 2
+fig, ax = plt.subplots(figsize=(9, 3.0))
+ax.plot(mus, truth, color="#2a9d5c", lw=2, label=r"truth: $J(\mu')-J(0)$")
+ax.plot(mus, plain_s, color="0.5", lw=2, ls="--", label=r"plain surrogate $\mathrm{mean}(\rho A)$")
+ax.plot(mus, clip_s, color="#8e44ad", lw=2.5, label="clipped surrogate (PPO)")
+ax.plot(a, np.full_like(a, -2.9), "|", color="#e8743b", ms=10, label="the 64 old samples")
+ax.set_ylim(-3, 1.2); ax.set_xlabel(r"new mean $\mu'$ (old mean 0)"); ax.grid(alpha=0.3); ax.legend(fontsize=7.5, loc="upper right")
+fig.tight_layout(); plt.show()
+```
+
+---
+
+## The surrogate, read {.smaller}
+
+```{python}
+h = 1e-6
+print(f"slope at mu'=0: plain {(surrogate(a, A, h, 0, False) - surrogate(a, A, -h, 0, False)) / 2 / h:.4f}, "
+      f"clipped {(surrogate(a, A, h, 0, True) - surrogate(a, A, -h, 0, True)) / 2 / h:.4f}, "
+      f"policy gradient {np.mean(a / sd0**2 * A):.4f}")
+for m in (2.0, 2.5, 3.0):
+    k = np.argmin(abs(mus - m))
+    print(f"mu' = {m}: truth {truth[k]:+.2f}   plain predicts {plain_s[k]:+.3f}   clipped predicts {clip_s[k]:+.3f}")
+```
+
+- **Near the old policy all three agree.** The slopes at $\mu' = 0$ are identical — Step 2 of the ratio slide, measured.
+  (The policy-gradient number is below the exact 2 because 64 samples are a noisy estimate.)
+- **Far away the plain surrogate goes blind.** The old samples all sit near 0; under a policy centred at 2.5 each of
+  them is very unlikely, so every ${\color{#8e44ad}{\rho}}\to 0$ and the prediction decays to "about no change" — while the truth is a large loss.
+- **The clipped surrogate is pessimistic out there:** it predicts a loss wherever the plain one predicts nothing. Its
+  maximum sits close to the old policy — a short step you can trust, then collect new data.
+
+---
+
+## Small steps, many times: measured {.smaller}
+
+Repeat the one-action experiment as PPO does: collect 64 samples from the current policy, move the mean to
+the **maximum of the clipped surrogate**, collect again.
+
+```{python}
+#| fig-align: center
+rng = np.random.default_rng(1); m, path = 0.0, [0.0]
+grid = np.linspace(-0.5, 3.0, 701)
+for _ in range(12):
+    a = rng.normal(m, sd0, 64); A = score(a) - score(a).mean()
+    m = grid[np.argmax([surrogate(a, A, x, m, True) for x in grid])]
+    path.append(m)
+fig, ax = plt.subplots(figsize=(8.5, 2.6))
+ax.plot(path, "o-", color="#8e44ad", lw=2); ax.axhline(1.0, color="#2a9d5c", ls=":", label="best action")
+ax.set_xlabel("round (collect 64 samples, maximise the clipped surrogate)"); ax.set_ylabel(r"policy mean $\mu$")
+ax.grid(alpha=0.3); ax.legend(fontsize=8); fig.tight_layout(); plt.show()
+print("mean after each round:", " ".join(f"{p:.2f}" for p in path))
+```
+
+Each round moves only as far as the clip allows, and the steps shrink as the policy nears the best action,
+because the advantages shrink with it. It reaches 1 within about ten rounds and then wanders around it by
+the sampling noise of 64 samples.
+
+---
+
+## PPO, the whole loop {.smaller}
+
+```{python}
+for k in ("n_steps", "batch_size", "n_epochs", "gamma", "gae_lambda", "clip_range", "learning_rate", "ent_coef"):
+    print(f"  {k:14s} = {defaults[k]}")
+per_batch = defaults["n_steps"] // defaults["batch_size"] * defaults["n_epochs"]
+print(f"gradient steps per batch of experience: {defaults['n_steps']} // {defaults['batch_size']} x {defaults['n_epochs']} = {per_batch}")
+print(f"batches in 30k steps: ceil(30000 / {defaults['n_steps']}) = {int(np.ceil(30000 / defaults['n_steps']))}")
+```
+
+1. **Collect** `n_steps` of experience with the current policy ${\color{#3b7dd8}{\pi_{\text{old}}}}$ — *sampled* actions, not the mean.
+2. **Score** it: returns, and advantages ${\color{#2a9d5c}{\hat A_t}}$ by GAE with the critic ${\color{#c0392b}{V}}$.
+3. **Improve**: `n_epochs` passes over the batch in minibatches of `batch_size`, ascending $L^{\text{CLIP}}$ (and fitting ${\color{#c0392b}{V}}$ to the returns).
+4. ${\color{#3b7dd8}{\pi_{\text{old}}}} \leftarrow {\color{#3b7dd8}{\pi_\theta}}$; go to 1.
+
+Step 3 is the reuse REINFORCE could not do. Remember step 1's word *sampled* — it decides the G1's fate below.
 
 ---
 
@@ -270,7 +734,6 @@ CartPole has two discrete actions. A robot has twelve continuous ones, so let us
 move to a continuous problem — still trivial, but the right shape.
 
 ```{python}
-from stable_baselines3 import PPO
 from stable_baselines3.common.evaluation import evaluate_policy
 
 t0 = time.time()
@@ -282,7 +745,9 @@ after, _ = evaluate_policy(model, pend, n_eval_episodes=10, warn=False)
 print(f"InvertedPendulum: return {before:.1f} -> {after:.1f}  ({time.time()-t0:.0f}s)")
 ```
 
-Solved, cleanly, in about a minute and a half. **Remember this feeling.**
+A pole on a cart again, but the push is now a continuous force — one Gaussian action, the formula above with
+one term. It pays 1 per step upright, up to 1000 steps: **1000 is perfect.** Solved, cleanly, in about a
+minute and a half. **Remember this feeling.**
 
 ---
 
@@ -291,8 +756,6 @@ Solved, cleanly, in about a minute and a half. **Remember this feeling.**
 Same algorithm, same defaults, our environment from last week.
 
 ```{python}
-from soc4180.envs import G1WalkEnv
-
 env_g1 = G1WalkEnv()
 t0 = time.time()
 agent = PPO("MlpPolicy", env_g1, verbose=0, seed=0, device="cpu")
@@ -303,7 +766,8 @@ after, _ = evaluate_policy(agent, env_g1, n_eval_episodes=5, warn=False)
 print(f"30k steps : {after:7.1f}      ({time.time()-t0:.0f}s)")
 ```
 
-Two things in those numbers, and both matter.
+Two things in those numbers, and both matter. `evaluate_policy` uses the **mean** action
+(deterministic) and reports the undiscounted episode return — the sum of every step's reward.
 
 ---
 
@@ -343,15 +807,18 @@ print(f"forward velocity : {info['forward_velocity']:+.3f} m/s  "
 print(f"outcome          : {'FELL' if terminated else 'survived'}")
 ```
 
-It **lunges**. Velocity far past the target, a metre of ground covered, and then
-it goes down.
+It **lunges**: at the moment it falls it is moving at about two and a half times the
+target speed, having covered roughly half a metre, and the episode ends before one
+second of its ten (50 steps per second at 50 Hz).
 
 ---
 
 ## Is the reward to blame? {.smaller}
 
 The obvious story is that our reward rewards diving. **Check it before believing
-it** — the reward is only four terms, so evaluate them by hand:
+it.** Per step the reward is $1.5\,e^{-(v-0.5)^2/0.25} + 0.5\cdot\text{upright} + 0.5$
+(tracking, upright, alive; the effort and smoothness costs are small and dropped here).
+Evaluate it by hand, taking upright = 1 (vertical):
 
 ```{python}
 def per_step_reward(v, target=0.5):
@@ -367,7 +834,7 @@ for v, steps, label in ((0.5, 500, "walk at the target"),
 Lunging and falling is worth 52. There is no loophole: the reward wants exactly
 what we want. The trained policy did not outsmart it; it scored *worse*.
 
-So the failure is somewhere else.
+So the failure is somewhere else. Remember step 1 of the PPO loop.
 
 ---
 
@@ -400,6 +867,29 @@ print(f"untrained, stochastic    (what we train on) : {survival(agent2, probe, F
 
 ---
 
+## How wide is σ = 1, in radians? {.smaller}
+
+The env turns an action into a joint target: $q_{\text{target}} = q_{\text{crouch}} + \kappa\,{\color{#e8743b}{a}}$, with ${\color{#e8743b}{a}}$ clipped to $[-1, 1]$.
+
+```{python}
+from math import erf, sqrt
+kappa = probe.action_scale
+for s in (1.0, np.exp(-2.0)):
+    p_out = 1 - erf(1 / (s * sqrt(2)))                     # P(|N(0, s^2)| > 1)
+    print(f"std {s:.3f}: typical joint offset {kappa * s:.3f} rad = {np.degrees(kappa * s):4.1f} deg")
+    print(f"           P(one joint's sample hits the +-1 clip) = {p_out:.2g},  "
+          f"P(at least one of the 12) = {1 - (1 - p_out) ** 12:.2g}")
+```
+
+- $\kappa$ — `action_scale`, radians per unit of action
+- $\text{erf}$ — the standard formula for the probability that a normal sample lands within $\pm$ a distance of its mean
+
+With σ = 1 every one of the twelve leg joints is thrown by a typical ~17°, **independently, fifty times a second**,
+and on almost every step at least one joint is slammed to its limit. That is not exploring *around* a crouch; it is shaking the robot.
+With σ = 0.135 the typical offset is about 2°.
+
+---
+
 ## Survival against noise, no training at all {.smaller}
 
 ```{python}
@@ -429,7 +919,7 @@ about forty steps.
 
 So more than 90% of the experience PPO collects is a robot falling over. It never
 sees the competent behaviour its own mean produces, and it dutifully learns from
-the wreckage.
+the wreckage: the advantages it computes compare one way of falling with another.
 
 > A policy is a *distribution*. If the distribution is too wide, the data you
 > gather describes a policy you would never deploy.
@@ -538,12 +1028,16 @@ Evaluates the untrained policy both ways, trains with a progress line every
    still beats every attempt to walk. What does that say about shaping?
 6. **Honest baselines.** Report untrained return, hold-the-crouch return, and
    trained return for three seeds. Is the difference between them significant?
+7. **On paper.** Derive $\partial\log\pi/\partial\ell$ for the Gaussian (with $\sigma = e^{\ell}$) and check it
+   against the slide. Then explain in one sentence why a *good* sample two σ from the mean makes PPO widen σ.
 
 ---
 
 ## Next week
 
 **09 — reward shaping.** We take a real locomotion reward apart term by term,
-remove them one at a time, and catalogue the pathology each one produces.
+remove them one at a time, and ask what each one does.
 
-Today's lunging robot is the first entry in that catalogue.
+Today's lesson carries over: the lunging robot was **not** a reward loophole — it
+was exploration noise. Next week's robot trains with the noise fixed, stands
+safely at ~780, and the question becomes why it never walks toward 1250.

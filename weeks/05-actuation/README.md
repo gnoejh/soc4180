@@ -26,9 +26,24 @@
 - `kp = 500` on every joint; `kv` ranges **4.55 – 43.01**, larger nearer the trunk —
   because **every leg joint is critically damped**: $\zeta = k_v / 2\sqrt{k_p M} = 1.00$
   against the mass-matrix diagonal, on all twelve. The arms sit at 0.7–1.9.
-- Step response of the knee (gravity off): $k_p \times 4$ reaches 1% of target in
-  0.034 s instead of 0.116 s with 2% overshoot and 4x the torque; $k_v / 4$
-  overshoots 9%; $k_v \times 4$ is still 1% short after 0.5 s.
+- Step response of the knee (gravity off, robot lifted 0.5 m so nothing touches
+  the floor): $k_p \times 4$ reaches 1% of target in 0.032 s instead of 0.110 s
+  with 4.0% overshoot and 4x the torque; $k_v / 4$ overshoots 16.9%; $k_v \times 4$
+  is not within 1% after 0.5 s. The one-joint formula ($M_{ii} = 0.1256$,
+  $\omega_n = 63.1$ rad/s) predicts 0.106 s nominal (measured 0.110) but 44.4%
+  overshoot for $k_v/4$: the floating body's "free" inertia $1/(M^{-1})_{ii} = 0.0412$
+  predicts 21.8%, and the robot sits between the two limits. (An earlier version
+  quoted 9% — that run let a foot touch the floor mid-step; `servo.py` does too,
+  hence its 4.6%.)
+- Sag, one joint (left arm straight out, shoulder only re-tuned): gravity torque
+  4.73 N·m, sag 9.45 mrad at $k_p = 500$ against $\tau_g/k_p = 9.46$; the $1/k_p$ law
+  holds to 0.05 mrad from 125 to 2000.
+- Saturation, same arm: gravity's largest pull is 5.09 N·m. A 6 N·m limit holds;
+  4 and 3 N·m give way and stop inside the band where $\tau_g = \tau_{\max} \pm 0.3$
+  (joint friction); 2 N·m stops 0.4° short of its band.
+- Coupled phase oscillators ($\dot e = \Delta\omega - 2w\sin e$): $w = 2$ locks a
+  0.1 Hz mismatch at $e^* = 0.158$ rad as predicted; $w = 0.25$ drifts. The
+  package's `CPG` has no coupling term — it is the locked solution written down.
 - Sag against stiffness: 11.0 mm at 500, 9.4 at 600, 6.0 at 750 — the $1/k_p$
   spring law — then a fall at 1000. Below 500 it does not sag more, it falls (400 collapses).
 - The knee exceeds 50 N·m for only **4.0%** of the walk, 55 N·m for 2.1%.
@@ -37,7 +52,8 @@
   strong. The gait needs **> 50 N·m**: it falls at 50 and walks at 55.
 - Gain sweep: only the nominal `kp = 500` walks. 0.25× and 0.5× collapse; 2× and
   4× fall. Scaling `kv` as $\sqrt{k_p}$ changes nothing.
-- CPG: **all nine parameter settings fall** (3 frequencies × 3 amplitudes).
+- CPG: **all nine parameter settings fall** (3 frequencies × 3 amplitudes),
+  between 1.9 and 3.2 s in — now computed in the deck rather than tabulated.
 
 ## The two lessons
 

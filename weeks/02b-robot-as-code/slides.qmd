@@ -73,6 +73,29 @@ Six numbers describe the entire robot's *shape as data*:
 
 ---
 
+## Colour code for this deck {.smaller}
+
+**In the drawings**, one colour per chain, used on every figure:
+
+<span style="color:#1f77b4">**left leg**</span> ·
+<span style="color:#6fb3e0">**right leg**</span> ·
+<span style="color:#2ca02c">**waist**</span> ·
+<span style="color:#d62728">**left arm**</span> ·
+<span style="color:#f08b8c">**right arm**</span> — and grey for the floating base.
+
+**In the maths**, three things that are easy to confuse get their own colours:
+
+| symbol | meaning | colour |
+| --- | --- | --- |
+| ${\color{#8e44ad}{i_q(j)}}$ | joint $j$'s slot in **`qpos`** — position space | <span style="color:#8e44ad">purple</span> |
+| ${\color{#e8743b}{i_v(j)}}$ | joint $j$'s slot in **`qvel`** — velocity space | <span style="color:#e8743b">orange</span> |
+| ${\color{#16a085}{M}}$ | the **mirror**, left ↔ right: $M = \mathrm{diag}(1, -1, 1)$ | <span style="color:#16a085">teal</span> |
+
+Axes as in week 1: $+x$ forward, $+y$ the robot's left, $+z$ up. **Roll, pitch and
+yaw** are turns about $x$, $y$ and $z$.
+
+---
+
 ## The robot is a tree {.smaller}
 
 Every body has exactly **one parent**. That is not a convention, it is the
@@ -129,6 +152,98 @@ ax.set_title("every joint of the G1, and the body it turns  "
              "(qN = its slot in qpos)", fontsize=11)
 fig.tight_layout(); plt.show()
 ```
+
+That picture was laid out by hand from the chain table. The next two slides
+rebuild it from MuJoCo's own data, with nothing hand-placed.
+
+---
+
+## A tree is one array: `body_parentid` {.smaller}
+
+MuJoCo stores the skeleton as a single list of integers — entry $b$ is the
+parent of body $b$. Call that function $\pi$:
+
+$$\pi(b) = \text{the parent of body } b, \qquad \pi(0) = 0 \;\;(\text{body 0 is the world, its own parent})$$
+
+Everything about the tree follows from $\pi$ by repeating it:
+
+- **Ancestors** of $b$ — follow parents until the world:
+  $A(b) = \{\pi(b),\ \pi(\pi(b)),\ \dots,\ 0\}$
+- **Depth** of $b$ — how many steps that takes: $\mathrm{depth}(b) = |A(b)|$
+- **Children** of $b$ — every $c$ with $\pi(c) = b$; a **leaf** has none
+
+```{python}
+parent = model.body_parentid
+short = lambda b: (mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_BODY, b)
+                   .replace("_link", "").replace("left_", "L ").replace("right_", "R "))
+
+def ancestors(b):
+    out = []
+    while b != 0:
+        b = int(parent[b])
+        out.append(b)
+    return out
+
+print("body_parentid =", list(map(int, parent)))
+hand = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "left_wrist_yaw_link")
+print(f"\nancestors of '{short(hand)}' (depth {len(ancestors(hand))}):")
+print("   " + "  <-  ".join(short(a) for a in ancestors(hand)))
+leaves = [b for b in range(model.nbody) if b not in set(parent[1:])]
+print("\nleaves:", [short(b) for b in leaves])
+```
+
+A tree is exactly a structure where **each node has one parent**, so one integer
+per body is enough to store it. The hand's ancestor list is the path the arm
+walks from the hand back to the world — and it passes through the torso and the
+waist, which is why the waist moves the hand.
+
+---
+
+## The tree, drawn from that array alone {.smaller}
+
+Lay it out mechanically: each leaf gets its own column, each parent sits over the
+middle of its children, and the row is the depth.
+
+```{python}
+#| fig-align: center
+children = {b: [c for c in range(1, model.nbody) if parent[c] == b] for b in range(model.nbody)}
+xpos_tree, next_col = {}, [0]
+
+def place(b):                               # post-order: children first, then centre the parent
+    if not children[b]:
+        xpos_tree[b] = next_col[0]; next_col[0] += 1
+    else:
+        for c in children[b]:
+            place(c)
+        xpos_tree[b] = np.mean([xpos_tree[c] for c in children[b]])
+place(0)
+
+def chain_colour(b):
+    j = model.body_jntadr[b]
+    if j < 1:
+        return "#777777"                    # the world, and the pelvis's free joint
+    name = mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_JOINT, j)
+    return next((COLOUR[c] for c, js in B.CHAINS.items() if name in js), "#777777")
+
+fig, ax = plt.subplots(figsize=(12.0, 4.5))
+for b in range(1, model.nbody):             # edges first, so boxes sit on top
+    p = int(parent[b])
+    ax.plot([xpos_tree[p], xpos_tree[b]], [-len(ancestors(p)), -len(ancestors(b))],
+            color="#bbb", lw=1.2, zorder=1)
+for b in range(model.nbody):
+    x, y = xpos_tree[b], -len(ancestors(b))
+    ax.text(x, y, f"{b} {short(b)}", ha="center", va="center", fontsize=7.5, color="w",
+            zorder=3, bbox=dict(boxstyle="round,pad=0.25", fc=chain_colour(b), ec="none"))
+ax.set_xlim(-0.6, next_col[0] - 0.4); ax.set_ylim(-11.6, 0.6); ax.axis("off")
+ax.set_title("all 31 bodies, placed only from body_parentid "
+             "(number = body id, row = depth)", fontsize=11)
+fig.tight_layout(); plt.show()
+```
+
+Four leaves — two feet, two hands — so four columns. The legs branch at depth 1,
+the waist runs up the middle to the torso, and the arms branch there. It is the
+hand-drawn tree again, now with the world at the top and every body a genuine
+MuJoCo id.
 
 ---
 
@@ -217,6 +332,55 @@ because you cannot store a 3-D rotation in 3 numbers without a singularity
 The danger is that both indices are valid. Use a `qvel` index on `qpos` and you
 silently read the **neighbouring joint** — an elbow where you meant a shoulder.
 Nothing raises. Nothing warns. The robot simply does the wrong thing.
+
+---
+
+## Why exactly one: counting slots {.smaller}
+
+MuJoCo lays joints out in id order, each taking as many slots as it needs. Every
+joint type costs a fixed number in each array:
+
+| joint type | `qpos` slots $n_q$ | `qvel` slots $n_v$ |
+| --- | --- | --- |
+| free (the pelvis) | 7 = position 3 + quaternion 4 | 6 = linear 3 + angular velocity 3 |
+| ball | 4 = quaternion | 3 = angular velocity |
+| hinge (all 29 of the G1's others) | 1 = angle | 1 = its rate |
+
+**Step 1 — a slot address is a running total.** Joint $j$ starts where all
+earlier joints end: ${\color{#8e44ad}{i_q(j)}} = \sum_{k<j} n_q(k)$ and
+${\color{#e8743b}{i_v(j)}} = \sum_{k<j} n_v(k)$.
+
+**Step 2 — subtract.** ${\color{#8e44ad}{i_q(j)}} - {\color{#e8743b}{i_v(j)}} = \sum_{k<j} \big(n_q(k) - n_v(k)\big)$.
+Every hinge contributes $1 - 1 = 0$. Only the free joint, joint 0, contributes $7 - 6 = 1$.
+
+**Step 3 — so for every hinge $j \ge 1$, the difference is exactly 1.** And the
+G1's MJCF puts the free joint first, so there is no hinge before it to escape the offset.
+
+---
+
+## Why a rotation costs 4 slots in `qpos` but 3 in `qvel` {.smaller}
+
+A unit quaternion
+${\mathbf{q}}$ must keep $\|\mathbf{q}\| = 1$. Its rate of change is
+$\dot{\mathbf{q}} = \tfrac12\,\mathbf{q}\otimes(0, \boldsymbol{\omega})$, fixed by the
+three numbers of the angular velocity $\boldsymbol{\omega}$ — one constraint on four
+numbers leaves three freedoms. ($\otimes$ is quaternion multiplication; today you
+need only that its input is those three numbers.)
+
+That rate never changes the length: $\tfrac{d}{dt}\|\mathbf{q}\|^2 = 2\,\mathbf{q}\cdot\dot{\mathbf{q}} = 0$,
+so a quaternion moved this way stays a unit quaternion. Adding `qvel` to `qpos` is
+not even the right shape (35 numbers against 36); `mj_integratePos` turns the
+quaternion instead. Spin the base at 0.5 rad/s about $z$ for one second:
+
+```{python}
+q_int = model.key_qpos[0].copy()
+v_int = np.zeros(model.nv)
+v_int[3:6] = [0.0, 0.0, 0.5]                      # spin about z at 0.5 rad/s
+mujoco.mj_integratePos(model, q_int, v_int, 1.0)  # ...for one second
+print("base quaternion after 1 s:", q_int[3:7].round(4), f"  norm {np.linalg.norm(q_int[3:7]):.6f}")
+print(f"cos(0.25), sin(0.25)     : {np.cos(0.25):.4f}, {np.sin(0.25):.4f}"
+      "   <- (cos t/2, sin t/2): a quaternion holds HALF the angle, t = 0.5 rad about z")
+```
 
 ---
 
@@ -438,6 +602,44 @@ ankle is for trimming.
 
 ---
 
+## The blanks, predicted from the tree {.smaller}
+
+A joint turns the body it belongs to and everything hanging below. So, with $A(k)$
+the ancestors from the `body_parentid` slide and $\beta(j)$ the body joint $j$
+turns (`model.jnt_bodyid[j]`):
+
+$$\text{joint } j \text{ can move landmark } k \iff \beta(j) = k \;\text{ or }\; \beta(j) \in A(k)$$
+
+Compute that for all $5 \times 29$ cells **without moving anything**, and compare
+with the heat map's measured blanks:
+
+```{python}
+land_bodies = bodies + [int(model.site_bodyid[imu])]            # the IMU rides on torso_link
+
+def beta(jname):                                                 # the body joint j turns
+    return int(model.jnt_bodyid[mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, jname)])
+
+predicted = np.array([[beta(j) == k or beta(j) in ancestors(k) for j in joints]
+                      for k in land_bodies])
+measured = effect > ZERO
+names_5 = [n for n, _ in LANDMARKS] + ["torso IMU"]
+print(f"cells predicted to move : {predicted.sum()}   measured moving : {measured.sum()}")
+print(f"predicted blank, and blank          : {(~predicted & ~measured).sum()}")
+print(f"predicted blank, but moved          : {(~predicted & measured).sum()}")
+print("predicted to move, but measured 0   :")
+for i, k in zip(*np.nonzero(predicted & ~measured)):
+    print(f"    {joints[k]:24s} -> {names_5[i]}")
+```
+
+The tree predicts **every blank** — 110 cells called blank, all 110 measured
+blank, none that moved. The only disagreements run the other way, six cells:
+`ankle_roll`, `wrist_roll` and `wrist_yaw` on each side, which the tree says
+*could* move their landmark and which measure zero, because that landmark sits on
+the joint's own axis. The next slide is
+about exactly those.
+
+---
+
 ## Three joints that move nothing at all {.smaller}
 
 ```{python}
@@ -462,6 +664,120 @@ It is a property of where the MJCF author put the body origin, not of the robot.
 
 The joints are not useless: they *rotate*. Position is only half of a pose, and
 next week's IK solves both.
+
+---
+
+## Mirroring, as maths {.smaller}
+
+The mirror that swaps left and right flips $y$ and nothing else:
+${\color{#16a085}{M}} = \mathrm{diag}(1,-1,1)$, and ${\color{#16a085}{M}}^{-1} = {\color{#16a085}{M}}$
+(flip twice and you are back).
+
+**Step 1 — mirror a motion, not just a point.** The left arm turns a point by
+$R$: $\mathbf{p}' = R\,\mathbf{p}$. The right arm should do the mirror image:
+reflect the point to the left side, turn it there, reflect back:
+$\;\mathbf{p}'_{\text{right}} = {\color{#16a085}{M}}\,R\,{\color{#16a085}{M}}\,\mathbf{p}_{\text{right}}$.
+So the right side's rotation is ${\color{#16a085}{M}}R{\color{#16a085}{M}}$.
+
+**Step 2 — what ${\color{#16a085}{M}}R{\color{#16a085}{M}}$ does to each entry.**
+Multiplying by a diagonal matrix on the left scales rows; on the right, columns.
+So entry $(i, k)$ is multiplied by $m_i\,m_k$ — it flips sign exactly when **one**
+of $i, k$ is the $y$ index.
+
+**Step 3 — apply it to the three basic rotations:**
+
+$$R_x(\theta) = \begin{bmatrix}1&0&0\\0&c&-s\\0&s&c\end{bmatrix}\xrightarrow{\;{\color{#16a085}{M}}\cdot{\color{#16a085}{M}}\;}\begin{bmatrix}1&0&0\\0&c&s\\0&-s&c\end{bmatrix} = R_x(-\theta)$$
+
+$$\text{likewise}\qquad R_z(\theta)\longrightarrow R_z(-\theta),
+\qquad
+R_y(\theta)\longrightarrow R_y(\theta)$$
+
+($c = \cos\theta$, $s = \sin\theta$.) $R_x$ and $R_z$ have their $\pm s$ entries in
+a $y$ row or column, so they flip; $R_y$'s $\pm s$ sit at $(x, z)$ and $(z, x)$,
+untouched. **Roll and yaw negate, pitch keeps its sign.**
+
+---
+
+## Mirroring, checked {.smaller}
+
+**Step 4 — this becomes a rule about joint *angles* only because both sides use
+the same axes.** If the right hip roll turned about $-x$, the signs would come
+out the other way. Checked, together with step 3:
+
+```{python}
+M = np.diag([1.0, -1.0, 1.0])
+def rot(axis, t):
+    q, R = np.zeros(4), np.zeros(9)
+    mujoco.mju_axisAngle2Quat(q, np.asarray(axis, float), t)
+    mujoco.mju_quat2Mat(R, q)
+    return R.reshape(3, 3)
+
+for name, axis in (("roll  (x)", [1, 0, 0]), ("pitch (y)", [0, 1, 0]), ("yaw   (z)", [0, 0, 1])):
+    MRM = M @ rot(axis, 0.4) @ M
+    print(f"{name}:  M R(0.4) M  vs R(+0.4): {np.abs(MRM - rot(axis, 0.4)).max():.2f}"
+          f"   vs R(-0.4): {np.abs(MRM - rot(axis, -0.4)).max():.2f}")
+
+pairs = [j for c in ("left_leg", "left_arm") for j in B.CHAINS[c]]
+same = all(np.allclose(model.jnt_axis[mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, j)],
+                       model.jnt_axis[mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT,
+                                                        j.replace("left", "right"))])
+           for j in pairs)
+print(f"\nall {len(pairs)} left/right joint pairs share the same axis in the MJCF: {same}")
+```
+
+Roll and yaw land on $R(-0.4)$ exactly, pitch on $R(+0.4)$; and since every twin
+turns about the same axis as its left partner, `soc4180.mirror` needs nothing but
+the joint's *name*: negate it if the name contains `roll` or `yaw`, keep it
+otherwise.
+
+---
+
+## Mirroring, drawn {.smaller}
+
+Sweep one left joint, and its right twin once with the mirror rule and once with
+the sign copied naively. Front view for roll, side view for pitch:
+
+```{python}
+#| fig-align: center
+hand_id = {s: mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, f"{s}_wrist_yaw_link")
+           for s in ("left", "right")}
+
+def hand_path(side, joint, values):
+    path = []
+    for v in values:
+        soc4180.set_pose(model, data, **{f"{side}_{joint}": v})
+        path.append(data.xpos[hand_id[side]].copy())
+    return np.array(path)
+
+sweep = np.linspace(0.2, 1.2, 11)
+fig, axs = plt.subplots(1, 2, figsize=(11.6, 3.7))
+panels = [(axs[0], "shoulder_roll", (1, 2), "front view: y (left) vs z", "roll: mirror NEGATES"),
+          (axs[1], "shoulder_pitch", (0, 2), "side view: x (forward) vs z", "pitch: mirror KEEPS")]
+for ax, joint, (a, b), view, title in panels:
+    L = hand_path("left", joint, sweep)
+    Rm = hand_path("right", joint, -sweep if "roll" in joint else sweep)
+    Rn = hand_path("right", joint, sweep if "roll" in joint else -sweep)
+    ax.plot(L[:, a], L[:, b], "o-", color=COLOUR["left_arm"], ms=4,
+            label="left hand, joint swept 0.2 -> 1.2 rad")
+    ax.plot(Rm[:, a], Rm[:, b], "o-", color=COLOUR["right_arm"], ms=4,
+            label="right hand, mirror rule")
+    ax.plot(Rn[:, a], Rn[:, b], "x--", color="#999", ms=5,
+            label="right hand, the other sign (wrong)")
+    ax.set_title(f"{title}\n{view}", fontsize=10); ax.set_aspect("equal"); ax.grid(alpha=0.3)
+    ax.set_ylim(0.62, 1.06)
+fig.legend(*axs[0].get_legend_handles_labels(), loc="lower center", ncol=3, fontsize=8.5)
+axs[0].axvline(0, color="#16a085", lw=1.2, ls=":")
+axs[0].set_xlabel("y (m)"); axs[0].set_ylabel("z (m)")
+axs[1].set_xlabel("x (m)"); axs[1].set_ylabel("z (m)")
+fig.tight_layout(rect=(0, 0.11, 1, 1)); plt.show()
+soc4180.set_pose(model, data)
+```
+
+**Roll** (left): the teal line is the mirror $y = 0$. Sign flipped, the right hand
+traces the left one's reflection; sign copied, it swings *inward*, across the body.
+**Pitch** (right): the mirror does not touch $x$ or $z$, so the correct twin keeps
+the sign and its path lies exactly on the left one's; flipping it swings that arm
+forward while the left swings back.
 
 ---
 

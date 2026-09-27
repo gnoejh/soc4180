@@ -27,13 +27,13 @@ begins. No learning code appears — only the problem definition.
 | Policy | Return | Outcome |
 | --- | --- | --- |
 | Do nothing (hold the crouch) | 774.09 | survived all 500 steps |
-| Uniform random | 22.47 | fell in 25 steps (0.5 s) |
+| Uniform random (action space seeded 0) | 25.78 | fell in 33 steps (0.66 s) |
 | Analytic walker (Week 4) | — | **fell after 4.2 s, 0.24 m** |
 
 The Week 4 walker **fails inside its own environment**, with actions clipped on
 **35.7%** of steps. The diagnosis separates two causes:
 
-| action_scale | 50 Hz | 100 Hz | 200 Hz |
+| action_scale | 50 Hz | 100 Hz | 200 Hz asked (250 Hz actual: decimation round(2.5) = 2) |
 | --- | --- | --- | --- |
 | 0.3 | fell (36% clipped) | fell | fell |
 | 0.6 | fell (18% clipped) | fell | fell |
@@ -51,7 +51,7 @@ locomotion literature trains with, and learned policies do succeed inside that
 envelope; they just find *different* gaits from ours. An environment is a
 commitment about what kind of solution you expect.
 
-**Return is not comparable across control rates.** The 200 Hz runs score ~5×
+**Return is not comparable across control rates.** The "200 Hz" (really 250 Hz) runs score ~5×
 the 50 Hz ones purely because they contain more steps. Report distance, time
 upright, or mean velocity alongside it.
 

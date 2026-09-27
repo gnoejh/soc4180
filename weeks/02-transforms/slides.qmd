@@ -208,8 +208,13 @@ print(f"relative to the HIP joint : {np.round(foot_world - hip_world, 4)}")
 ```
 
 The world answer says the foot is 3 cm above the floor. The pelvis answer says it
-is 76 cm below the hips. **Both are correct.** Neither is usable without its
-label.
+is 76 cm below the pelvis origin (the pelvis stands at $z = 0.79$ m), and the hip
+answer 65 cm below the hip joint. **All three are correct.** None is usable
+without its label.
+
+The pelvis line is not a subtraction alone: it is `pelvis_rot.T @ (...)`, an
+*inverse transform*. The slide *Undoing a transform* below derives why it has
+that shape.
 
 ---
 
@@ -249,32 +254,120 @@ The arrows differ; the star does not move. **A frame is a question, not a place.
 
 ---
 
-## A transform is a rotation and a translation {.smaller}
+## Colour code for the week {.smaller}
 
-To move a point from a child frame into its parent, do two things — turn it, then
-shift it:
+The same colours mean the same things in every equation from here on, and in the
+drawings built for them:
 
-$$\mathbf{p}_{\text{parent}} = \underbrace{R\,\mathbf{p}_{\text{child}}}_{\text{turn}} + \underbrace{\mathbf{t}}_{\text{shift}}$$
+| symbol | meaning |
+| --- | --- |
+| <span style="color:#3b7dd8">blue</span> ${\color{#3b7dd8}{q,\ \theta}}$ | a **joint angle** — what an encoder reports |
+| <span style="color:#c0392b">red</span> ${\color{#c0392b}{\mathbf{p},\ \mathbf{x}}}$ | a **point** we want to locate — usually the foot |
+| <span style="color:#e8743b">orange</span> ${\color{#e8743b}{R}}$ | a **rotation**: a $3\times3$ matrix, how a frame is turned |
+| <span style="color:#2a9d5c">green</span> ${\color{#2a9d5c}{\mathbf{t}}}$ | a **translation**: where a frame's origin is |
+| <span style="color:#8e44ad">purple</span> ${\color{#8e44ad}{T}}$ | a **transform**: rotation and translation in one $4\times4$ matrix |
 
-$R$ is a $3\times3$ **rotation matrix**; $\mathbf{t}$ is where the child's origin
-sits in the parent. Chaining two of them — child to parent to grandparent — gives:
+Blue angles and a red foot are week 3's choice too, so the colours carry over.
 
-$$R_{ac} = R_{ab} R_{bc}, \qquad \mathbf{t}_{ac} = R_{ab}\mathbf{t}_{bc} + \mathbf{t}_{ab}$$
+**Subscripts name two frames, read right to left.**
+${\color{#e8743b}{R_{ab}}}$ and ${\color{#2a9d5c}{\mathbf{t}_{ab}}}$ describe
+frame $b$ *as seen from* frame $a$: they take a point written in $b$'s coordinates
+and return it in $a$'s; ${\color{#c0392b}{\mathbf{p}_b}}$ is a point written in
+$b$. In ${\color{#e8743b}{R_{ab}}}{\color{#c0392b}{\mathbf{p}_b}}$ the inner
+letters match — the $b$'s "cancel", leaving $a$. Inner letters that do not match
+are a bug.
 
-That second formula is the whole of forward kinematics. Everything else today is
-applying it six times in a row.
+---
 
-Note where $R_{ab}$ sits in the translation: **the parent's rotation acts on the
-child's offset.** Forget that and the leg swings from the wrong place.
+## A rotation matrix is where the axes land {.smaller}
+
+What *is* the $3\times3$ matrix ${\color{#e8743b}{R}}$? Three steps, no memorising:
+
+**Step 1 — every vector is a mix of the three axes.** With
+$\mathbf{e}_x = (1,0,0)$, $\mathbf{e}_y = (0,1,0)$, $\mathbf{e}_z = (0,0,1)$:
+$\;\mathbf{v} = v_x\,\mathbf{e}_x + v_y\,\mathbf{e}_y + v_z\,\mathbf{e}_z$.
+
+**Step 2 — a rotation turns a mix into the same mix of turned axes.** Turning a
+rigid object does not stretch it, so
+$\;{\color{#e8743b}{R}}\mathbf{v} = v_x\,({\color{#e8743b}{R}}\mathbf{e}_x) + v_y\,({\color{#e8743b}{R}}\mathbf{e}_y) + v_z\,({\color{#e8743b}{R}}\mathbf{e}_z)$.
+
+**Step 3 — so the columns of ${\color{#e8743b}{R}}$ are the turned axes.**
+$\;{\color{#e8743b}{R}} = \big[\,{\color{#e8743b}{R}}\mathbf{e}_x \;\big|\; {\color{#e8743b}{R}}\mathbf{e}_y \;\big|\; {\color{#e8743b}{R}}\mathbf{e}_z\,\big]$.
+Column 1 is where $x$ ends up, column 2 where $y$ ends up, column 3 where $z$ ends up.
+
+Now read the three basic rotations off a drawing (next slide). Turn by
+${\color{#3b7dd8}{\theta}}$ about $z$: $x$ lands at $(\cos{\color{#3b7dd8}{\theta}}, \sin{\color{#3b7dd8}{\theta}}, 0)$,
+$y$ at $(-\sin{\color{#3b7dd8}{\theta}}, \cos{\color{#3b7dd8}{\theta}}, 0)$, and $z$ stays. Stack those as columns:
+
+$$R_z({\color{#3b7dd8}{\theta}}) = \begin{bmatrix} \cos\theta & -\sin\theta & 0\\ \sin\theta & \cos\theta & 0\\ 0&0&1\end{bmatrix}\quad
+R_x({\color{#3b7dd8}{\theta}}) = \begin{bmatrix} 1&0&0\\ 0&\cos\theta & -\sin\theta\\ 0&\sin\theta & \cos\theta\end{bmatrix}\quad
+R_y({\color{#3b7dd8}{\theta}}) = \begin{bmatrix} \cos\theta & 0 & \sin\theta\\ 0&1&0\\ -\sin\theta & 0 & \cos\theta\end{bmatrix}$$
+
+$R_y$ looks as if its minus sign is in the wrong corner. It is not — the drawing
+shows why.
+
+---
+
+## $R_z$ and $R_y$, drawn {.smaller}
+
+```{python}
+#| fig-align: center
+import matplotlib.pyplot as plt
+
+def Rx(t): return np.array([[1, 0, 0], [0, np.cos(t), -np.sin(t)], [0, np.sin(t), np.cos(t)]])
+def Ry(t): return np.array([[np.cos(t), 0, np.sin(t)], [0, 1, 0], [-np.sin(t), 0, np.cos(t)]])
+def Rz(t): return np.array([[np.cos(t), -np.sin(t), 0], [np.sin(t), np.cos(t), 0], [0, 0, 1]])
+
+th30 = np.radians(30)
+panels = [(Rz(th30), (0, 1), "x", "y", "turn 30° about z\nlooking down: z points AT you"),
+          (Ry(th30), (0, 2), "x", "z", "turn 30° about y\nx right, z up: y points AWAY from you")]
+
+fig, axs = plt.subplots(1, 2, figsize=(10.4, 3.9))
+for ax, (R, (i, j), n1, n2, title) in zip(axs, panels):
+    for col, name in ((i, n1), (j, n2)):
+        before = np.eye(3)[:, col][[i, j]]
+        after = R[:, col][[i, j]]                      # column `col` of R, seen in this plane
+        ax.annotate("", xy=before, xytext=(0, 0),
+                    arrowprops=dict(arrowstyle="-|>", color="#bbb", lw=2))
+        ax.annotate("", xy=after, xytext=(0, 0),
+                    arrowprops=dict(arrowstyle="-|>", color="#e8743b", lw=2.4))
+        ax.text(*(before * 1.12), name, color="#999", fontsize=11, ha="center", va="center")
+        ax.text(*(after * 1.10 + [0.04 if after[0] >= 0 else -0.04, 0]),
+                f"{name}' = ({after[0]:+.2f}, {after[1]:+.2f})", color="#e8743b", fontsize=9.5,
+                ha="left" if after[0] >= 0 else "right", va="center")
+    start = np.arctan2(*np.eye(3)[:, i][[j, i]])      # angle of the first axis, before
+    end = np.arctan2(*R[:, i][[j, i]])                # ...and after
+    arc = np.linspace(start, end, 30)
+    ax.plot(0.45 * np.cos(arc), 0.45 * np.sin(arc), color="#3b7dd8", lw=1.6)
+    ax.text(0.55 * np.cos(arc[15]), 0.55 * np.sin(arc[15]), r"$\theta$", color="#3b7dd8",
+            fontsize=12, ha="center", va="center")
+    ax.plot(0, 0, "o", color="k", ms=5)
+    ax.set_xlim(-1.95, 2.55); ax.set_ylim(-0.8, 1.3); ax.set_aspect("equal")
+    ax.set_xlabel(n1); ax.set_ylabel(n2); ax.grid(alpha=0.25)
+    ax.set_title(title, fontsize=10)
+fig.suptitle("grey = the axes before; orange = the same axes after = the columns of R",
+             fontsize=10.5)
+fig.tight_layout(); plt.show()
+```
+
+Left: seen with $z$ toward you, a positive turn is **counter-clockwise**, and
+$x' = (0.87, 0.50)$ is column 1 of $R_z(30°)$. Right: $+y$ points **away** from
+you, so the same right-hand rule looks **clockwise** — $x$ dips to $z = -0.50$
+and $z$ tips forward to $x = +0.50$. That is where $R_y$'s signs come from, and it
+is the view every side-on leg drawing today uses.
 
 ---
 
 ## Rotating a point, in 2D, by hand {.smaller}
 
 Start with one link in the $xz$ plane, hanging straight down from a pivot, tip at
-$(0, -L)$. Rotate it by $\theta$ about the $y$ axis:
+$(0, 0, -L)$. Turn it by ${\color{#3b7dd8}{\theta}}$ about the $y$ axis — that is
+$R_y({\color{#3b7dd8}{\theta}})$ times the tip, and only the third column of $R_y$
+survives, scaled by $-L$:
 
-$$\text{tip} = (-L\sin\theta,\; -L\cos\theta)$$
+$$R_y({\color{#3b7dd8}{\theta}})\begin{bmatrix}0\\0\\-L\end{bmatrix} = -L\begin{bmatrix}\sin\theta\\0\\\cos\theta\end{bmatrix}
+\quad\Longrightarrow\quad
+{\color{#c0392b}{\text{tip}}} = (-L\sin{\color{#3b7dd8}{\theta}},\; -L\cos{\color{#3b7dd8}{\theta}})\ \text{ in } (x, z)$$
 
 Check it with a calculator before trusting any code:
 
@@ -320,6 +413,226 @@ Read the signs off the picture. At $0°$ the tip hangs directly below. At $90°$
 has swung to horizontal at $x = -0.34$ — **backwards**. So a *positive* pitch
 angle swings the leg **back**, which is why the Week 4 crouch commands a hip pitch
 of $-0.35$: negative means knee forward.
+
+---
+
+## A transform is a rotation and a translation {.smaller}
+
+To move a point from a child frame $b$ into its parent frame $a$, do two things —
+turn it, then shift it:
+
+$${\color{#c0392b}{\mathbf{p}_a}} = \underbrace{{\color{#e8743b}{R_{ab}}}\,{\color{#c0392b}{\mathbf{p}_b}}}_{\text{turn}} + \underbrace{{\color{#2a9d5c}{\mathbf{t}_{ab}}}}_{\text{shift}}$$
+
+- ${\color{#c0392b}{\mathbf{p}_b}}$ — the point, in the child's own coordinates (for a link: fixed forever, it is bolted on)
+- ${\color{#e8743b}{R_{ab}}}$ — how the child is turned relative to the parent; its columns are the child's axes written in the parent
+- ${\color{#2a9d5c}{\mathbf{t}_{ab}}}$ — where the child's **origin** sits, in the parent's coordinates
+- ${\color{#c0392b}{\mathbf{p}_a}}$ — the same physical point, now in the parent's coordinates
+
+**Why turn first, then shift?** ${\color{#c0392b}{\mathbf{p}_b}}$ is measured
+along the child's axes. ${\color{#e8743b}{R_{ab}}}$ re-expresses that arrow along
+the parent's axes — same length, same physical direction, new numbers. It is still
+an arrow *from the child's origin*, so adding ${\color{#2a9d5c}{\mathbf{t}_{ab}}}$
+(parent origin → child origin) makes it an arrow from the parent's origin. Shift
+first and you would be turning the offset as well, which is a different point.
+
+A robot leg is this rule, once per link. The next slide chains two.
+
+---
+
+## Chaining two transforms, step by step {.smaller}
+
+Three frames: $a$ (say the pelvis), $b$ (the thigh), $c$ (the shin). We know
+$b$ in $a$ and $c$ in $b$. We want $c$ in $a$ directly.
+
+**Step 1 — from $c$ into $b$:** $\;{\color{#c0392b}{\mathbf{p}_b}} = {\color{#e8743b}{R_{bc}}}{\color{#c0392b}{\mathbf{p}_c}} + {\color{#2a9d5c}{\mathbf{t}_{bc}}}$
+
+**Step 2 — from $b$ into $a$:** $\;{\color{#c0392b}{\mathbf{p}_a}} = {\color{#e8743b}{R_{ab}}}{\color{#c0392b}{\mathbf{p}_b}} + {\color{#2a9d5c}{\mathbf{t}_{ab}}}$
+
+**Step 3 — substitute step 1 into step 2:**
+$\;{\color{#c0392b}{\mathbf{p}_a}} = {\color{#e8743b}{R_{ab}}}\big({\color{#e8743b}{R_{bc}}}{\color{#c0392b}{\mathbf{p}_c}} + {\color{#2a9d5c}{\mathbf{t}_{bc}}}\big) + {\color{#2a9d5c}{\mathbf{t}_{ab}}}$
+
+**Step 4 — multiply out, and group into "turn" and "shift":**
+
+$${\color{#c0392b}{\mathbf{p}_a}} = \underbrace{\big({\color{#e8743b}{R_{ab}R_{bc}}}\big)}_{{\color{#e8743b}{R_{ac}}}}{\color{#c0392b}{\mathbf{p}_c}} \;+\; \underbrace{\big({\color{#e8743b}{R_{ab}}}{\color{#2a9d5c}{\mathbf{t}_{bc}}} + {\color{#2a9d5c}{\mathbf{t}_{ab}}}\big)}_{{\color{#2a9d5c}{\mathbf{t}_{ac}}}}$$
+
+So one transform $a \leftarrow c$ has ${\color{#e8743b}{R_{ac} = R_{ab}R_{bc}}}$ and
+${\color{#2a9d5c}{\mathbf{t}_{ac}}} = {\color{#e8743b}{R_{ab}}}{\color{#2a9d5c}{\mathbf{t}_{bc}}} + {\color{#2a9d5c}{\mathbf{t}_{ab}}}$.
+
+That is the whole of forward kinematics; the rest of today is applying it six
+times. Note where ${\color{#e8743b}{R_{ab}}}$ sits in the translation: **the
+parent's rotation acts on the child's offset** — ${\color{#2a9d5c}{\mathbf{t}_{bc}}}$
+was measured along the thigh's axes and must be turned into the pelvis's before it
+can be added. Forget that and the leg swings from the wrong place.
+
+---
+
+## Chaining two transforms, drawn {.smaller}
+
+```{python}
+#| fig-align: center
+def R2d(deg):
+    t = np.radians(deg)
+    return np.array([[np.cos(t), -np.sin(t)], [np.sin(t), np.cos(t)]])
+
+R_ab, t_ab = R2d(30), np.array([1.0, 0.4])     # frame b, seen from a
+R_bc, t_bc = R2d(50), np.array([0.9, 0.0])     # frame c, seen from b
+p_c = np.array([0.5, 0.25])                    # a point bolted to c
+
+p_b = R_bc @ p_c + t_bc                        # step 1
+p_a = R_ab @ p_b + t_ab                        # step 2
+R_ac, t_ac = R_ab @ R_bc, R_ab @ t_bc + t_ab   # step 4: one combined transform
+print(f"two steps     : p_a = {np.round(p_a, 4)}")
+print(f"one transform : p_a = {np.round(R_ac @ p_c + t_ac, 4)}")
+print(f"t_ac = R_ab t_bc + t_ab = {np.round(R_ab @ t_bc, 4)} + {t_ab} = {np.round(t_ac, 4)}")
+
+fig, ax = plt.subplots(figsize=(7.4, 4.6))
+def triad(o, R, name):
+    for k, lab in ((0, "x"), (1, "y")):
+        ax.annotate("", xy=o + 0.32 * R[:, k], xytext=o,
+                    arrowprops=dict(arrowstyle="-|>", color="#e8743b", lw=1.8))
+        ax.text(*(o + 0.40 * R[:, k]), lab, color="#e8743b", fontsize=9, ha="center", va="center")
+    ax.text(*(o + np.array([-0.07, -0.13])), name, fontsize=12, weight="bold")
+
+triad(np.zeros(2), np.eye(2), "a")
+triad(t_ab, R_ab, "b")
+triad(t_ac, R_ac, "c")
+arrow = dict(arrowstyle="-|>", lw=2.2)
+ax.annotate("", xy=t_ab, xytext=(0, 0), arrowprops={**arrow, "color": "#2a9d5c"})
+ax.text(*(t_ab / 2 + [0.02, -0.14]), r"$\mathbf{t}_{ab}$", color="#2a9d5c", fontsize=12)
+ax.annotate("", xy=t_ac, xytext=t_ab, arrowprops={**arrow, "color": "#2a9d5c", "ls": "--"})
+ax.text(*((t_ab + t_ac) / 2 + [0.06, -0.10]), r"$R_{ab}\mathbf{t}_{bc}$", color="#2a9d5c", fontsize=12)
+ax.annotate("", xy=t_ac, xytext=(0, 0), arrowprops={**arrow, "color": "#2a9d5c", "alpha": 0.35})
+ax.text(*(t_ac * 0.55 + [-0.30, 0.10]), r"$\mathbf{t}_{ac}$", color="#2a9d5c", fontsize=12, alpha=0.7)
+ax.annotate("", xy=p_a, xytext=t_ac, arrowprops={**arrow, "color": "#c0392b"})
+ax.text(*((t_ac + p_a) / 2 + [-0.48, 0.02]), r"$R_{ac}\mathbf{p}_c$", color="#c0392b", fontsize=12)
+ax.plot(*p_a, "*", ms=16, color="#c0392b", zorder=5)
+ax.text(*(p_a + [0.06, 0.04]), r"$\mathbf{p}$", color="#c0392b", fontsize=13)
+ax.set_xlim(-0.35, 2.35); ax.set_ylim(-0.35, 2.05); ax.set_aspect("equal"); ax.grid(alpha=0.25)
+ax.set_title("walk the green arrows origin to origin, then the red one to the point", fontsize=10.5)
+fig.tight_layout(); plt.show()
+```
+
+The dashed green arrow is ${\color{#2a9d5c}{\mathbf{t}_{bc}}} = (0.9, 0)$ — straight
+along $b$'s own $x$ axis — drawn in $a$, where it is tilted $30°$ because $b$ is.
+That tilt is the ${\color{#e8743b}{R_{ab}}}$ in front of it.
+
+---
+
+## One matrix instead of two rules: homogeneous transforms {.smaller}
+
+Two rules (multiply the rotations; turn-and-add the translations) are easy to get
+wrong. Pack both into one $4\times4$ matrix and let matrix multiplication do the
+bookkeeping. Append a $1$ to the point:
+
+$${\color{#8e44ad}{T_{ab}}} = \begin{bmatrix} {\color{#e8743b}{R_{ab}}} & {\color{#2a9d5c}{\mathbf{t}_{ab}}}\\ \mathbf{0}^{\top} & 1\end{bmatrix},
+\qquad
+\tilde{\mathbf{p}} = \begin{bmatrix}{\color{#c0392b}{\mathbf{p}}}\\ 1\end{bmatrix}$$
+
+**Step 1 — it applies the rule.** Multiply block by block:
+${\color{#8e44ad}{T_{ab}}}\tilde{\mathbf{p}}_b = \begin{bmatrix}{\color{#e8743b}{R_{ab}}}{\color{#c0392b}{\mathbf{p}_b}} + {\color{#2a9d5c}{\mathbf{t}_{ab}}}\cdot 1\\ 0 + 1\end{bmatrix}$.
+The appended $1$ is what picks up the translation; the bottom row keeps it a $1$.
+
+**Step 2 — it chains by plain multiplication.**
+${\color{#8e44ad}{T_{ab}T_{bc}}} = \begin{bmatrix}{\color{#e8743b}{R_{ab}R_{bc}}} & {\color{#e8743b}{R_{ab}}}{\color{#2a9d5c}{\mathbf{t}_{bc}}} + {\color{#2a9d5c}{\mathbf{t}_{ab}}}\\ \mathbf{0}^{\top} & 1\end{bmatrix}$ —
+exactly step 4 of the chaining slide, now automatic. A leg is
+${\color{#8e44ad}{T_{\text{pelvis}\leftarrow\text{foot}} = T_1T_2\cdots T_6}}$.
+
+A **direction** (an axis, a velocity) gets a $0$ appended instead of a $1$: it
+then turns with ${\color{#e8743b}{R}}$ but ignores ${\color{#2a9d5c}{\mathbf{t}}}$ —
+an arrow has no position to shift.
+
+---
+
+## Undoing a transform, checked on the robot {.smaller}
+
+**Step 3 — it undoes cleanly.** Solve ${\color{#c0392b}{\mathbf{p}_a}} = {\color{#e8743b}{R}}{\color{#c0392b}{\mathbf{p}_b}} + {\color{#2a9d5c}{\mathbf{t}}}$
+for ${\color{#c0392b}{\mathbf{p}_b}}$: subtract ${\color{#2a9d5c}{\mathbf{t}}}$, then
+multiply by ${\color{#e8743b}{R}}^{-1} = {\color{#e8743b}{R}}^{\top}$ (a rotation's
+inverse is its transpose, because its columns are perpendicular unit vectors):
+
+$${\color{#c0392b}{\mathbf{p}_b}} = {\color{#e8743b}{R}}^{\top}\big({\color{#c0392b}{\mathbf{p}_a}} - {\color{#2a9d5c}{\mathbf{t}}}\big)
+\qquad\Longrightarrow\qquad
+{\color{#8e44ad}{T}}^{-1} = \begin{bmatrix}{\color{#e8743b}{R}}^{\top} & -{\color{#e8743b}{R}}^{\top}{\color{#2a9d5c}{\mathbf{t}}}\\ \mathbf{0}^{\top} & 1\end{bmatrix}$$
+
+That is the `pelvis_rot.T @ (foot_world - pelvis_pos)` of the three-frames slide.
+The pelvis's pose is `qpos[:3]` (its ${\color{#2a9d5c}{\mathbf{t}}}$) and
+`qpos[3:7]` (a quaternion for its ${\color{#e8743b}{R}}$):
+
+```{python}
+def make_T(R, t):
+    """4x4 homogeneous transform from a 3x3 rotation and a 3-vector translation."""
+    T = np.eye(4)
+    T[:3, :3], T[:3, 3] = R, t
+    return T
+
+def inv_T(T):
+    """The closed-form inverse from step 3: [R^T, -R^T t; 0, 1]."""
+    R, t = T[:3, :3], T[:3, 3]
+    return make_T(R.T, -R.T @ t)
+
+T_wp = make_T(pelvis_rot, pelvis_pos)             # pelvis, seen from the world
+foot_h = np.r_[foot_world, 1.0]                    # append the 1
+
+print("T_world<-pelvis =", np.round(T_wp, 4).tolist())
+print("foot in the pelvis frame, via inv_T :", np.round((inv_T(T_wp) @ foot_h)[:3], 4))
+print("the same, as the three-frames slide  :", np.round(pelvis_rot.T @ (foot_world - pelvis_pos), 4))
+print(f"inv_T(T) @ T == identity, to          {np.abs(inv_T(T_wp) @ T_wp - np.eye(4)).max():.1e}")
+print(f"closed form vs np.linalg.inv          {np.abs(inv_T(T_wp) - np.linalg.inv(T_wp)).max():.1e}")
+```
+
+At `stand` the pelvis is upright, so its ${\color{#e8743b}{R}}$ is the identity and
+${\color{#2a9d5c}{\mathbf{t}}}$ is its height, $0.79$ m — the last entry of the
+third row. The closed-form inverse needs one transpose and no general matrix
+inversion, and agrees with NumPy's.
+
+---
+
+## Order in a chain, drawn: parent first {.smaller}
+
+${\color{#8e44ad}{T_{ab}T_{bc}}}$ and ${\color{#8e44ad}{T_{bc}T_{ab}}}$ are
+different robots. A planar leg built twice — hip $-0.35$, knee $+0.70$ rad, links
+0.34 and 0.30 m (rounded, for the sketch); each joint is "turn by
+${\color{#3b7dd8}{\theta}}$, then step $L$ down the link":
+
+```{python}
+#| fig-align: center
+def T_link(theta, L):
+    """Planar (x, z) link, pivot convention of the pendulum slide: turn, then step -L."""
+    c, s = np.cos(theta), np.sin(theta)
+    turn = np.array([[c, s, 0], [-s, c, 0], [0, 0, 1]])   # R_y restricted to (x, z)
+    step = np.array([[1, 0, 0], [0, 1, -L], [0, 0, 1]])
+    return turn @ step
+
+T_hip, T_knee = T_link(-0.35, 0.34), T_link(0.70, 0.30)
+origin = np.array([0.0, 0.0, 1.0])
+chains = {"T_hip @ T_knee  (parent first)": [np.eye(3), T_hip, T_hip @ T_knee],
+          "T_knee @ T_hip  (reversed)":     [np.eye(3), T_knee, T_knee @ T_hip]}
+
+fig, axs = plt.subplots(1, 2, figsize=(8.4, 3.5), sharey=True)
+for ax, (title, Ts) in zip(axs, chains.items()):
+    pts = np.array([T @ origin for T in Ts])[:, :2]
+    ax.plot(pts[:2, 0], pts[:2, 1], lw=5, color="#3b7dd8", solid_capstyle="round")
+    ax.plot(pts[1:, 0], pts[1:, 1], lw=5, color="#e8743b", solid_capstyle="round")
+    for T in Ts:                                       # each frame's own "down the link"
+        o, d = (T @ origin)[:2], (T @ [0, -0.08, 0])[:2]
+        ax.annotate("", xy=o + d, xytext=o,
+                    arrowprops=dict(arrowstyle="-|>", color="#8e44ad", lw=1.4))
+    ax.plot(*pts[-1], "*", ms=16, color="#c0392b", zorder=5)
+    ax.annotate(f"end ({pts[-1, 0]:+.3f}, {pts[-1, 1]:+.3f})", pts[-1],
+                textcoords="offset points", xytext=(10, -4), fontsize=9, color="#c0392b")
+    ax.plot(0, 0, "s", ms=9, color="#444")
+    ax.set_title(title, fontsize=10); ax.set_aspect("equal"); ax.grid(alpha=0.25)
+    ax.set_xlim(-0.42, 0.42); ax.set_ylim(-0.70, 0.08); ax.set_xlabel("x forward (m)")
+axs[0].set_ylabel("z up (m)")
+fig.suptitle("same two matrices, opposite order — blue is the first factor's link", fontsize=10.5)
+fig.tight_layout(); plt.show()
+```
+
+Read a product **left to right, root to tip**: each factor acts in the frame its
+left-hand neighbours produced. Left: the knee turns about a knee the hip already
+carried. Right: the "hip" link hangs off a shin — another machine; the foot ends
+32 cm further back and 5 cm higher. So `my_fk` writes `rot = rot @ Rj`: the joint
+goes on the **right**, turning about the link's own, already-moved axis.
 
 ---
 
@@ -692,7 +1005,103 @@ vector, so every other form has to reach it.
 
 ---
 
-## Axis-angle $\to R$: Rodrigues' formula {.smaller}
+## Axis-angle $\to R$: Rodrigues, derived {.smaller}
+
+Turn a vector $\mathbf{v}$ by ${\color{#3b7dd8}{\theta}}$ about a **unit** axis
+$\mathbf{u}$. Five steps, each one a picture on the next slide:
+
+**Step 1 — split $\mathbf{v}$ into "along the axis" and "across it".**
+$\;\mathbf{v}_{\parallel} = (\mathbf{u}\cdot\mathbf{v})\,\mathbf{u}, \qquad \mathbf{v}_{\perp} = \mathbf{v} - \mathbf{v}_{\parallel}$
+
+**Step 2 — the part along the axis does not move.** A spit-roast turns the
+chicken, not the spit: $\mathbf{v}_{\parallel}' = \mathbf{v}_{\parallel}$.
+
+**Step 3 — the part across the axis turns in a flat plane.** That plane has two
+perpendicular arrows of the same length: $\mathbf{v}_{\perp}$ and
+$\mathbf{w} = \mathbf{u}\times\mathbf{v}$ (a quarter-turn of $\mathbf{v}_{\perp}$
+about $\mathbf{u}$). A 2-D turn by ${\color{#3b7dd8}{\theta}}$ in that plane is
+$\;\mathbf{v}_{\perp}' = \cos{\color{#3b7dd8}{\theta}}\;\mathbf{v}_{\perp} + \sin{\color{#3b7dd8}{\theta}}\;\mathbf{w}$ —
+the same $\cos$/$\sin$ mix as $R_z$, with $\mathbf{v}_{\perp}$ playing $x$ and $\mathbf{w}$ playing $y$.
+
+**Step 4 — add the pieces back:**
+$\;\mathbf{v}' = \mathbf{v}_{\parallel} + \cos{\color{#3b7dd8}{\theta}}\,(\mathbf{v} - \mathbf{v}_{\parallel}) + \sin{\color{#3b7dd8}{\theta}}\;\mathbf{u}\times\mathbf{v}
+= \cos{\color{#3b7dd8}{\theta}}\,\mathbf{v} + (1-\cos{\color{#3b7dd8}{\theta}})(\mathbf{u}\cdot\mathbf{v})\,\mathbf{u} + \sin{\color{#3b7dd8}{\theta}}\;\mathbf{u}\times\mathbf{v}$
+
+**Step 5 — write each term as a matrix times $\mathbf{v}$.** $(\mathbf{u}\cdot\mathbf{v})\,\mathbf{u} = \mathbf{u}\mathbf{u}^{\top}\mathbf{v}$,
+and $\mathbf{u}\times\mathbf{v} = [\mathbf{u}]_{\times}\mathbf{v}$ with the
+cross-product matrix below. Pull out the $\mathbf{v}$:
+
+$${\color{#e8743b}{R}} = I\cos{\color{#3b7dd8}{\theta}} \;+\; (1-\cos{\color{#3b7dd8}{\theta}})\,\mathbf{u}\mathbf{u}^{\top} \;+\; [\mathbf{u}]_{\times}\sin{\color{#3b7dd8}{\theta}},
+\qquad
+[\mathbf{u}]_{\times} = \begin{bmatrix} 0 & -u_z & u_y \\ u_z & 0 & -u_x \\ -u_y & u_x & 0\end{bmatrix}$$
+
+(Multiply $[\mathbf{u}]_{\times}$ by $\mathbf{v}$ by hand once: the rows come out
+as $u_y v_z - u_z v_y$, and so on — the cross product.)
+
+---
+
+## Rodrigues, drawn: the $120°$ turn of $x$ {.smaller}
+
+The example from two slides ago, $\mathbf{u} = (1,1,1)/\sqrt3$,
+${\color{#3b7dd8}{\theta}} = 120°$, applied to $\mathbf{v} = \mathbf{e}_x$:
+
+```{python}
+#| fig-align: center
+v = np.array([1.0, 0.0, 0.0])
+u = diag
+v_par = (u @ v) * u                       # step 1
+v_perp = v - v_par
+w = np.cross(u, v)                        # step 3's second arrow
+th120 = np.radians(120)
+v_new = v_par + np.cos(th120) * v_perp + np.sin(th120) * w     # step 4
+
+print("   ".join(f"{name} {tidy(vec)} (|{np.linalg.norm(vec):.3f}|)" for name, vec in
+                  (("v_par", v_par), ("v_perp", v_perp), ("u x v", w))))
+print(f"v' = {tidy(v_new)}    vs R120 @ x: {np.abs(v_new - R120 @ v).max():.1e}")
+
+e1, e2 = v_perp / np.linalg.norm(v_perp), w / np.linalg.norm(w)   # the turning plane
+fig, axs = plt.subplots(1, 2, figsize=(9.0, 3.6))
+ax = axs[0]                                # side view: the plane holding u and v
+for vec, lab, c, off in ((u, r"$\mathbf{u}$ (axis)", "#444", (0.03, 0.05)),
+                         (v_par, r"$\mathbf{v}_\parallel$", "#2a9d5c", (-0.26, 0.10)),
+                         (v, r"$\mathbf{v}=\mathbf{e}_x$", "#c0392b", (0.03, -0.12))):
+    xy = np.array([vec @ e1, vec @ u])
+    ax.annotate("", xy=xy, xytext=(0, 0), arrowprops=dict(arrowstyle="-|>", color=c, lw=2.2))
+    ax.text(*(xy + off), lab, color=c, fontsize=11)
+base = np.array([0, v_par @ u])
+ax.annotate("", xy=[v @ e1, v @ u], xytext=base,
+            arrowprops=dict(arrowstyle="-|>", color="#e8743b", lw=2.2, ls="--"))
+ax.text(0.22, base[1] + 0.05, r"$\mathbf{v}_\perp$", color="#e8743b", fontsize=11)
+ax.set_xlim(-0.4, 1.1); ax.set_ylim(-0.25, 1.2); ax.set_aspect("equal"); ax.grid(alpha=0.25)
+ax.set_xlabel(r"across the axis (along $\mathbf{v}_\perp$)"); ax.set_ylabel(r"along the axis $\mathbf{u}$")
+ax.set_title("steps 1-2: split v; the axis part stays", fontsize=10)
+
+ax = axs[1]                                # looking straight down the axis
+r = np.linalg.norm(v_perp)
+circ = np.linspace(0, 2 * np.pi, 200)
+ax.plot(r * np.cos(circ), r * np.sin(circ), color="#ddd", lw=1.2)
+for vec, lab, c in ((v_perp, r"$\mathbf{v}_\perp$", "#e8743b"), (w, r"$\mathbf{u}\times\mathbf{v}$", "#8e44ad"),
+                    (v_new - v_par, r"$\mathbf{v}'_\perp$", "#c0392b")):
+    xy = np.array([vec @ e1, vec @ e2])
+    ax.annotate("", xy=xy, xytext=(0, 0), arrowprops=dict(arrowstyle="-|>", color=c, lw=2.2))
+    ax.text(*(xy * 1.22), lab, color=c, fontsize=11, ha="center", va="center")
+arc = np.linspace(0, th120, 40)
+ax.plot(0.3 * r * np.cos(arc), 0.3 * r * np.sin(arc), color="#3b7dd8", lw=1.6)
+ax.text(0.30 * r, 0.30 * r, r"$\theta=120°$", color="#3b7dd8", fontsize=10)
+ax.plot(0, 0, "o", color="#444", ms=6)
+ax.set_xlim(-1.05, 1.05); ax.set_ylim(-0.75, 1.1); ax.set_aspect("equal"); ax.grid(alpha=0.25)
+ax.set_title("step 3: looking down u, the across-part turns 120°", fontsize=10)
+fig.tight_layout(); plt.show()
+```
+
+$\mathbf{v}_\parallel = \tfrac13(1,1,1)$; $\mathbf{v}_\perp$ and
+$\mathbf{u}\times\mathbf{v}$ are the turning plane's two perpendicular arrows, both
+of length $0.816$. Turned across-part plus untouched along-part lands exactly on
+$\mathbf{e}_y$.
+
+---
+
+## Axis-angle $\to R$: Rodrigues' formula, in code {.smaller}
 
 For a **unit** axis $\mathbf{u}$ and angle $\theta$:
 
@@ -700,8 +1109,10 @@ $$R = I\cos\theta \;+\; (1-\cos\theta)\,\mathbf{u}\mathbf{u}^{\top} \;+\; [\math
 \qquad
 [\mathbf{u}]_{\times} = \begin{bmatrix} 0 & -u_z & u_y \\ u_z & 0 & -u_x \\ -u_y & u_x & 0\end{bmatrix}$$
 
-Three pieces: what survives the turn, what is flattened onto the axis, and what
-gets swung sideways. Written out and checked against MuJoCo:
+Three pieces, one per step of the derivation: $I\cos\theta$ and
+$-\cos\theta\,\mathbf{u}\mathbf{u}^{\top}$ shrink the across-part, $\mathbf{u}\mathbf{u}^{\top}$
+keeps the along-part, and $[\mathbf{u}]_{\times}\sin\theta$ swings the across-part
+sideways. Written out and checked against MuJoCo:
 
 ```{python}
 def rodrigues(u, theta):
@@ -975,7 +1386,9 @@ def my_fk(model, qpos, side="left"):
 ```
 
 Twelve lines, and every one of them is $\mathbf{p} \mapsto R\mathbf{p} +
-\mathbf{t}$ from four slides ago. **`rot` always means "how the current link is
+\mathbf{t}$ from the transform slide: `pos = pos + rot @ offset` is
+${\color{#2a9d5c}{\mathbf{t}_{ac}}} = {\color{#e8743b}{R_{ab}}}{\color{#2a9d5c}{\mathbf{t}_{bc}}} + {\color{#2a9d5c}{\mathbf{t}_{ab}}}$,
+and `rot = rot @ ...` is ${\color{#e8743b}{R_{ac}}} = {\color{#e8743b}{R_{ab}R_{bc}}}$. **`rot` always means "how the current link is
 turned, in world coordinates"** — which is why every offset is multiplied by it
 before being added.
 
@@ -1005,7 +1418,78 @@ computation.
 
 If your own version disagrees, it is almost always **composition order** or a
 **scalar-last quaternion**. The third candidate — the joint anchor — cannot bite
-you on this robot, and the next slide explains why that is worth knowing.
+you on this robot, and a slide below explains why that is worth knowing.
+
+---
+
+## The same chain, as one product of $4\times4$ matrices {.smaller}
+
+Each body contributes two factors: its **fixed mount** (offset and built-in tilt,
+from the MJCF) and its **joint** (a pure turn by ${\color{#3b7dd8}{q_j}}$ about the
+axis). The leg is their product, left to right, pelvis to foot, ending with the
+foot site's own offset $\mathbf{s}$ inside the last body:
+
+$${\color{#8e44ad}{T_{\text{world}\leftarrow\text{foot}}}} = {\color{#8e44ad}{T_{\text{pelvis}}}}\;\prod_{k=1}^{6}\Big[\underbrace{{\color{#8e44ad}{T}}\big({\color{#e8743b}{R_{\text{mount},k}}},\,{\color{#2a9d5c}{\mathbf{t}_{\text{mount},k}}}\big)}_{\text{the mount, from the MJCF}}\;\underbrace{{\color{#8e44ad}{T}}\big({\color{#e8743b}{R_{\text{axis}_k}({\color{#3b7dd8}{q_k}})}},\,\mathbf{0}\big)}_{\text{the joint}}\Big]\;{\color{#8e44ad}{T}}\big(I,\,\mathbf{s}\big)$$
+
+```{python}
+# mount = body_quat + body_pos;  s = site_pos, the foot site's offset in its body
+T_run = make_T(quat2mat(data.qpos[3:7]), data.qpos[:3])       # the pelvis
+frames_T = [("pelvis", T_run.copy())]
+for bid in kin.leg_chain(model, "left"):
+    T_run = T_run @ make_T(quat2mat(model.body_quat[bid]), model.body_pos[bid])   # mount
+    jnt = model.body_jntadr[bid]
+    T_run = T_run @ make_T(axis_angle(model.jnt_axis[jnt],
+                                      data.qpos[model.jnt_qposadr[jnt]]), np.zeros(3))  # joint
+    name = mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_BODY, bid)
+    frames_T.append((name, T_run.copy()))
+    print(f"  {name:24s} position error {np.abs(T_run[:3, 3] - data.xpos[bid]).max():.1e}"
+          f"   rotation error {np.abs(T_run[:3, :3] - data.xmat[bid].reshape(3, 3)).max():.1e}")
+
+foot_T = T_run @ np.r_[model.site_pos[kin.foot_site_id(model, 'left')], 1.0]
+print(f"\n  foot site                position error "
+      f"{np.abs(foot_T[:3] - data.site_xpos[kin.foot_site_id(model, 'left')]).max():.1e}")
+```
+
+Every intermediate frame matches MuJoCo's own `xpos` and `xmat` — not just the
+foot. That is the advantage of the matrix form: the product *up to body $k$* is
+body $k$'s pose, so you get all six frames for free on the way down.
+
+---
+
+## Six frames down the leg, drawn {.smaller}
+
+```{python}
+#| fig-align: center
+fig, ax = plt.subplots(figsize=(7.0, 4.6))
+chain_xyz = np.array([T[:3, 3] for _, T in frames_T] + [foot_T[:3]])
+ax.plot(chain_xyz[:, 0], chain_xyz[:, 2], color="#bbb", lw=3, zorder=1)
+label_at = {"pelvis": (14, 0), "hip_pitch": (-72, 2), "hip_roll": (14, -10),
+            "hip_yaw": (14, -4), "knee": (14, -4), "ankle_pitch": (-86, 6),
+            "ankle_roll": (16, -14)}
+for name, T in frames_T:
+    o = T[:3, 3]
+    for col, style in ((0, "-"), (2, "--")):              # the frame's own x and z axes
+        tip = o + 0.05 * T[:3, col]
+        ax.annotate("", xy=(tip[0], tip[2]), xytext=(o[0], o[2]),
+                    arrowprops=dict(arrowstyle="-|>", color="#e8743b", lw=1.6, ls=style))
+    ax.plot(o[0], o[2], "o", ms=7, color="#2a9d5c", zorder=3)
+    short = name.replace("left_", "").replace("_link", "")
+    ax.annotate(short if short != "ankle_roll" else "ankle_roll = foot site", (o[0], o[2]),
+                textcoords="offset points", xytext=label_at[short], fontsize=8.5,
+                color="#c0392b" if short == "ankle_roll" else "k")
+ax.plot(foot_T[0], foot_T[2], "*", ms=15, color="#c0392b", zorder=4)
+ax.set_aspect("equal"); ax.grid(alpha=0.25)
+ax.set_xlim(-0.40, 0.40); ax.set_ylim(-0.02, 0.86)
+ax.set_xlabel("x forward (m)"); ax.set_ylabel("z up (m)")
+ax.set_title("each frame: green dot = its t,  orange arrows = its R's x (solid) and z (dashed)",
+             fontsize=9.5)
+fig.tight_layout(); plt.show()
+```
+
+Each dashed $z$ arrow is the previous frame's, turned by one more factor. Two
+mounts are tilted in the MJCF itself: `body_quat` turns the hip-roll link $-10°$
+about $y$ and the knee link $+10°$. Roll and yaw are on in this pose too, but
+they mostly turn frames out of the page, where a side view cannot show them.
 
 ---
 
@@ -1239,6 +1723,50 @@ of $x_i$ per radian of $q_j$. **The whole matrix is six of our nudges, divided.*
 
 ---
 
+## A derivative is a slope — drawn {.smaller}
+
+Hold five joints at the crouch and sweep **one**, `hip_pitch`, through a whole
+radian. The foot's height ${\color{#c0392b}{z}}$ traces a curve against
+${\color{#3b7dd8}{q_1}}$. One entry of $J$, $J_{z,\,\text{hip pitch}}$ (row 3,
+column 1), is the **slope of that curve** at the crouch:
+
+```{python}
+#| fig-align: center
+q0 = crouch[0]
+sweep = np.linspace(q0 - 0.6, q0 + 0.6, 81)
+fz_sweep = np.array([foot_at([s] + list(crouch[1:]))[2] for s in sweep])
+z0 = foot_at(crouch)[2]
+slope = J_exact[2, 0]                                  # m per rad, from mj_jacSite
+
+fig, ax = plt.subplots(figsize=(7.6, 3.3))
+ax.plot(sweep, fz_sweep, color="#c0392b", lw=2.4, label="foot z as hip_pitch sweeps")
+ax.plot(sweep, z0 + slope * (sweep - q0), color="#444", lw=1.4,
+        label=f"tangent: slope J = {slope:+.4f} m/rad")
+for eps, c in ((0.5, "#8e44ad"), (0.2, "#2a9d5c")):
+    z1 = foot_at([q0 + eps] + list(crouch[1:]))[2]
+    sec = (z1 - z0) / eps
+    span = np.array([q0 - 0.25, q0 + eps + 0.1])
+    ax.plot(span, z0 + sec * (span - q0), ls="--", color=c, lw=1.4,
+            label=f"secant, eps = {eps}: slope {sec:+.4f}")
+    ax.plot(q0 + eps, z1, "o", color=c, ms=6)
+ax.plot(q0, z0, "o", color="k", ms=7, zorder=5)
+ax.annotate("the crouch", (q0, z0), textcoords="offset points", xytext=(-30, -18), fontsize=9)
+ax.set_xlabel("hip_pitch angle $q_1$ (rad)"); ax.set_ylabel("foot site z (m)")
+ax.grid(alpha=0.3); ax.legend(fontsize=8.5, loc="upper center")
+ax.set_title("the nudge-and-divide of the last slide, as geometry", fontsize=10.5)
+fig.tight_layout(); plt.show()
+```
+
+A **secant** joins two points on the curve; its slope is (change in
+${\color{#c0392b}{z}}$) ÷ (change in ${\color{#3b7dd8}{q}}$) — our nudge divided.
+As the nudge ${\varepsilon}$ shrinks, the secant swings onto the **tangent**, and
+the tangent's slope is the derivative. It is almost flat here — the foot hangs
+nearly below the hip, so the hip swings it fore and aft, not up. Swing further and
+the foot rises: the curve bends, so $J$ holds only *near* its pose, and next
+week's IK recomputes it after every step.
+
+---
+
 ## How small should the nudge be? {.smaller}
 
 Instinct says "as small as possible". Instinct is wrong, and this is worth seeing
@@ -1247,9 +1775,21 @@ once:
 $$\text{error} \;\approx\; \underbrace{C\,\varepsilon}_{\text{truncation}} \;+\; \underbrace{u/\varepsilon}_{\text{round-off}}
 \qquad\Longrightarrow\qquad \varepsilon_{\text{best}} \approx \sqrt{u} \approx 1.5\times10^{-8}$$
 
-$u \approx 2.2\times10^{-16}$ is double precision. Too big and the straight line
-misses the curve; too small and $f(\mathbf{q}+\varepsilon) - f(\mathbf{q})$ is two
-nearly-equal numbers subtracted, so the digits that mattered cancel away.
+- **Truncation, $C\varepsilon$.** Taylor: $f(q+\varepsilon) = f(q) + \varepsilon f'(q) + \tfrac12\varepsilon^2 f''(q) + \dots$
+  Subtract $f(q)$, divide by $\varepsilon$: the secant slope is $f'(q) + \tfrac12\varepsilon f''(q)$.
+  The error is proportional to $\varepsilon$, with $C = \tfrac12|f''|$ — how much the curve bends.
+- **Round-off, $u/\varepsilon$.** Each stored $f$ is wrong by about $u|f|$, where
+  $u \approx 2.2\times10^{-16}$ is double precision. The difference of two nearly
+  equal numbers keeps that absolute error, and dividing by $\varepsilon$ magnifies it.
+- **The best $\varepsilon$.** Set the derivative of $C\varepsilon + u/\varepsilon$ to zero:
+  $C - u/\varepsilon^2 = 0$, so $\varepsilon = \sqrt{u/C}$ — and with $C$ and $|f|$
+  of order one (metres, radians), $\sqrt{u}$.
+
+---
+
+## How small should the nudge be? Measured {.smaller}
+
+The same finite-difference Jacobian, for eight nudges, against `mj_jacSite`:
 
 ```{python}
 print(f"{'eps':>10}   {'max error vs analytic':>22}")
@@ -1316,6 +1856,99 @@ the foot to go, **which combination of these six arrows produces it?**
 
 ---
 
+## Where a column comes from: axis × lever arm {.smaller}
+
+`mj_jacSite` needs no nudge at all. It uses one fact about turning, in four steps:
+
+**Step 1 — a hinge turns everything below it about one line.** Joint $j$'s line
+passes through its anchor $\mathbf{o}_j$ (MuJoCo: `data.xanchor[j]`) with unit
+direction $\mathbf{a}_j$ (`data.xaxis[j]`), both in world coordinates.
+
+**Step 2 — a point turning about a line moves perpendicular to it.** Spin at
+angular velocity $\boldsymbol{\omega}$ and a point at lever arm $\mathbf{r}$ from
+the line moves at $\dot{\mathbf{p}} = \boldsymbol{\omega}\times\mathbf{r}$: speed
+$|\boldsymbol{\omega}|$ times its distance from the line, direction perpendicular
+to both. (A door handle moves faster than a point by the hinge.)
+
+**Step 3 — substitute.** $\boldsymbol{\omega} = \mathbf{a}_j\,{\color{#3b7dd8}{\dot q_j}}$
+and $\mathbf{r} = {\color{#c0392b}{\mathbf{p}}} - \mathbf{o}_j$:
+$\;{\color{#c0392b}{\dot{\mathbf{p}}}} = \big(\mathbf{a}_j \times ({\color{#c0392b}{\mathbf{p}}} - \mathbf{o}_j)\big)\,{\color{#3b7dd8}{\dot q_j}}$
+
+**Step 4 — that bracket is column $j$.** Comparing with
+${\color{#c0392b}{\dot{\mathbf{x}}}} = J{\color{#3b7dd8}{\dot{\mathbf{q}}}}$:
+
+$$J_{\text{pos},\,j} = \mathbf{a}_j \times ({\color{#c0392b}{\mathbf{p}}} - \mathbf{o}_j),
+\qquad J_{\text{rot},\,j} = \mathbf{a}_j$$
+
+```{python}
+p_foot = d.site_xpos[kin.foot_site_id(model, "left")]
+print(f"{'joint':14s} {'lever |p-o| (m)':>16s} {'|column| (m/rad)':>17s} {'vs mj_jacSite':>14s}")
+for k, bid in enumerate(kin.leg_chain(model, "left")):
+    j = model.body_jntadr[bid]
+    lever = p_foot - d.xanchor[j]
+    col = np.cross(d.xaxis[j], lever)
+    print(f"{names[k]:14s} {np.linalg.norm(lever):16.4f} {np.linalg.norm(col):17.4f}"
+          f" {np.abs(col - J_exact[:, k]).max():14.1e}")
+print(f"rotation rows equal the axes: {np.abs(jac_r[:, dofs] - d.xaxis[[model.body_jntadr[b] for b in kin.leg_chain(model, 'left')]].T).max():.1e}")
+```
+
+---
+
+## Reading the lever-arm table {.smaller}
+
+**Every column matches `mj_jacSite` to the last bit** — the cross product *is*
+what MuJoCo computes, with no $\varepsilon$ anywhere.
+
+**A column's length is the part of the lever *across* the axis.** A cross product
+has length $|\mathbf{a}_j|\,|\mathbf{r}|\sin\phi$, with $\phi$ the angle between
+axis and lever and $|\mathbf{a}_j| = 1$. So it measures the foot's distance from
+the axis *line*, not from the anchor point:
+
+- **knee, ankle pitch** — the lever is already across the axis ($\phi = 90°$), so
+  column and lever agree: 0.3166 and 0.0176.
+- **hip pitch** — the lever is 0.6181 m but includes about 5 cm sideways, *along*
+  the $y$ axis, which a turn about $y$ cannot use: 0.6157 remains.
+- **hip roll, hip yaw** — in the crouch their axes are tilted 30° (roll's $x$
+  axis leans up, yaw's $z$ axis leans back), so much of the lever lies along the
+  axis and is wasted: 0.587 → 0.509, and 0.499 → 0.317.
+- **ankle roll** — the lever is zero: the site is on the axis.
+
+Hip 0.62, knee 0.32, ankle 0.018: the bar chart's ranking, now explained.
+
+---
+
+## Axis × lever arm, drawn {.smaller}
+
+```{python}
+#| fig-align: center
+fig, ax = plt.subplots(figsize=(6.6, 5.0))
+leg_pts = np.array([d.xanchor[model.body_jntadr[b]] for b in kin.leg_chain(model, "left")] + [p_foot])
+ax.plot(leg_pts[:, 0], leg_pts[:, 2], color="#bbb", lw=5, solid_capstyle="round", zorder=1)
+for k, c in ((0, "#3b7dd8"), (3, "#c0392b"), (4, "#8e44ad")):     # hip, knee, ankle pitch
+    bid = kin.leg_chain(model, "left")[k]
+    o = d.xanchor[model.body_jntadr[bid]]
+    ax.plot([o[0], p_foot[0]], [o[2], p_foot[2]], ls=":", color=c, lw=1.5)   # the lever arm
+    ax.plot(o[0], o[2], "o", color=c, ms=9, mec="k", zorder=3)
+    col = J_exact[:, k] * 0.25                                   # drawn at 0.25 rad/s
+    ax.annotate("", xy=(p_foot[0] + col[0], p_foot[2] + col[2]), xytext=(p_foot[0], p_foot[2]),
+                arrowprops=dict(arrowstyle="-|>", color=c, lw=2.2))
+    ax.annotate(f"{names[k]}\nlever {np.linalg.norm(p_foot - o):.3f} m", (o[0], o[2]),
+                textcoords="offset points", xytext=(12, -6), fontsize=8.5, color=c)
+ax.plot(p_foot[0], p_foot[2], "*", ms=15, color="k", zorder=4)
+ax.set_aspect("equal"); ax.grid(alpha=0.3)
+ax.set_xlim(-0.25, 0.32); ax.set_ylim(-0.02, 0.74)
+ax.set_xlabel("x forward (m)"); ax.set_ylabel("z up (m)")
+ax.set_title("dotted = lever arm p - o;  arrow = foot velocity at 0.25 rad/s", fontsize=10)
+fig.tight_layout(); plt.show()
+```
+
+The $y$ axis points into the page, so each pitch joint turns the foot
+**perpendicular to its dotted lever**, at a speed proportional to the lever's
+length. The hip's arrow is long because the hip is far away; the ankle's is a stub
+because the ankle is right above the foot site.
+
+---
+
 ## The other three rows, and what $J$ is for {.smaller}
 
 A foot pose is six numbers, not three, so the full Jacobian stacks **three more
@@ -1330,6 +1963,13 @@ sv = np.linalg.svd(J, compute_uv=False)
 print(f"  full leg Jacobian  : {J.shape}   (3 position + 3 orientation) x 6 joints")
 print(f"  singular values    : {np.round(sv, 4)}")
 print(f"  largest / smallest : {sv[0]:.4f} / {sv[-1]:.5f}  =  condition number {sv[0]/sv[-1]:.1f}")
+
+d_stand = soc4180.keyframe_data(model, "stand")          # all six leg angles zero
+mujoco.mj_forward(model, d_stand)                        # the Jacobian reads x-quantities
+jp_s, jr_s = np.zeros((3, model.nv)), np.zeros((3, model.nv))
+mujoco.mj_jacSite(model, d_stand, jp_s, jr_s, kin.foot_site_id(model, "left"))
+sv_stand = np.linalg.svd(np.vstack([jp_s, jr_s])[:, dofs], compute_uv=False)
+print(f"\n  at stand, smallest : {sv_stand[-1]:.2e}   ({sv[-1] / sv_stand[-1]:,.0f} x smaller than crouched)")
 ```
 
 A **square** Jacobian: six joints for six freedoms, which is why the foot can be
@@ -1339,8 +1979,10 @@ to move, the smallest the hardest.
 
 **When the smallest approaches zero, one direction has stopped responding.** That
 is a *singularity*, and next week it is the whole story: at the `stand` keyframe
-this number collapses to $9\times10^{-6}$, and inverting $J$ there is division by
-almost nothing.
+— every leg joint exactly zero, a perfectly straight leg — this number collapses to
+$9\times10^{-7}$, about 99,000 times smaller than crouched, and inverting $J$
+there is division by almost nothing. (That is exercise 8's answer; try it before
+reading the last line of the output.)
 
 ---
 

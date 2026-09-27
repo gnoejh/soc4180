@@ -41,6 +41,26 @@ Why they fail is the lecture.
 
 ---
 
+## Colour code for the week {.smaller}
+
+The same colours mean the same things in every equation and every drawing:
+
+| symbol | meaning | colour |
+| --- | --- | --- |
+| ${\color{#2a9d5c}{a^*,\ \pi^*}}$ | the **expert**: its action, and the rule that chose it | <span style="color:#2a9d5c">green</span> |
+| ${\color{#3b7dd8}{\pi_\theta,\ \theta}}$ | the **student** network and its weights | <span style="color:#3b7dd8">blue</span> |
+| ${\color{#e8743b}{o}}$ | what the **student is shown** — its observation | <span style="color:#e8743b">orange</span> |
+| $s$ | the robot's full **state** (everything the simulator knows) | black |
+| ${\color{#c0392b}{\varepsilon}}$ | an **error**: how often, or how much, the student is wrong | <span style="color:#c0392b">red</span> |
+
+Two more letters, not coloured: $T$ is the **horizon** — how many decisions an
+episode lasts (1000 for a 10 s walk at 100 Hz, 250 for 5 s at 50 Hz) — and
+$h$ is the function that turns a state into what the student sees,
+${\color{#e8743b}{o}} = h(s)$. The expert may read all of $s$; the student
+reads only ${\color{#e8743b}{o}}$. Most of today is about the gap between the two.
+
+---
+
 ## Setting up {.smaller}
 
 ```{python}
@@ -75,7 +95,7 @@ print(f"walker env: {1 / walk_env.control_dt:.0f} Hz, action scale {walk_env.act
 1. Let the expert act. At every step record the pair
    *(what the student will be shown, what the expert did)*.
 2. Fit a network to those pairs by squared error:
-   $\min_\theta \sum_i \lVert \pi_\theta(o_i) - a_i^{\text{expert}} \rVert^2$
+   $\min_{\color{#3b7dd8}{\theta}} \sum_i \lVert {\color{#3b7dd8}{\pi_\theta}}({\color{#e8743b}{o_i}}) - {\color{#2a9d5c}{a_i^*}} \rVert^2$
 3. Let the network act.
 
 ```python
@@ -93,6 +113,44 @@ class Student(nn.Module):              # soc4180.imitation.Student
 Step 2 is week 14's `BallNet` training loop with a different $X$ and $Y$.
 Nothing here needs a reward, a value function, or exploration. It needs
 **examples** — and the question of *which* examples is the whole subject.
+
+---
+
+## Behaviour cloning, written out {.smaller}
+
+**Step 1 — the data.** Run the expert; at every step $i$ keep what the student
+will be shown and what the expert did:
+
+$$\mathcal D = \big\{ ({\color{#e8743b}{o_i}},\ {\color{#2a9d5c}{a_i^*}}) \big\}_{i=1}^{N},
+\qquad {\color{#e8743b}{o_i}} = h(s_i),\quad {\color{#2a9d5c}{a_i^*}} = {\color{#2a9d5c}{\pi^*}}(s_i) \in \mathbb R^{12}.$$
+
+**Step 2 — the loss.** Squared distance between the student's answer and the
+expert's, averaged over the $N$ examples and the 12 joints (that is what
+`((s(X) - Y) ** 2).mean()` computes):
+
+$$L({\color{#3b7dd8}{\theta}}) \;=\; \frac{1}{12N}\sum_{i=1}^{N}
+\big\lVert {\color{#3b7dd8}{\pi_\theta}}({\color{#e8743b}{o_i}}) - {\color{#2a9d5c}{a_i^*}} \big\rVert^2 .$$
+
+**Step 3 — descend it.** Pick 256 examples at random, and move the weights a
+little downhill: ${\color{#3b7dd8}{\theta}} \leftarrow {\color{#3b7dd8}{\theta}} - \eta\,\nabla_\theta L_{\text{batch}}$
+(the code uses Adam, a refinement of this step that rescales it per
+weight; $\eta = 10^{-3}$). One pass over $\mathcal D$ is an **epoch**.
+
+---
+
+## Behaviour cloning: the pieces, named {.smaller}
+
+- ${\color{#3b7dd8}{\pi_\theta}}$ — first standardises its input,
+  $({\color{#e8743b}{o}} - \mu)/\sigma$ with $\mu, \sigma$ the mean and spread of
+  the training inputs, so a gyro in rad/s and a clock in $[-1,1]$ start on
+  equal terms; then two layers of 256 units (ELU) and 12 outputs.
+- $\sqrt{L}$ is the **rms error** in action units — the typical size of the
+  student's mistake on one joint. For the walker one action unit is 1 rad,
+  so $\sqrt{L}$ is in radians; that is how the next slides read an MSE.
+
+This is **ordinary regression**, the same problem as fitting a line through
+points. Every difficulty today comes from *which* points are in $\mathcal D$,
+not from the fitting.
 
 ---
 
@@ -128,9 +186,16 @@ for name, (feats, X, Y) in demos.items():
     s = im.Student.fit(X, Y, epochs=100)
     walks = im.walk(s, feats, env=walk_env, params=params)
     results[name] = (s.train_mse, walks)
-    print(f"{name:24s} training MSE {s.train_mse:.1e}   walks: "
-          + ", ".join(f"{x:+.2f} m" + (" (fell)" if n < 1000 else "") for n, x in walks))
+    rms = np.sqrt(s.train_mse)
+    print(f"{name:24s} training MSE {s.train_mse:.1e} = rms {rms:.4f} rad ({np.degrees(rms):.2f} deg)\n"
+          f"{'':24s} walks: " + ", ".join(f"{x:+.2f} m" + (" (fell)" if n < 1000 else "") for n, x in walks))
+print(f"for scale: the walker's actions themselves have rms {np.sqrt((Y ** 2).mean()):.2f} rad")
 ```
+
+**Reading the MSE.** $\sqrt{\text{MSE}}$ is the typical mistake per joint: a
+few thousandths of a radian — a quarter of a degree or less — against
+actions whose own size is about 0.18 rad. Both students copy the expert to
+within 2–3 % of what it does.
 
 The student that sees **more** — every sensor, plus the clock — fits the
 expert **better** and falls over within three seconds, every time.
@@ -184,13 +249,140 @@ ax.set_xlabel("time (s)"); ax.set_ylabel("|student − walker| (rad, worst joint
 fig.tight_layout(); plt.show()
 ```
 
-The sensor-student's first action is already a few hundredths of a radian
-off — ten times its training error, because its own starting crouch was
-never demonstrated. Each error moves the robot to a state **no
+The sensor-student's first action is already more than a hundredth of a
+radian off — five times its training error, because its own starting
+crouch was never demonstrated — and within a tenth of a second the gap is
+over ten times the training error. (The worst joint is plotted, so the gap
+starts above the rms line even where the student is doing well.) Each error moves the robot to a state **no
 demonstration visited**; there the network is guessing, the next error is
 larger, and the states drift further. The gap grows until the robot is
 on the floor. **Ross, Gordon & Bagnell, 2011**: behaviour cloning's error can
 grow with the *square* of the horizon.
+
+---
+
+## Covariate shift, drawn {.smaller}
+
+The network was fitted on the states in $\mathcal D$. How far is each state the
+robot actually visits from the **nearest** state in $\mathcal D$? (Distance in
+the student's own standardised inputs — the units the network sees.)
+
+```{python}
+#| fig-align: center
+mu, sd = Xs.mean(0), Xs.std(0) + 1e-3
+Z = (Xs - mu) / sd                                          # the training states, standardised
+def nearest(x):
+    return np.sqrt((((x - mu) / sd - Z) ** 2).sum(1).min())
+Xe, _ = im.walker_demos(1, feats, seed=100, env=walk_env, params=params)   # the EXPERT, from a new start
+obs, _ = walk_env.reset(seed=100); Xst, ts = [], []                       # the STUDENT, same start
+while True:
+    ts.append(walk_env.data.time); Xst.append(im.observe(obs, ts[-1], feats, params))
+    obs, _, term, trunc, _ = walk_env.step(s.act(Xst[-1]))
+    if term or trunc:
+        break
+Xst = np.array(Xst)
+d_exp = np.array([nearest(x) for x in Xe]); d_stu = np.array([nearest(x) for x in Xst])
+# a 2-D picture of the same thing: the two directions along which the training states spread most
+U = np.linalg.svd(Z - Z.mean(0), full_matrices=False)[2][:2]
+P = lambda X: ((X - mu) / sd) @ U.T
+fig, axes = plt.subplots(1, 2, figsize=(10.5, 3.4))
+axes[0].plot(*P(Xs).T, ".", ms=1, color="0.75", label="training states $\\mathcal{D}$ (expert)")
+axes[0].plot(*P(Xe).T, "-", lw=1, color="#2a9d5c", label="the expert, new start")
+axes[0].plot(*P(Xst).T, "-", lw=1.5, color="#c0392b", label="the student, same start")
+lo, hi = P(Xs).min(0), P(Xs).max(0); pad = 0.6 * (hi - lo)
+axes[0].set_xlim(lo[0] - pad[0], hi[0] + pad[0]); axes[0].set_ylim(lo[1] - pad[1], hi[1] + pad[1])
+axes[0].text(0.02, 0.03, "as it falls, the student leaves this frame", transform=axes[0].transAxes, fontsize=7, color="#c0392b")
+axes[0].set_xlabel("direction 1"); axes[0].set_ylabel("direction 2"); axes[0].legend(fontsize=7, markerscale=8, loc="upper right")
+axes[0].set_title("where the states are (2-D shadow of 34 numbers)", fontsize=9)
+t_exp = np.arange(len(d_exp)) * walk_env.control_dt
+axes[1].semilogy(t_exp, d_exp, color="#2a9d5c", lw=1.2, label="the expert")
+axes[1].semilogy(ts, d_stu, color="#c0392b", lw=1.5, label="the student (falls)")
+axes[1].set_xlabel("time (s)"); axes[1].set_ylabel("distance to nearest\ntraining state"); axes[1].grid(alpha=0.3, which="both")
+axes[1].legend(fontsize=7); axes[1].set_xlim(0, 4)
+fig.tight_layout(); plt.show()
+print(f"median distance: expert {np.median(d_exp):.2f}, student {np.median(d_stu):.2f}; "
+      f"student falls at {ts[-1]:.2f} s, {d_stu[-1]:.0f} units from anything it was shown")
+```
+
+---
+
+## Reading the drawing {.smaller}
+
+- **Grey**: the ${\color{#2a9d5c}{\text{expert's}}}$ distribution of states — the only
+  places the network was ever taught. It is a thin band, because a walker
+  repeats the same gait.
+- **Green**: the expert again, from a start it has never seen. It stays on
+  the band for the whole 10 s walk: its typical distance to the nearest
+  example is a few hundredths.
+- **Red**: the student from that same start. Its distance to the nearest
+  example grows more than tenfold within two seconds, and is over a
+  hundred times its starting value when it falls. Far from every example,
+  the network's output is an **extrapolation**, and nothing in the loss
+  $L({\color{#3b7dd8}{\theta}})$ ever measured how good that is.
+
+The name: the **covariates** (inputs) at test time come from a different
+distribution than at training time. In symbols,
+$d_{{\color{#3b7dd8}{\pi_\theta}}}(s) \ne d_{{\color{#2a9d5c}{\pi^*}}}(s)$ —
+the states *the student's* actions lead to are not the states *the
+expert's* actions led to. Behaviour cloning optimised
+$\mathbb E_{s \sim d_{\pi^*}}[\,\cdot\,]$ and is then judged on
+$\mathbb E_{s \sim d_{\pi_\theta}}[\,\cdot\,]$.
+
+---
+
+## Why errors compound: $T^2$ versus $T$ {.smaller}
+
+Count mistakes. Let ${\color{#c0392b}{\varepsilon}}$ be the probability that the
+student gets a step wrong **on a state the expert visits**, and suppose — the
+worst case — that after its first mistake it is lost and wrong at every
+remaining step.
+
+**Step 1 — the first mistake.** At step $t$ the student is still on the
+expert's states (no mistake yet), so it errs there with probability at most
+${\color{#c0392b}{\varepsilon}}$.
+
+**Step 2 — its price.** A first mistake at step $t$ costs every step from $t$
+to $T$: at most $T - t + 1$ wrong steps.
+
+**Step 3 — add up over $t$:**
+$\;\sum_{t=1}^{T} {\color{#c0392b}{\varepsilon}}\,(T-t+1) = {\color{#c0392b}{\varepsilon}}\,\frac{T(T+1)}{2} \;=\; O({\color{#c0392b}{\varepsilon}} T^2).$
+
+**Behaviour cloning** (Ross & Bagnell, 2010; restated in Ross, Gordon & Bagnell, 2011),
+with costs in $[0, 1]$ per step:
+$$J({\color{#3b7dd8}{\pi_\theta}}) \;\le\; J({\color{#2a9d5c}{\pi^*}}) + T^2\,{\color{#c0392b}{\varepsilon}} .$$
+
+(Step 3's sum is at most $T^2\varepsilon$, since $T(T+1)/2 \le T^2$.) The
+square comes from Step 2: a mistake early in the episode is paid for at
+every step that follows.
+
+---
+
+## The two bounds, side by side {.smaller}
+
+**Behaviour cloning**, from the previous slide:
+$\;J({\color{#3b7dd8}{\pi_\theta}}) \le J({\color{#2a9d5c}{\pi^*}}) + T^2\,{\color{#c0392b}{\varepsilon}}$.
+
+**DAgger** (Ross, Gordon & Bagnell, 2011, §3): trained on the student's
+*own* states, its error ${\color{#c0392b}{\varepsilon_N}}$ is measured where it
+will be tested, and after enough rounds $N$ the best of its students satisfies
+$$J({\color{#3b7dd8}{\hat\pi}}) \;\le\; J({\color{#2a9d5c}{\pi^*}}) + u\,T\,{\color{#c0392b}{\varepsilon_N}} + O(1),$$
+where $u$ bounds how much one wrong action can raise the expert's cost-to-go
+— how **recoverable** a mistake is.
+
+Read with numbers: a 10 s walk at 100 Hz is $T = 1000$. One mistake in a
+thousand steps (${\color{#c0392b}{\varepsilon}} = 10^{-3}$) gives a bound of
+$10^{-3} \times 1000 = 1$ wrong step for DAgger's $T\varepsilon$ and
+$10^{-3} \times 1000^2 = 1000$ — the whole walk — for $T^2\varepsilon$.
+These are **upper bounds** from the paper, not measurements of our robot.
+
+- $J(\pi)$ — the total cost of an episode run by $\pi$ (a sum of $T$ per-step
+  costs, each between 0 and 1)
+- ${\color{#c0392b}{\varepsilon}}$ — the student's error on the **expert's** states;
+  ${\color{#c0392b}{\varepsilon_N}}$ — its error on **its own** states, after
+  $N$ rounds
+
+The difference is not a better network. It is *where the error was
+measured*: DAgger measures it on the distribution the student will actually meet.
 
 ---
 
@@ -285,6 +477,87 @@ mistakes lead to.
 
 ---
 
+## Why a history recovers velocity {.smaller}
+
+The student is shown joint angles $q_t, q_{t-1}, \dots$ one decision apart,
+$\Delta t = 0.02$ s (50 Hz). It is not shown $\dot q_t$. Can it get it back?
+
+**Step 1 — expand the previous angle around now** (Taylor's theorem):
+$$q_{t-1} = q(t - \Delta t) = q_t - \dot q_t\,\Delta t + \tfrac12\,\ddot q\,\Delta t^2 - \dots$$
+
+**Step 2 — solve for the velocity:**
+$$\frac{q_t - q_{t-1}}{\Delta t} \;=\; \dot q_t \;-\; {\color{#c0392b}{\tfrac12\,\ddot q\,\Delta t}} \;+\; \dots$$
+
+The **backward difference** is the velocity plus an error of about
+${\color{#c0392b}{\tfrac12\,|\ddot q|\,\Delta t}}$: small if the joint's speed
+changes little within one decision, large if it changes a lot.
+
+**Step 3 — a network can compute it.** A first-layer unit computes a weighted
+sum of its inputs. Weights $+1/\Delta t = +50$ on $q_t$ and $-50$ on $q_{t-1}$
+give exactly Step 2's left side. So with two steps of history the missing
+sensor is *representable*; whether the network *finds* those weights is a
+question of data.
+
+More steps allow better formulas — e.g.
+$(3q_t - 4q_{t-1} + q_{t-2})/(2\Delta t)$ cancels the ${\color{#c0392b}{\ddot q}}$
+term and leaves an error of order $\Delta t^2$ — **if** $q(t)$ is smooth
+enough for the Taylor series to be trusted. The next slide checks.
+
+---
+
+## Finite differences, measured {.smaller}
+
+One episode of the week-12 policy (nominal world, an 80 N shove), with the
+velocities it was given and the ones a history would give:
+
+```{python}
+#| fig-align: center
+Xv, _, _ = im._run(push_env, teacher, None, ["joints", "velocities"], 1, seed=5000,
+                   world=dict(friction=1.0, mass=0.0, kp=1.0), push=80.0)
+Xv = np.array(Xv); q, v = Xv[:, :12], Xv[:, 12:]
+dt = push_env.control_dt
+back = (q[1:] - q[:-1]) / dt                                  # two steps of history
+second = (3 * q[2:] - 4 * q[1:-1] + q[:-2]) / (2 * dt)         # three steps
+qdd = (v[1:] - v[:-1]) / dt                                   # how fast the velocity itself changes
+rms = lambda e: np.sqrt(np.mean(e ** 2))
+j = 3                                                          # left knee
+t = np.arange(len(q)) * dt
+fig, ax = plt.subplots(figsize=(10, 3))
+ax.plot(t, v[:, j], color="k", lw=1.5, label="true velocity (the sensor the student lost)")
+ax.plot(t[1:], back[:, j], color="#3b7dd8", lw=1.2, label="$(q_t - q_{t-1})/\\Delta t$")
+ax.axvspan(push_env.push_time, push_env.push_time + 0.2, color="#c0392b", alpha=0.12)
+ax.set_xlabel("time (s)"); ax.set_ylabel("left knee (rad/s)"); ax.legend(fontsize=8, loc="lower left"); ax.grid(alpha=0.3)
+fig.tight_layout(); plt.show()
+print(f"all 12 joints, {len(q)} decisions:  velocity rms {rms(v):.2f} rad/s, "
+      f"acceleration rms {rms(qdd):.0f} rad/s^2 (from successive velocities)")
+print(f"  backward difference   error rms {rms(back - v[1:]):.2f}   "
+      f"(Step 2 predicts about 1/2 rms(qdd) dt = {0.5 * rms(qdd) * dt:.2f})   "
+      f"correlation {np.corrcoef(back.ravel(), v[1:].ravel())[0, 1]:.2f}")
+print(f"  three-point formula   error rms {rms(second - v[2:]):.2f}")
+```
+
+---
+
+## Reading the measurement {.smaller}
+
+- The backward difference **follows** the true velocity (correlation near
+  0.9) but is far from exact — its error is a large fraction of the signal.
+- Step 2 predicted the size of that error, ${\tfrac12\,|\ddot q|\,\Delta t}$,
+  from nothing but the data: the two numbers printed agree closely. The
+  error is not noise; it is the Taylor term.
+- The "better" three-point formula is **worse**. It assumes $q(t)$ is smooth
+  over 0.04 s, and this robot's joints are not: the policy sends a new
+  target every 20 ms, and at the acceleration printed above a joint's speed
+  changes by $|\ddot q|\,\Delta t$ — comparable to the speed itself —
+  within a single interval. A formula is only as good as its assumption.
+
+So a history makes velocity **available**, roughly, not handed over. The
+network must learn how to combine the steps for this robot — which it does
+only from data on the states it actually visits. That matches the table:
+history alone 3 / 20, history + DAgger 16 / 20.
+
+---
+
 ## DAgger {.smaller}
 
 **Dataset Aggregation** (Ross, Gordon & Bagnell, 2011) fixes covariate shift
@@ -303,6 +576,39 @@ for round in range(3):
 It needs an expert that can be **asked** — "what would you do *here*?" — at
 any state, not just one that can perform. A recorded human demonstration
 cannot be asked. A policy can. A planner can, at a price.
+
+---
+
+## DAgger, as an algorithm {.smaller}
+
+::: {style="border: 2px solid #3b7dd8; border-radius: 6px; padding: 0.3em 0.9em; font-size: 0.9em;"}
+**Algorithm — DAgger** (Ross, Gordon & Bagnell, 2011)
+
+**Given:** an expert ${\color{#2a9d5c}{\pi^*}}$ that can be *queried* at any state;
+rounds $N$; mixing weights $\beta_1, \dots, \beta_N \in [0, 1]$.
+
+0. $\mathcal D \leftarrow$ the expert's own demonstrations
+   $\{({\color{#e8743b}{h(s)}}, {\color{#2a9d5c}{\pi^*(s)}})\}$;
+   $\;{\color{#3b7dd8}{\theta_0}} \leftarrow \arg\min_\theta L(\theta; \mathcal D)$ — behaviour cloning.
+1. **for** $i = 1, \dots, N$:
+2. $\quad$ run the mixture $\pi_i$: at each step act with ${\color{#2a9d5c}{\pi^*}}$
+   with probability $\beta_i$, else with ${\color{#3b7dd8}{\pi_{\theta_{i-1}}}}$
+3. $\quad$ at **every state $s$ it visits**, record
+   $({\color{#e8743b}{h(s)}},\ {\color{#2a9d5c}{\pi^*(s)}})$ — what the *expert*
+   would have done there — into $\mathcal D_i$
+4. $\quad$ $\mathcal D \leftarrow \mathcal D \cup \mathcal D_i$ $\quad$ (aggregate: nothing is thrown away)
+5. $\quad$ ${\color{#3b7dd8}{\theta_i}} \leftarrow \arg\min_\theta L(\theta; \mathcal D)$ $\quad$ (retrain on everything)
+6. **return** ${\color{#3b7dd8}{\pi_{\theta_N}}}$
+:::
+
+**Here** (`imitation.dagger`): $N = 3$, $\beta_1 = 0.5$, $\beta_2 = \beta_3 = 0$,
+20 episodes per round, 30 epochs per fit. $\beta_1 = 0.5$ keeps the first,
+worst student from falling in the first second, so round 1 still reaches
+the shove.
+
+Step 3 is the whole idea: the **states** come from the student, the
+**labels** from the expert. Line 2 alone would be ordinary trial and error;
+line 3 is what turns it into supervised learning on the right distribution.
 
 ---
 
@@ -343,6 +649,59 @@ Distilling planners is done — Guided Policy Search (Levine & Koltun, 2013),
 and the planners inside AlphaZero and TD-MPC2 are trained *together with*
 the networks that copy them, so that the planner's answers stay consistent
 enough to learn. An off-the-shelf MPPI is not.
+
+---
+
+## The rule, as mathematics {.smaller}
+
+Let $m({\color{#e8743b}{o}}) = \mathbb E\big[{\color{#2a9d5c}{a^*}} \mid {\color{#e8743b}{o}}\big]$
+be the expert's **average** action over all states that look like ${\color{#e8743b}{o}}$
+to the student. For any student $f$:
+
+**Step 1 — add and subtract $m$:**
+$\;\mathbb E\lVert f({\color{#e8743b}{o}}) - {\color{#2a9d5c}{a^*}}\rVert^2
+= \mathbb E\lVert \big(f({\color{#e8743b}{o}}) - m({\color{#e8743b}{o}})\big) + \big(m({\color{#e8743b}{o}}) - {\color{#2a9d5c}{a^*}}\big)\rVert^2 .$
+
+**Step 2 — expand the square.** The cross term
+$2\,\mathbb E\big[(f - m)^{\mathsf T}(m - {\color{#2a9d5c}{a^*}})\big]$ is zero:
+fix ${\color{#e8743b}{o}}$, and $f - m$ is a constant while
+$m - {\color{#2a9d5c}{a^*}}$ averages to zero by the definition of $m$.
+
+**Step 3 — what is left:**
+$$\mathbb E\lVert f({\color{#e8743b}{o}}) - {\color{#2a9d5c}{a^*}}\rVert^2
+= \underbrace{\mathbb E\lVert f({\color{#e8743b}{o}}) - m({\color{#e8743b}{o}})\rVert^2}_{\text{the student can shrink this to 0}}
+\;+\; \underbrace{\mathbb E\lVert {\color{#2a9d5c}{a^*}} - m({\color{#e8743b}{o}})\rVert^2}_{{\color{#c0392b}{\text{no student can touch this}}}}$$
+
+**The rule.** The best any student can do is $f = m$, and it copies the
+expert **exactly** if and only if the second term is zero — that is, if
+$${\color{#2a9d5c}{a^*}} = g({\color{#e8743b}{o}}) \ \text{ for some function } g:\qquad
+h(s) = h(s') \;\Longrightarrow\; {\color{#2a9d5c}{\pi^*}}(s) = {\color{#2a9d5c}{\pi^*}}(s').$$
+*Two states the student cannot tell apart must get the same expert action.*
+
+---
+
+## The rule, applied to the three experts {.smaller}
+
+| expert | ${\color{#2a9d5c}{a^*}}$ a function of ${\color{#e8743b}{o}}$? | what the second term becomes |
+| --- | --- | --- |
+| walker, student sees the clock | **yes** — the walker's action depends on the time only | 0; the MSE left (1.8e-5) is fitting error. It walks |
+| PPO policy, student sees its 42 numbers | **yes** — the policy *is* a function of them | 0; MSE 8.4e-5, fitting error. It copies |
+| PPO policy, student sees no velocities | **no** — two states with the same angles but different velocities get different actions | > 0, until a history makes velocity visible again |
+| MPPI planner | **no** — it depends on the full state, its stored plan, and random samples | > 0: MSE 1.1e-2, *rising* as DAgger adds states |
+
+---
+
+## Three puzzles, one line each {.smaller}
+
+- **Randomness** (MPPI) puts variance in ${\color{#2a9d5c}{a^*}}$ for the *same* $s$ — the
+  second term can never reach zero, and more data only measures it better.
+  That fits the planner student's training MSE *rising* as DAgger added
+  states: a bigger dataset, the same floor it cannot get under.
+- **Two good answers** (step left, step right) make $m$ their **average** —
+  standing still — which may be neither.
+- The condition is **necessary, not sufficient**: the sensor-student of the
+  walker *could* see the time, so the rule holds for it, and it still fell.
+  Covariate shift is the other half of the story.
 
 ---
 

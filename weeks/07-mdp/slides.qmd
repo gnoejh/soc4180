@@ -34,25 +34,98 @@ mathematics stops being where things go wrong, and the *specification* starts.
 
 Today we write no learning code at all. We write the problem.
 
+This is still **Layer 4** (control and planning) of the week 0 stack — but from
+week 8 the controller in that layer is *learned* rather than derived.
+
 ---
 
-## The Markov decision process
+## Today, in order {.smaller}
 
-Five pieces:
+1. **The MDP** — the six pieces of a learning problem, symbol by symbol, and
+   the loop they make.
+2. **Return and discount** — what the algorithm adds up, and why $\gamma = 0.99$
+   means "about two seconds" for our robot.
+3. **Value and the Bellman equation** — derived in five steps from the return.
+4. **Terminated vs truncated** — one formula, and the bug it prevents.
+5. **Three design decisions** for the G1: what it sees, what it commands, how
+   often it decides.
+6. **Test the environment** — can it express the week 4 walker? (It cannot, at
+   first. Finding out why is the week's main lesson.)
 
-| Symbol | Name | For our robot |
+---
+
+## Colour code for the week {.smaller}
+
+The same colours mean the same things in every equation and every drawing:
+
+| symbol | meaning | colour |
 | --- | --- | --- |
-| $\mathcal{S}$ | states | joint angles, velocities, body attitude |
-| $\mathcal{A}$ | actions | what we send to the servos |
-| $P(s'\mid s,a)$ | transition | **MuJoCo** — we never write this down |
-| $R(s,a)$ | reward | what we want, expressed as a number |
-| $\gamma$ | discount | how much the future counts |
+| ${\color{#3b7dd8}{s,\ o}}$ | the **state** of the world, and the **observation** the robot gets of it | <span style="color:#3b7dd8">blue</span> |
+| ${\color{#e8743b}{a}}$ | the **action** the policy sends | <span style="color:#e8743b">orange</span> |
+| ${\color{#2a9d5c}{r,\ G}}$ | **reward** (one step) and **return** (a sum of rewards) | <span style="color:#2a9d5c">green</span> |
+| ${\color{#8e44ad}{\gamma}}$ | the **discount** — how much the future counts | <span style="color:#8e44ad">purple</span> |
+| ${\color{#c0392b}{P}}$ | the **environment's** rules: MuJoCo, and the end-of-episode tests | <span style="color:#c0392b">red</span> |
+| ${\color{#b8860b}{V}}$ | the **value** — the return you expect from here | <span style="color:#b8860b">gold</span> |
 
-The goal: a policy $\pi(a\mid s)$ maximising expected discounted return
-$\mathbb{E}\left[\sum_t \gamma^t r_t\right]$.
+A subscript is always the **decision number** $t = 0, 1, 2, \dots$ — not
+seconds. At 50 Hz, decision $t$ happens at $0.02\,t$ seconds.
+
+---
+
+## The Markov decision process: six pieces {.smaller}
+
+An MDP is the tuple $(\,{\color{#3b7dd8}{\mathcal{S}}},\ {\color{#e8743b}{\mathcal{A}}},\ {\color{#c0392b}{P}},\ {\color{#2a9d5c}{R}},\ {\color{#3b7dd8}{\rho_0}},\ {\color{#8e44ad}{\gamma}}\,)$:
+
+| Symbol | Name | In words | For the G1 this week |
+| --- | --- | --- | --- |
+| ${\color{#3b7dd8}{\mathcal{S}}}$ | state space | every situation the world can be in | `qpos` + `qvel`: 36 + 35 = 71 numbers |
+| ${\color{#e8743b}{\mathcal{A}}}$ | action space | every command the policy may send | 12 numbers, each in $[-1, 1]$ |
+| ${\color{#c0392b}{P(s'\mid s,a)}}$ | transition | "in ${\color{#3b7dd8}{s}}$, doing ${\color{#e8743b}{a}}$, you land in ${\color{#3b7dd8}{s'}}$" | **MuJoCo** — ten `mj_step` calls |
+| ${\color{#2a9d5c}{R(s,a)}}$ | reward | a number saying how good that step was | four terms + an alive bonus |
+| ${\color{#3b7dd8}{\rho_0}}$ | start distribution | where episodes begin | the crouch, each leg joint ± 0.02 rad at random |
+| ${\color{#8e44ad}{\gamma}}$ | discount | how much a reward one step later counts | 0.99 (weeks 8–10) |
+
+---
+
+## The transition is MuJoCo {.smaller}
+
+${\color{#c0392b}{P}}$ is the one piece of the tuple we never write down.
+`env.step(a)` *is* the transition: set twelve servo targets from
+${\color{#e8743b}{a}}$, run ten `mj_step` calls, and whatever state MuJoCo
+reaches is ${\color{#3b7dd8}{s'}}$.
+
+Read the transition as a probability: $P(s'\mid s,a)$ is "how likely is $s'$
+next". MuJoCo is **deterministic** — the same $s$ and $a$ always give the same
+$s'$ — so here the probability is 1 for one $s'$ and 0 for every other. The
+randomness in our problem lives in $\rho_0$ and, later, in the policy.
 
 **MuJoCo being the transition function is the whole reason this works.** We do
-not need to model the dynamics — we can simply run them.
+not need to write the dynamics down — we can simply run them.
+
+---
+
+## The policy and the goal {.smaller}
+
+The thing we want is a **policy** $\pi$: a rule from what the robot sees to
+what it does. Written as a probability,
+
+$$\pi({\color{#e8743b}{a}} \mid {\color{#3b7dd8}{s}}) = \text{how likely the policy is to send } {\color{#e8743b}{a}} \text{ when it sees } {\color{#3b7dd8}{s}} .$$
+
+A *deterministic* policy (week 4's walker, "hold the crouch") puts all its
+probability on one action. A *stochastic* one (every policy PPO trains in week
+8) draws its action at random — that is how it explores. (Strictly, our policy
+sees an *observation* ${\color{#3b7dd8}{o}}$, not the full state
+${\color{#3b7dd8}{s}}$; *Markov, honestly* below explains the difference.)
+
+The goal is the policy with the largest **expected return**:
+
+$$J(\pi) \;=\; \mathbb{E}\big[\,{\color{#2a9d5c}{G_0}}\,\big], \qquad {\color{#2a9d5c}{G_0}} = {\color{#2a9d5c}{r_1}} + {\color{#8e44ad}{\gamma}}\,{\color{#2a9d5c}{r_2}} + {\color{#8e44ad}{\gamma^2}}\,{\color{#2a9d5c}{r_3}} + \cdots$$
+
+- ${\color{#2a9d5c}{G_0}}$ — the return of one whole episode (defined properly on
+  *The return*, three slides on)
+- $\mathbb{E}[\cdot]$ — the **average over many episodes**: different start
+  poses from $\rho_0$, different random actions from $\pi$. One lucky episode
+  proves nothing; the average is what we maximise.
 
 ---
 
@@ -71,155 +144,445 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.patches import FancyBboxPatch
 
-fig, ax = plt.subplots(figsize=(9, 3.4)); ax.axis("off"); ax.set_xlim(0, 10); ax.set_ylim(0, 4)
-def block(x, y, w, h, text, col):
-    ax.add_patch(FancyBboxPatch((x, y), w, h, boxstyle="round,pad=0.1", color=col, alpha=0.9))
+BLUE, ORANGE, GREEN, PURPLE, RED, GOLD = "#3b7dd8", "#e8743b", "#2a9d5c", "#8e44ad", "#c0392b", "#b8860b"
+
+fig, ax = plt.subplots(figsize=(9.6, 3.6)); ax.axis("off"); ax.set_xlim(0, 10.4); ax.set_ylim(0, 4)
+def block(x, y, w, h, text, col, alpha=0.9):
+    ax.add_patch(FancyBboxPatch((x, y), w, h, boxstyle="round,pad=0.1", color=col, alpha=alpha))
     ax.text(x + w / 2, y + h / 2, text, ha="center", va="center", fontsize=10, color="w")
-block(0.5, 1.2, 2.6, 1.6, "policy  $\\pi_\\theta(a\\mid s)$\n(weeks 8–10: a network)", "#3b7dd8")
-block(5.4, 0.4, 4.2, 3.2, "", "#e8743b")
-ax.text(7.5, 3.3, "environment", ha="center", fontsize=10, color="w", weight="bold")
-block(5.7, 1.9, 1.7, 0.9, "MuJoCo\n$P(s'\\mid s,a)$", "#c0392b")
-block(7.7, 1.9, 1.7, 0.9, "reward\n$R(s,a)$", "#c0392b")
-block(5.7, 0.6, 3.7, 0.9, "terminate? truncate?  (fell / 10 s)", "#c0392b")
-ax.annotate("", xy=(5.3, 2.6), xytext=(3.2, 2.6), arrowprops=dict(arrowstyle="->", lw=2))
-ax.text(4.25, 2.75, "$a_t$: 12 residuals, 50 Hz", ha="center", fontsize=9)
-ax.annotate("", xy=(3.2, 1.5), xytext=(5.3, 1.5), arrowprops=dict(arrowstyle="->", lw=2))
-ax.text(4.25, 1.15, "$s_{t+1}$: 42 numbers,  $r_{t+1}$", ha="center", fontsize=9)
+block(0.4, 1.2, 2.6, 1.6, "policy  $\\pi(a\\mid o)$\n(weeks 8–10: a network)", "0.35")
+block(5.6, 0.3, 4.4, 3.3, "", RED, alpha=0.25)
+ax.text(7.8, 3.35, "environment  (G1WalkEnv)", ha="center", fontsize=10, color=RED, weight="bold")
+block(5.9, 1.9, 1.8, 0.95, "MuJoCo\n$P(s'\\mid s,a)$", RED)
+block(8.0, 1.9, 1.8, 0.95, "reward\n$R(s,a)$", GREEN)
+block(5.9, 0.55, 3.9, 0.9, "terminated? (fell)   truncated? (10 s)", RED)
+ax.annotate("", xy=(5.5, 2.6), xytext=(3.1, 2.6), arrowprops=dict(arrowstyle="->", lw=2.5, color=ORANGE))
+ax.text(4.3, 2.78, "$a_t$: 12 numbers", ha="center", fontsize=9.5, color=ORANGE)
+ax.annotate("", xy=(3.1, 1.6), xytext=(5.5, 1.6), arrowprops=dict(arrowstyle="->", lw=2.5, color=BLUE))
+ax.text(4.3, 1.75, "$o_{t+1}$: 42 numbers", ha="center", fontsize=9.5, color=BLUE)
+ax.annotate("", xy=(3.1, 1.3), xytext=(5.5, 1.3), arrowprops=dict(arrowstyle="->", lw=2.5, color=GREEN))
+ax.text(4.3, 0.95, "$r_{t+1}$: one number", ha="center", fontsize=9.5, color=GREEN)
+ax.text(5.2, 0.05, "one trip round the loop = one decision = 20 ms = 10 physics steps", ha="center",
+        fontsize=9, color="0.3")
 fig.tight_layout(); plt.show()
 ```
 
-Everything inside the orange box is *ours to specify* and nothing inside it
-learns. Everything the algorithm touches is the blue box.
+Everything in the red box is *ours to specify* and nothing inside it learns.
+The only thing an algorithm changes is the grey box. Note the **indexing**: the
+policy sends ${\color{#e8743b}{a_t}}$, and what comes back — the next
+observation and the reward for that step — carry $t+1$.
 
 ---
 
-## What $\gamma$ means in seconds {.smaller}
+## One episode, unrolled {.smaller}
 
-The return from time $t$ is $G_t = \sum_{k \ge 0} \gamma^k\, r_{t+k}$. A constant
-reward $r$ sums to $r/(1-\gamma)$, so $1/(1-\gamma)$ is the **effective
-horizon**, in decisions:
+```{python}
+#| fig-align: center
+fig, ax = plt.subplots(figsize=(10, 2.3)); ax.axis("off"); ax.set_xlim(-0.5, 12.2); ax.set_ylim(-0.9, 1.5)
+for k in range(4):
+    x = 3.2 * k
+    ax.text(x, 0.5, f"$s_{k}$", ha="center", va="center", fontsize=14, color=BLUE,
+            bbox=dict(boxstyle="circle", fc="white", ec=BLUE))
+    if k < 3:
+        ax.annotate("", xy=(x + 2.8, 0.5), xytext=(x + 0.4, 0.5), arrowprops=dict(arrowstyle="->", lw=1.8, color="0.3"))
+        ax.text(x + 1.6, 0.8, f"$a_{k}$", ha="center", fontsize=12, color=ORANGE)
+        ax.text(x + 1.6, 0.05, f"$r_{k + 1}$", ha="center", fontsize=12, color=GREEN)
+ax.text(10.6, 0.5, "$\\cdots$  until terminated or truncated", va="center", fontsize=11)
+ax.text(5.5, -0.7, "state → action → (reward, next state) → action → …   Every arrow is one call to env.step(a).",
+        ha="center", fontsize=9, color="0.3")
+fig.tight_layout(); plt.show()
+```
 
-| $\gamma$ | horizon (decisions) | at 50 Hz |
-| --- | --- | --- |
-| 0.9 | 10 | 0.2 s — less than one footstep |
-| 0.99 | 100 | 2 s — three footsteps |
-| 0.999 | 1000 | 20 s — longer than the episode |
-
-The same $\gamma$ means a different *time* at a different control rate: the
-$0.99$ that suits 50 Hz is a 0.2 s horizon at 500 Hz. That is a second reason
-the control rate below is a design decision and not a detail.
+An **episode** is one such chain, from `env.reset()` (which draws
+${\color{#3b7dd8}{s_0}}$ from $\rho_0$) to the step that says *stop*. A
+**trajectory** is the recorded list $s_0, a_0, r_1, s_1, a_1, r_2, \dots$ —
+it is everything a learning algorithm ever gets to see.
 
 ---
 
-## Markov, honestly
+## The return {.smaller}
+
+The **return** from decision $t$ adds up every reward still to come, each one
+shrunk by ${\color{#8e44ad}{\gamma}}$ once per step of delay:
+
+$${\color{#2a9d5c}{G_t}} \;=\; {\color{#2a9d5c}{r_{t+1}}} + {\color{#8e44ad}{\gamma}}\,{\color{#2a9d5c}{r_{t+2}}} + {\color{#8e44ad}{\gamma^2}}\,{\color{#2a9d5c}{r_{t+3}}} + \cdots \;=\; \sum_{k=0}^{\infty} {\color{#8e44ad}{\gamma^k}}\,{\color{#2a9d5c}{r_{t+k+1}}}$$
+
+- ${\color{#2a9d5c}{G_t}}$ — the return seen from decision $t$
+- ${\color{#2a9d5c}{r_{t+k+1}}}$ — the reward that arrives $k$ steps after the next one
+- ${\color{#8e44ad}{\gamma^k}}$ — its weight: 1, then $\gamma$, then $\gamma^2$, …
+- after the episode ends every reward is 0, so the sum is really finite
+
+Why discount at all? Three reasons, in order of importance for us:
+
+1. **So the sum is finite.** A robot that stands for ever earns 1.55 per step
+   for ever; without $\gamma < 1$ its return is infinite and cannot be compared.
+2. **So nearer consequences count more.** A fall 0.1 s from now is more
+   clearly *this* action's fault than a fall 8 s from now.
+3. **So the learning problem is easier** — the next slides show that
+   $\gamma$ sets how far ahead the algorithm has to look.
+
+---
+
+## Derivation: the geometric series {.smaller}
+
+Suppose every step pays the same ${\color{#2a9d5c}{r}}$. Then
+${\color{#2a9d5c}{G}} = {\color{#2a9d5c}{r}}\,S$ with $S = 1 + {\color{#8e44ad}{\gamma}} + {\color{#8e44ad}{\gamma^2}} + \cdots$.
+
+**Step 1 — write the sum, and the sum times $\gamma$:**
+$$S = 1 + {\color{#8e44ad}{\gamma}} + {\color{#8e44ad}{\gamma^2}} + {\color{#8e44ad}{\gamma^3}} + \cdots \qquad\quad {\color{#8e44ad}{\gamma}}\,S = {\color{#8e44ad}{\gamma}} + {\color{#8e44ad}{\gamma^2}} + {\color{#8e44ad}{\gamma^3}} + \cdots$$
+
+**Step 2 — subtract.** Every term after the 1 appears in both and cancels:
+$$S - {\color{#8e44ad}{\gamma}}\,S = 1 \quad\Longrightarrow\quad S = \frac{1}{1-{\color{#8e44ad}{\gamma}}} \qquad (\text{valid because } 0 \le \gamma < 1)$$
+
+**Step 3 — a finite episode of $N$ steps** stops the series; the same
+subtraction leaves one extra term at the end:
+$$S_N = 1 + {\color{#8e44ad}{\gamma}} + \cdots + {\color{#8e44ad}{\gamma^{N-1}}} = \frac{1-{\color{#8e44ad}{\gamma^N}}}{1-{\color{#8e44ad}{\gamma}}}$$
+
+So a constant reward ${\color{#2a9d5c}{r}}$ for ever is worth
+${\color{#2a9d5c}{G}} = {\color{#2a9d5c}{r}}/(1-{\color{#8e44ad}{\gamma}})$.
+
+---
+
+## Reading it: the effective horizon {.smaller}
+
+**Step 4 — read it.** A discounted sum of a constant reward is the reward times
+$\frac{1}{1-\gamma}$. So $\frac{1}{1-\gamma}$ behaves like a **number of
+steps**: the discounted sum is as if you counted $\frac{1}{1-\gamma}$ steps in
+full and ignored the rest. It is called the **effective horizon**:
+$$H = \frac{1}{1-{\color{#8e44ad}{\gamma}}}\ \text{decisions} \qquad = \frac{\Delta t_{\text{control}}}{1-{\color{#8e44ad}{\gamma}}}\ \text{seconds}.$$
+
+- $H$ — the effective horizon: how far ahead the discounted sum really "looks"
+- $\Delta t_{\text{control}}$ — the time between decisions, 0.02 s at 50 Hz
+
+**Worked example:** $\gamma = 0.99$ gives $H = 1/0.01 = 100$ decisions, and
+$100 \times 0.02\ \text{s} = 2$ s. The next slide computes the table for our env.
+
+---
+
+## The effective horizon, measured for our env {.smaller}
+
+```{python}
+from soc4180.envs import G1WalkEnv, walker_actions
+from soc4180.walking import GaitParams
+
+env = G1WalkEnv()
+dt = env.control_dt
+step_time = GaitParams().step_time
+print(f"control period dt = {dt*1000:.0f} ms (50 Hz);  one footstep of the week 4 gait = {step_time} s\n")
+print(f"{'gamma':>6} {'H = 1/(1-g)':>12} {'H seconds':>10} {'footsteps':>10} {'half-life':>10} {'weight in first H':>18}")
+for g in (0.9, 0.95, 0.99, 0.995, 0.999):
+    H = 1 / (1 - g)
+    half = np.log(0.5) / np.log(g)          # steps until gamma^k = 1/2
+    print(f"{g:6.3f} {H:12.0f} {H*dt:9.2f}s {H*dt/step_time:10.1f} {half*dt:9.2f}s {1 - g**H:18.3f}")
+```
+
+- **H seconds** $= \Delta t / (1-\gamma)$ — how far ahead the robot effectively looks.
+- **half-life** — the delay after which a reward counts half: solve
+  $\gamma^k = \tfrac12$, so $k = \ln\tfrac12 / \ln\gamma$.
+- **weight in first H** $= 1 - \gamma^H$ — the share of the total weight that
+  falls inside the horizon. It is **0.63 for every** $\gamma$ near 1 (it tends
+  to $1 - 1/e$), which is what makes $H$ a fair "horizon": about two-thirds of
+  what matters is inside it.
+
+**Reading the 0.99 row:** the G1 plans about **2 s** ahead — **three
+footsteps** — and a reward 1.4 s away counts half. That is long enough to see
+a fall coming and short enough not to care about the 10 s episode's end.
+
+---
+
+## The weights, drawn {.smaller}
+
+```{python}
+#| fig-align: center
+t = np.arange(0, 12, dt)
+k = np.arange(len(t))
+fig, ax = plt.subplots(figsize=(10, 3.2))
+for g, ls in ((0.9, ":"), (0.99, "-"), (0.999, "--")):
+    ax.plot(t, g ** k, ls, lw=2, color=PURPLE, label=f"$\\gamma^k$, $\\gamma$ = {g}")
+    H = dt / (1 - g)
+    if H < 12:
+        ax.axvline(H, color=PURPLE, lw=0.8, alpha=0.5)
+        ax.text(H + 0.08, 0.55 if g < 0.95 else 0.7, f"H = {H:.1f} s", color=PURPLE, fontsize=8)
+for s in np.arange(step_time, 12, step_time):
+    ax.plot([s, s], [0, 0.05], color="0.5", lw=1)
+ax.text(5.6, 0.14, "grey ticks on the axis: footsteps of the week 4 gait (0.65 s)", fontsize=8, color="0.4")
+ax.axvline(10, color=RED, ls="--", lw=1.2); ax.text(9.95, 0.5, "episode ends (10 s)", color=RED, fontsize=8, ha="right")
+ax.set_xlabel("delay from now (s)  —  one decision every 20 ms"); ax.set_ylabel("weight on that reward")
+ax.set_xlim(0, 12); ax.set_ylim(0, 1.05); ax.grid(alpha=0.3); ax.legend(fontsize=8, loc="upper right")
+fig.tight_layout(); plt.show()
+```
+
+With $\gamma = 0.9$ the robot is blind beyond 0.2 s — less than one footstep,
+too short to notice it is falling. With $\gamma = 0.999$ it looks 20 s ahead,
+past the end of the episode, and every reward looks equally important, which
+makes the credit for a fall very hard to pin on the action that caused it.
+
+**The same $\gamma$ is a different time at a different control rate:** at
+500 Hz, $\gamma = 0.99$ is a $0.002/0.01 = 0.2$ s horizon. That is one more
+reason the control rate below is a design decision and not a detail.
+
+---
+
+## The return on a real episode {.smaller}
+
+"Hold the crouch" (action = 0 every step) for one 10 s episode, then the return
+computed backwards with ${\color{#2a9d5c}{G_t}} = {\color{#2a9d5c}{r_{t+1}}} + {\color{#8e44ad}{\gamma}}\,{\color{#2a9d5c}{G_{t+1}}}$
+(the next slide derives that line):
+
+```{python}
+gamma = 0.99
+obs, _ = env.reset(seed=0)
+rewards = []
+while True:
+    obs, r, terminated, truncated, _ = env.step(np.zeros(12, dtype=np.float32))
+    rewards.append(r)
+    if terminated or truncated:
+        break
+rewards = np.array(rewards); N = len(rewards)
+G = np.zeros(N + 1)                        # G[N] = 0: nothing after the last step
+for t_ in reversed(range(N)):
+    G[t_] = rewards[t_] + gamma * G[t_ + 1]
+rbar = rewards.mean()
+print(f"{N} decisions, terminated={terminated}, truncated={truncated}")
+print(f"reward per step: mean {rbar:.3f}, min {rewards.min():.3f}, max {rewards.max():.3f}")
+print(f"undiscounted sum            = {rewards.sum():8.2f}   (the 'return' printed by the labs)")
+print(f"discounted G_0              = {G[0]:8.2f}")
+print(f"formula  rbar (1-g^N)/(1-g) = {rbar*(1-gamma**N)/(1-gamma):8.2f}   (constant-reward estimate)")
+print(f"formula  rbar / (1-g)       = {rbar/(1-gamma):8.2f}   (the same, if it stood for ever)")
+```
+
+- The reward is nearly constant (1.40 to 1.70), so the formula from the
+  derivation predicts ${\color{#2a9d5c}{G_0}}$ to within about one percent.
+- $\gamma^{500} = 0.0066$, so an episode ten times the horizon long is, to the
+  discounted sum, almost the same as one that never ends: 152.5 against 154.8.
+- **Two different numbers are both called "return".** The labs print the plain
+  sum (774); the algorithm maximises the discounted one (152.5). Say which.
+
+---
+
+## Value: the return you expect from here {.smaller}
+
+${\color{#2a9d5c}{G_t}}$ is a random number — a different episode gives a
+different one. Its average, given where you are now, is the **value**:
+
+$${\color{#b8860b}{V^\pi(s)}} \;=\; \mathbb{E}_\pi\big[\,{\color{#2a9d5c}{G_t}} \;\big|\; {\color{#3b7dd8}{s_t}} = {\color{#3b7dd8}{s}}\,\big]$$
+
+- ${\color{#b8860b}{V^\pi(s)}}$ — "how good is it to be in ${\color{#3b7dd8}{s}}$,
+  if I keep following $\pi$?"; one number per state
+- the superscript $\pi$ — the value depends on the policy: the same crouch is
+  worth ~155 to "hold still" and much less to "uniform random"
+- $\mathbb{E}_\pi[\,\cdot \mid s_t = s]$ — average over every episode that
+  passes through ${\color{#3b7dd8}{s}}$ at some time $t$
+
+Why we want it: an algorithm that knows ${\color{#b8860b}{V}}$ can judge an
+action **the moment it lands**, by asking whether the new state is worth more
+or less than expected — without waiting for the episode to end. Week 8's PPO
+trains a second network, the *critic*, to estimate exactly this.
+
+---
+
+## Derivation: the Bellman equation {.smaller}
+
+**Step 1 — split off the first reward.** Factor $\gamma$ out of everything
+after it:
+$${\color{#2a9d5c}{G_t}} = {\color{#2a9d5c}{r_{t+1}}} + {\color{#8e44ad}{\gamma}}\big({\color{#2a9d5c}{r_{t+2}}} + {\color{#8e44ad}{\gamma}}\,{\color{#2a9d5c}{r_{t+3}}} + \cdots\big) = {\color{#2a9d5c}{r_{t+1}}} + {\color{#8e44ad}{\gamma}}\,{\color{#2a9d5c}{G_{t+1}}}$$
+The bracket is the return from $t+1$ — the same definition, one step later.
+
+**Step 2 — average both sides, given ${\color{#3b7dd8}{s_t}} = {\color{#3b7dd8}{s}}$.** The left side becomes ${\color{#b8860b}{V^\pi(s)}}$ by definition:
+$${\color{#b8860b}{V^\pi(s)}} = \mathbb{E}_\pi\big[\,{\color{#2a9d5c}{r_{t+1}}} + {\color{#8e44ad}{\gamma}}\,{\color{#2a9d5c}{G_{t+1}}} \mid {\color{#3b7dd8}{s_t}} = {\color{#3b7dd8}{s}}\,\big]$$
+
+**Step 3 — the average of a sum is the sum of the averages:**
+$${\color{#b8860b}{V^\pi(s)}} = \mathbb{E}_\pi\big[{\color{#2a9d5c}{r_{t+1}}} \mid {\color{#3b7dd8}{s}}\big] + {\color{#8e44ad}{\gamma}}\,\mathbb{E}_\pi\big[{\color{#2a9d5c}{G_{t+1}}} \mid {\color{#3b7dd8}{s}}\big]$$
+
+**Step 4 — use the Markov property.** Once you know where you land,
+${\color{#3b7dd8}{s'}} = {\color{#3b7dd8}{s_{t+1}}}$, the future does not depend on how you got there,
+so the average of ${\color{#2a9d5c}{G_{t+1}}}$ is ${\color{#b8860b}{V^\pi(s')}}$ — averaged over where you might land:
+$$\mathbb{E}_\pi\big[{\color{#2a9d5c}{G_{t+1}}} \mid {\color{#3b7dd8}{s}}\big] = \mathbb{E}\big[{\color{#b8860b}{V^\pi(s')}} \mid {\color{#3b7dd8}{s}}\big]$$
+
+**Step 5 — put it back together** (${\color{#e8743b}{a}} \sim \pi$ picks the action, ${\color{#c0392b}{P}}$ the landing state):
+$$\boxed{\;{\color{#b8860b}{V^\pi(s)}} = \mathbb{E}_{{\color{#e8743b}{a}}\sim\pi,\ {\color{#3b7dd8}{s'}}\sim {\color{#c0392b}{P}}}\big[\,{\color{#2a9d5c}{R(s,a)}} + {\color{#8e44ad}{\gamma}}\,{\color{#b8860b}{V^\pi(s')}}\,\big]\;}$$
+
+**Read it:** *the value of here = the reward for the next step + the discounted
+value of where that step lands you.* One step of experience relates two values.
+
+---
+
+## Bootstrapping: learning from one step {.smaller}
+
+The Bellman equation turns into a learning signal. After one step
+$({\color{#3b7dd8}{s_t}}, {\color{#e8743b}{a_t}}, {\color{#2a9d5c}{r_{t+1}}}, {\color{#3b7dd8}{s_{t+1}}})$,
+the **target** for ${\color{#b8860b}{V(s_t)}}$ is
+
+$$y_t \;=\; {\color{#2a9d5c}{r_{t+1}}} + {\color{#8e44ad}{\gamma}}\,{\color{#b8860b}{V(s_{t+1})}}$$
+
+- $y_t$ — what ${\color{#b8860b}{V(s_t)}}$ *should* have been, judging by
+  one real step and the current guess at the next state
+- ${\color{#2a9d5c}{r_{t+1}}}$ — measured, real
+- ${\color{#b8860b}{V(s_{t+1})}}$ — **our own estimate**, standing in for every
+  reward after that
+
+Using your own estimate to fill in the rest is called **bootstrapping** (from
+"pulling yourself up by your bootstraps"). It lets the critic learn after every
+step instead of after every episode. Week 8's PPO does it with the formula on
+the next slide — and that formula is where the end of an episode has to be
+handled correctly.
+
+---
+
+## Terminated vs truncated: one formula {.smaller}
+
+An episode can stop for two different reasons, and Gymnasium's `env.step`
+returns them as two separate flags:
+
+| flag | means | in our env | what comes after |
+| --- | --- | --- | --- |
+| ${\color{#c0392b}{\text{terminated}}}$ | the task itself is over | the robot **fell** | nothing — no more rewards, ever |
+| ${\color{#c0392b}{\text{truncated}}}$ | **we** stopped watching | the **10 s** clock ran out | the robot would have kept earning |
+
+So the target must bootstrap past a truncation and **not** past a termination:
+
+$$y_t \;=\; {\color{#2a9d5c}{r_{t+1}}} \;+\; {\color{#8e44ad}{\gamma}}\,\big(1 - {\color{#c0392b}{\text{terminated}_{t+1}}}\big)\,{\color{#b8860b}{V(s_{t+1})}}$$
+
+- ${\color{#c0392b}{\text{terminated}_{t+1}}} \in \{0, 1\}$ — 1 if the step that produced ${\color{#2a9d5c}{r_{t+1}}}$ ended in a fall
+- a fall: the bracket is 0, and the target is the last reward alone. A fallen
+  robot's future is worth exactly nothing — ${\color{#b8860b}{V}}(\text{fallen}) = 0$.
+- truncated: **it does not appear in the formula at all.** The bracket is 1
+  and the target still includes ${\color{#b8860b}{V(s_{t+1})}}$.
+
+**The classic bug** is writing `done = terminated or truncated` and using
+`1 - done`. Then the last standing step of every 10 s episode gets the target
+"1.55 and nothing after" — and the next slide shows how wrong that is.
+
+---
+
+## The bug, measured on the hold-the-crouch episode {.smaller}
+
+```{python}
+#| fig-align: center
+V_est = rbar / (1 - gamma)                        # estimate: it keeps standing with the same mean reward
+y_right = rewards[-1] + gamma * V_est             # truncated: bootstrap
+y_wrong = rewards[-1]                             # truncated treated as terminated
+print(f"last step, reward {rewards[-1]:.2f}")
+print(f"  target, bootstrapped (correct)       y = {y_right:7.2f}")
+print(f"  target, treated as a fall (the bug)  y = {y_wrong:7.2f}")
+
+tsec = np.arange(N) * dt
+fig, ax = plt.subplots(figsize=(10, 2.9))
+ax.plot(tsec, G[:N], color=GREEN, lw=2, label="$G_t$ if the 10 s cut-off were a real ending (the bug)")
+ax.axhline(V_est, color=GOLD, lw=2, ls="--", label=f"value if it keeps standing: $\\bar r/(1-\\gamma)$ = {V_est:.1f}")
+ax.axvline(N * dt, color=RED, ls=":"); ax.text(N * dt - 0.1, 20, "truncated\nhere", color=RED, ha="right", fontsize=8)
+ax.set_xlabel("time in the episode (s)"); ax.set_ylabel("discounted return from here")
+ax.set_xlim(0, 10.3); ax.set_ylim(0, 175); ax.grid(alpha=0.3); ax.legend(fontsize=8, loc="lower left")
+fig.tight_layout(); plt.show()
+```
+
+The robot is standing in the **same crouch** at 2 s and at 9.9 s, and the
+observation has **no clock in it** — the policy cannot tell those states apart.
+Under the bug they get targets of ~150 and ~1.6. The critic is told the same
+state is worth two wildly different things, and learns that standing late in
+an episode is nearly worthless. Doing it the other way round — bootstrapping
+past a real fall — tells it that falling is survivable.
+
+---
+
+## Design decision 0: when does an episode end? {.smaller}
+
+- **Terminate** when the robot has fallen — the pelvis below **0.5 m**, or the
+  body tilted more than **44°** from upright. Continuing to simulate a heap on
+  the floor teaches nothing and wastes compute.
+- **Truncate** at **10 s** (500 decisions), so a policy that stands still for
+  ever still yields a finite episode.
+
+The tilt test in the code is `norm(gravity_body[:2]) > 0.7`. The gravity
+direction in the body frame is a unit vector; its horizontal part has length
+$\sin\theta$ for a tilt $\theta$. So the test is $\sin\theta > 0.7$, i.e.
+$\theta > \arcsin 0.7$:
+
+```{python}
+print(f"max_tilt = {env.max_tilt}  ->  terminate when tilt > arcsin(0.7) = {np.degrees(np.arcsin(env.max_tilt)):.1f} deg")
+print(f"(reading 0.7 as an angle in radians would give {np.degrees(env.max_tilt):.1f} deg -- not what the code does)")
+```
+
+Termination is also a **reward decision** in disguise: every step alive earns
+reward, so ending the episode is a penalty equal to everything the robot would
+have earned afterwards.
+
+---
+
+## Markov, honestly {.smaller}
 
 The Markov property says the current state contains everything needed to predict
-the future.
+the future. Step 4 of the Bellman derivation used it.
 
-Our robot **violates this**, and knowingly:
+The **state** (71 numbers) is Markov: MuJoCo needs nothing else to take the next
+step. But the policy does not get the state; it gets an **observation**
+${\color{#3b7dd8}{o}}$ — and ours **violates** the Markov property, knowingly:
 
-- we observe gravity and gyroscope, not true attitude (Week 6)
-- we cannot see the ground ahead
-- actuator state, contact history, and momentum are only partly visible
+- it has no position, no height, and no base linear velocity (no sensor measures them)
+- it cannot see the ground ahead
+- contact, and the arms and waist, are not in it at all
 
-Formally we have a *partially observable* MDP. The standard practical answer is
-to stack recent observations and include the previous action, giving the policy
-a short memory.
+Formally that is a *partially observable* MDP (POMDP). The standard practical
+answer is to include the previous action (and sometimes stack recent
+observations), giving the policy a short memory.
+
+One more honest note: the gravity direction in our observation is computed from
+the **true** pelvis orientation — a stand-in for the week 6 filter, which
+estimated it to within about 2° while walking. A real robot would observe the
+filter's estimate.
 
 **Pretending it is Markov, then compensating, is normal practice.** Knowing that
 you are doing it is the difference between engineering and cargo culting.
 
 ---
 
-## Design decision 1: what is an action? {.smaller}
-
-Three plausible choices, and they are not equally good:
-
-| Action | Consequence |
-| --- | --- |
-| **Joint torques** | Most general, and the policy must learn gravity compensation from scratch |
-| **Absolute joint angles** | Servos do the hard work; but every output must specify a whole posture |
-| **Residuals about a nominal pose** | The policy nudges a stance that already works |
-
-We use the third: $\text{target} = q_{\text{nominal}} + \kappa\,a$, with the
-nominal being the Week 4 crouch and $\kappa = 0.3$ rad.
-
-An untrained policy outputs roughly zero, which means it **starts by standing in
-a sensible crouch** rather than flailing. That single choice removes an enormous
-amount of wasted exploration.
-
----
-
-## Design decision 2: how fast does it think? {.smaller}
-
-Physics runs at 500 Hz. Does the policy?
-
-**No.** It runs at **50 Hz**, holding each action for 10 physics steps.
-
-Reasons, all from Week 0's timescale table:
-
-- a leg cannot move meaningfully in 2 ms, so deciding that often is wasted
-- a network evaluated at 500 Hz costs 10× the compute for no benefit
-- longer intervals mean fewer decisions per episode, so credit assignment is easier
-- real robots deploy policies at 50 Hz for exactly these reasons
-
-The servos still run at 500 Hz underneath. **The policy sets targets; the PD loop
-chases them.** The layered structure from Week 0 survives intact.
-
----
-
-## Two clocks {.smaller}
+## Design decision 1: what does it see? {.smaller}
 
 ```{python}
 #| fig-align: center
-fig, ax = plt.subplots(figsize=(9.6, 2.4)); ax.set_xlim(-1, 41); ax.set_ylim(-0.7, 2.4); ax.axis("off")
-for k in range(41):
-    ax.plot([k, k], [0, 0.35], color="0.4", lw=1)
-ax.text(-0.8, 0.15, "physics 500 Hz", ha="right", va="center", fontsize=9)
-for k in range(0, 41, 10):
-    ax.plot([k, k], [0.8, 1.6], color="#3b7dd8", lw=3)
-    ax.text(k, 1.75, f"$a_{k // 10}$", ha="center", fontsize=9, color="#3b7dd8")
-    if k < 40:
-        ax.annotate("", xy=(k + 9.6, 1.0), xytext=(k + 0.4, 1.0),
-                    arrowprops=dict(arrowstyle="-|>", lw=1, color="#3b7dd8", alpha=0.6))
-        ax.text(k + 5, 0.55, "held 10 steps", ha="center", fontsize=7, color="#3b7dd8")
-ax.text(-0.8, 1.2, "policy 50 Hz", ha="right", va="center", fontsize=9, color="#3b7dd8")
-ax.text(20, -0.5, "one decision = 20 ms = 10 physics steps; the servos chase the held target underneath",
-        ha="center", fontsize=9)
+fig, ax = plt.subplots(figsize=(10.5, 3.6)); ax.axis("off")
+state = [("pos", 3, "0.75", False), ("quat", 4, BLUE, True), ("legs", 12, BLUE, True), ("waist", 3, "0.75", False),
+         ("arms", 14, "0.75", False), ("lin vel", 3, "0.75", False), ("ang vel", 3, BLUE, True),
+         ("leg vel", 12, BLUE, True), ("waist", 3, "0.75", False), ("arms", 14, "0.75", False)]
+obsb = [("gravity", 3, BLUE), ("gyro", 3, BLUE), ("leg angles − nominal", 12, BLUE),
+        ("leg velocities", 12, BLUE), ("previous action", 12, ORANGE)]
+x, centres = 0, {}
+for i, (name, n, col, used) in enumerate(state):
+    ax.add_patch(plt.Rectangle((x, 2.2), n, 0.7, color=col, alpha=0.85 if used else 0.5, ec="w"))
+    ax.text(x + n / 2, 2.55, name if n >= 3 else "", ha="center", va="center", fontsize=7, color="w" if used else "0.2",
+            rotation=0 if n > 3 else 90)
+    centres[i] = x + n / 2; x += n
+ax.text(18, 3.15, "qpos: 36", ha="center", fontsize=9); ax.text(36 + 17.5, 3.15, "qvel: 35", ha="center", fontsize=9)
+ax.plot([36, 36], [2.1, 3.0], color="k", lw=1.5)
+ax.text(-1, 2.55, "state  s\n71 numbers", ha="right", va="center", fontsize=9, color=BLUE)
+x0 = 14.5; ox = {}
+for j, (name, n, col) in enumerate(obsb):
+    ax.add_patch(plt.Rectangle((x0, 0.2), n, 0.7, color=col, alpha=0.85, ec="w"))
+    ax.text(x0 + n / 2, 0.55 if n > 3 else 0.05, name, ha="center", va="center" if n > 3 else "top",
+            fontsize=7, color="w" if n > 3 else BLUE)
+    ox[j] = x0 + n / 2; x0 += n
+ax.text(14, 0.55, "observation  o\n42 numbers", ha="right", va="center", fontsize=9, color=BLUE)
+for si, oj, lab in ((1, 0, "rotate $-z$ into the body"), (6, 1, "≈ torso IMU"), (2, 2, ""), (7, 3, "")):
+    ax.annotate("", xy=(ox[oj], 0.95), xytext=(centres[si], 2.15), arrowprops=dict(arrowstyle="->", color="0.4", lw=1))
+ax.text(8, 1.35, "gravity: $-z$ rotated\ninto the pelvis frame", fontsize=7, ha="right", color="0.3")
+ax.text(ox[4], 1.2, "not in the state at all:\nwhat the policy sent last", ha="center", fontsize=7, color=ORANGE)
+ax.set_xlim(-8, 72); ax.set_ylim(-0.3, 3.4)
+ax.set_title("grey: in the state but hidden from the policy (no sensor for it, or not needed for walking)", fontsize=9)
 fig.tight_layout(); plt.show()
 ```
 
----
-
-## Design decision 3: when does an episode end? {.smaller}
-
-- **Terminate** when the robot has fallen — body below 0.5 m, or tilted more than
-  0.7 rad from upright. Continuing to simulate a heap on the floor teaches
-  nothing and wastes compute.
-- **Truncate** at 10 seconds, so a policy that stands still forever still yields
-  a finite episode.
-
-The distinction matters to the algorithm: **termination means the future is
-genuinely worth nothing; truncation means we merely stopped watching.**
-Bootstrapping past a truncation is correct; bootstrapping past a termination is
-a bug that quietly teaches the robot that falling is survivable.
+The rule from week 6: **only what a real robot can measure.** Position and
+height have no sensor; base linear velocity would need integration and drifts.
+Arms and waist are held by their servos and left out — 17 joints the walking
+problem does not need. The previous action is added: the robot knows what it
+commanded, and it is the cheapest memory there is.
 
 ---
 
 ## The environment {.smaller}
 
 ```{python}
-try:
-    import soc4180
-    import gymnasium
-except ImportError:
-    %pip install -q "soc4180[env] @ git+https://github.com/gnoejh/soc4180.git"
-    import soc4180
-
-import numpy as np
-from soc4180.envs import G1WalkEnv, walker_actions
-
-env = G1WalkEnv()
+print(f"state       : {env.model.nq} + {env.model.nv} = {env.model.nq + env.model.nv} numbers (qpos + qvel)")
 print(f"observation : {env.observation_space.shape[0]} numbers")
 print(f"action      : {env.action_space.shape[0]} (the twelve leg joints only)")
 print(f"control     : {1/env.control_dt:.0f} Hz over {1/env.model.opt.timestep:.0f} Hz physics"
@@ -256,7 +619,160 @@ fig.tight_layout(); plt.show()
 
 Compare it with week 6's 64: the arms and the waist are gone, and the
 **previous action** has been added — the one-step memory that papers over the
-missing Markov property.
+missing Markov property. (This one drawing is coloured by *sensor*, not by the
+week's colour code.)
+
+---
+
+## Design decision 2: what is an action? {.smaller}
+
+Three plausible choices, and they are not equally good:
+
+| Action | Consequence |
+| --- | --- |
+| **Joint torques** | Most general, and the policy must learn gravity compensation from scratch |
+| **Absolute joint angles** | Servos do the hard work; but every output must specify a whole posture |
+| **Residuals about a nominal pose** | The policy nudges a stance that already works |
+
+We use the third. For each of the twelve leg joints $j$:
+
+$$q^{\text{target}}_j \;=\; q^{\text{nom}}_j \;+\; \kappa\,\operatorname{clip}\big({\color{#e8743b}{a_j}},\,-1,\,1\big)$$
+
+- $q^{\text{target}}_j$ — the angle sent to joint $j$'s servo (week 5's PD loop chases it)
+- $q^{\text{nom}}_j$ — the week 4 crouch: hip pitch −0.35, knee +0.70, ankle pitch −0.35 rad, the rest 0
+- $\kappa$ — the **action scale**, 0.3 rad by default: how far one unit of action moves the target
+- ${\color{#e8743b}{a_j}}$ — the policy's number, clipped to $[-1, 1]$ first
+
+An untrained policy outputs roughly zero, which means it **starts by standing in
+a sensible crouch** rather than flailing. That single choice removes an enormous
+amount of wasted exploration.
+
+---
+
+## The action space, drawn on the joints {.smaller}
+
+```{python}
+#| fig-align: center
+import mujoco
+m = env.model
+jid = [int(np.where(m.jnt_qposadr == q)[0][0]) for q in env.leg_qpos[:6]]
+names = [mujoco.mj_id2name(m, mujoco.mjtObj.mjOBJ_JOINT, j).replace("left_", "").replace("_joint", "") for j in jid]
+nom = env.nominal[env.leg_qpos[:6]]
+fig, ax = plt.subplots(figsize=(10, 3.4))
+for i, (j, n0) in enumerate(zip(jid, nom)):
+    lo, hi = m.jnt_range[j]
+    ax.plot([lo, hi], [i, i], color="0.8", lw=12, solid_capstyle="butt", label="joint range" if i == 0 else None)
+    ax.plot([n0 - 1.0, n0 + 1.0], [i, i], color=ORANGE, lw=5, alpha=0.35, solid_capstyle="butt",
+            label="$\\kappa$ = 1.0 reach" if i == 0 else None)
+    ax.plot([n0 - 0.3, n0 + 0.3], [i, i], color=ORANGE, lw=5, solid_capstyle="butt",
+            label="$\\kappa$ = 0.3 reach (default)" if i == 0 else None)
+    ax.plot(n0, i, "o", color="k", ms=6, label="nominal crouch" if i == 0 else None)
+    ax.text(3.05, i, f"[{lo:+.2f}, {hi:+.2f}]", va="center", fontsize=7.5, color="0.4")
+ax.set_yticks(range(6), names); ax.invert_yaxis(); ax.set_xlim(-3.0, 3.8)
+ax.set_xlabel("joint angle (rad)  —  left leg; the right leg mirrors it")
+ax.legend(fontsize=7.5, loc="lower center", bbox_to_anchor=(0.5, 1.0), ncol=4, frameon=False)
+ax.grid(axis="x", alpha=0.3)
+fig.tight_layout(); plt.show()
+```
+
+The dark orange band is **everything the policy can ask for** at the default
+$\kappa = 0.3$: a 0.6 rad window centred on the crouch. The week 4 walker
+needs more than that on about a third of its steps (measured below). Where a band
+sticks out of the grey range (ankle roll even at 0.3, ±0.30 against a ±0.26
+range; hip roll, knee and ankle pitch at 1.0), MuJoCo clips the target a second time, because `ctrlrange` equals the joint
+range.
+
+---
+
+## Design decision 3: how fast does it think? {.smaller}
+
+Physics runs at 500 Hz. Does the policy?
+
+**No.** It runs at **50 Hz**, holding each action for 10 physics steps.
+
+Reasons, all from Week 0's timescale table:
+
+- a leg cannot move meaningfully in 2 ms, so deciding that often is wasted
+- a network evaluated at 500 Hz costs 10× the compute for no benefit
+- fewer decisions per second means a shorter chain from an action to its
+  consequence — the horizon in *decisions* is what $\gamma$ controls
+- the learned-locomotion work we follow does the same: MuJoCo Playground's G1
+  walking config (week 10) sets `ctrl_dt = 0.02` over `sim_dt = 0.002` — 50 Hz
+  over 500 Hz, exactly ours
+
+The servos still run at 500 Hz underneath. **The policy sets targets; the PD loop
+chases them.** The layered structure from Week 0 survives intact.
+
+---
+
+## Decimation: two clocks {.smaller}
+
+The number of physics steps per decision is the **decimation** $N$:
+
+$$N = \operatorname{round}\!\Big(\frac{1}{f_{\text{control}}\;\Delta t_{\text{physics}}}\Big) = \operatorname{round}\!\Big(\frac{1}{50 \times 0.002}\Big) = 10, \qquad \Delta t_{\text{control}} = N\,\Delta t_{\text{physics}} = 20\ \text{ms}.$$
+
+```{python}
+#| fig-align: center
+fig, ax = plt.subplots(figsize=(9.6, 2.4)); ax.set_xlim(-1, 41); ax.set_ylim(-0.7, 2.4); ax.axis("off")
+for k in range(41):
+    ax.plot([k, k], [0, 0.35], color="0.4", lw=1)
+ax.text(-0.8, 0.15, "physics 500 Hz", ha="right", va="center", fontsize=9)
+for k in range(0, 41, 10):
+    ax.plot([k, k], [0.8, 1.6], color=ORANGE, lw=3)
+    ax.text(k, 1.75, f"$a_{k // 10}$", ha="center", fontsize=9, color=ORANGE)
+    if k < 40:
+        ax.annotate("", xy=(k + 9.6, 1.0), xytext=(k + 0.4, 1.0),
+                    arrowprops=dict(arrowstyle="-|>", lw=1, color=ORANGE, alpha=0.6))
+        ax.text(k + 5, 0.55, "held 10 steps", ha="center", fontsize=7, color=ORANGE)
+ax.text(-0.8, 1.2, "policy 50 Hz", ha="right", va="center", fontsize=9, color=ORANGE)
+ax.text(20, -0.5, "one decision = 20 ms = 10 physics steps; the servos chase the held target underneath",
+        ha="center", fontsize=9)
+fig.tight_layout(); plt.show()
+```
+
+Watch the rounding: 200 Hz asks for $N = 2.5$, Python's `round` gives **2**
+(it rounds halves to even), and the env actually runs at **250 Hz**. Only
+rates that divide 500 exactly come out as asked.
+
+---
+
+## Inside one `env.step`, measured {.smaller}
+
+What `env.step(a)` does, written out: set the servo targets once, then run
+physics $N$ times. Here with random actions, recording the left knee at every
+physics step:
+
+```{python}
+#| fig-align: center
+env.reset(seed=0)
+rng = np.random.default_rng(1)
+knee = int(np.where(env.act_qpos == env.leg_qpos[3])[0][0])        # left knee's actuator
+tq, tq_target, target_hist, angle_hist, dec_t = [], [], [], [], []
+for decision in range(10):
+    a = rng.uniform(-1, 1, 12).astype(np.float32)
+    target = env.nominal.copy(); target[env.leg_qpos] += env.action_scale * a
+    dec_t.append(env.data.time)
+    for _ in range(env.decimation):                  # the decimation loop inside env.step
+        env.data.ctrl[:] = target[env.act_qpos]
+        tq_target.append(env.data.time); target_hist.append(env.data.ctrl[knee])
+        mujoco.mj_step(env.model, env.data)
+        tq.append(env.data.time); angle_hist.append(env.data.qpos[env.leg_qpos[3]])
+tq, tq_target = np.array(tq) * 1000, np.array(tq_target) * 1000
+fig, ax = plt.subplots(figsize=(10, 2.9))
+ax.step(tq_target, target_hist, where="post", color=ORANGE, lw=2, label="servo target $q^{nom} + \\kappa a$ (changes every 20 ms)")
+ax.plot(tq, angle_hist, ".-", color=BLUE, ms=3, lw=1, label="knee angle, every 2 ms physics step")
+for d in dec_t:
+    ax.axvline(d * 1000, color="0.8", lw=0.8, zorder=0)
+ax.set_xlabel("time (ms)"); ax.set_ylabel("left knee (rad)"); ax.grid(axis="y", alpha=0.3)
+ax.legend(fontsize=8, loc="upper right"); fig.tight_layout(); plt.show()
+print(f"largest target jump between decisions: {np.max(np.abs(np.diff(target_hist))):.2f} rad"
+      f" (at most 2 x kappa = {2*env.action_scale:.1f})")
+```
+
+The orange staircase is the action — constant for 10 physics steps, then a
+jump. The blue dots are the knee, updated every 2 ms, lagging behind and
+chasing each new target. That lag is why 50 Hz is enough: within 20 ms the
+joint has only covered part of the jump anyway.
 
 ---
 
@@ -293,15 +809,19 @@ def rollout(policy, seed=0):
 
 zero = lambda k: np.zeros(env.action_space.shape[0], dtype=np.float32)
 rand = lambda k: env.action_space.sample()
+env.action_space.seed(0)                     # so "random" is the same random every run
 
 for name, pol in (("do nothing (hold the crouch)", zero), ("uniform random", rand)):
     R, n, fell = rollout(pol)
-    print(f"  {name:30s} return {R:8.2f}  {n:3d} steps  "
-          f"{'FELL' if fell else 'survived'}")
+    print(f"  {name:30s} return {R:8.2f}  {n:3d} steps = {n*dt:5.2f} s  "
+          f"{'FELL (terminated)' if fell else 'survived (truncated)'}")
 ```
 
 **Always measure these first.** "Do nothing" is the number a policy must beat to
 have learned anything at all; random is the number it must beat to be a policy.
+Both are the *undiscounted* sum — the number the labs print. Uniform random
+falls in 0.66 s: it earns about half as much per step (25.78 / 33 = 0.78,
+against 1.55 for holding) *and* gets 15× fewer steps.
 
 ---
 
@@ -311,27 +831,30 @@ We already have a working controller. If the environment cannot represent it, no
 algorithm will find anything better.
 
 ```{python}
-from soc4180.walking import WalkingController, GaitParams
+from soc4180.walking import WalkingController
 
 def walker_in_env(action_scale=0.3, control_hz=50.0):
     e = G1WalkEnv(episode_seconds=12.0, action_scale=action_scale, control_hz=control_hz)
     c = WalkingController(e.model, GaitParams(n_steps=12))
-    e.reset(); clipped, steps = 0, 0
+    e.reset(); clipped, steps, ret = 0, 0, 0.0
     while True:
         a = walker_actions(e, c, e.data.time)
         clipped += int(np.any(np.abs(a) >= 0.999)); steps += 1
-        _, _, term, trunc, _ = e.step(a)
+        _, r, term, trunc, _ = e.step(a); ret += r
         if term or trunc:
-            return e.data.qpos[0], e.data.qpos[2], 100*clipped/steps, term
+            return dict(x=e.data.qpos[0], z=e.data.qpos[2], clip=100*clipped/steps, fell=term,
+                        ret=ret, steps=steps, hz=1/e.control_dt, t=e.data.time)
 
-x, z, clip, fell = walker_in_env()
-print(f"analytic walker inside the env: travelled {x:+.3f} m, pelvis {z:.3f} m")
-print(f"  {'FELL' if fell else 'survived'};  actions hit the limit on {clip:.1f}% of steps")
+w = walker_in_env()
+print(f"analytic walker inside the env: travelled {w['x']:+.3f} m, pelvis {w['z']:.3f} m")
+print(f"  {'FELL' if w['fell'] else 'survived'} at {w['t']:.1f} s;  actions hit the limit on {w['clip']:.1f}% of steps")
 print(f"  (at 500 Hz with no action limit it walks +0.99 m)")
 ```
 
 **It falls.** The controller that worked three weeks ago cannot survive its own
-environment.
+environment. `walker_actions` converts the walker's joint targets into
+residuals, $a = (q^{\text{target}} - q^{\text{nom}})/\kappa$; "hit the limit"
+means some $|a_j|$ needed to exceed 1.
 
 ---
 
@@ -342,19 +865,23 @@ Separate them.
 
 ```{python}
 grid = {}
-print(f"{'scale':>6} {'Hz':>5} {'travel':>8} {'z':>7} {'clipped':>8}  outcome")
+print(f"{'scale':>6} {'asked':>6} {'actual':>7} {'travel':>8} {'z':>7} {'clipped':>8}  outcome")
 for scale in (0.3, 0.6, 1.0):
     for hz in (50, 100, 200):
-        x, z, clip, fell = walker_in_env(scale, hz)
-        grid[(scale, hz)] = (x, clip, fell)
-        print(f"{scale:6.1f} {hz:5d} {x:+8.3f} {z:7.3f} {clip:7.1f}%  "
-              f"{'FELL' if fell else 'survived'}")
+        w = walker_in_env(scale, hz)
+        grid[(scale, hz)] = w
+        print(f"{scale:6.1f} {hz:6d} {w['hz']:6.0f}  {w['x']:+8.3f} {w['z']:7.3f} {w['clip']:7.1f}%  "
+              f"{'FELL' if w['fell'] else 'survived'}")
 ```
 
 **Both matter, independently.** At $\kappa=0.3$ a third of the actions are
 clipped and it fails at every rate. At $\kappa=1.0$ clipping stops, but 50 Hz
 still fails. Only $\kappa=1.0$ **and** ≥100 Hz reproduces the walk — 1.05 m,
-against 0.99 m at 500 Hz.
+against 0.99 m at 500 Hz. (The "200 Hz" column is really 250 Hz — the rounding
+from the decimation slide.)
+
+Note the $\kappa = 0.6$ and $1.0$ rows at 50 Hz: they travel *further* than the
+walk (about 1.55 m) and then fall — lurching forward, not walking.
 
 ---
 
@@ -363,28 +890,31 @@ against 0.99 m at 500 Hz.
 ```{python}
 #| fig-align: center
 scales, rates = (0.3, 0.6, 1.0), (50, 100, 200)
-dist = np.array([[grid[(s, hz)][0] for hz in rates] for s in scales])
-clip = np.array([[grid[(s, hz)][1] for hz in rates] for s in scales])
+dist = np.array([[grid[(s, hz)]["x"] for hz in rates] for s in scales])
+clip = np.array([[grid[(s, hz)]["clip"] for hz in rates] for s in scales])
 fig, (ax0, ax1) = plt.subplots(1, 2, figsize=(9.6, 3.6), gridspec_kw={"width_ratios": [1.3, 1]})
-ax0.imshow(dist, cmap="Blues", vmin=0, vmax=1.1, origin="lower")
+walked = np.array([[0.0 if grid[(s, hz)]["fell"] else 1.0 for hz in rates] for s in scales])
+ax0.imshow(walked, cmap="Blues", vmin=-0.3, vmax=1.3, origin="lower")
 for i, s in enumerate(scales):
     for j, hz in enumerate(rates):
-        x, c, fell = grid[(s, hz)]
-        ax0.text(j, i, f"{x:+.2f} m\n{'fell' if fell else 'walked'}", ha="center", va="center",
-                 fontsize=8, color="w" if x > 0.6 else "k")
-ax0.set_xticks(range(3), [f"{hz} Hz" for hz in rates])
+        g_ = grid[(s, hz)]
+        ax0.text(j, i, f"{g_['x']:+.2f} m\n{'fell' if g_['fell'] else 'walked'}", ha="center", va="center",
+                 fontsize=8, color="k" if g_["fell"] else "w")
+ax0.set_xticks(range(3), [f"{hz} Hz" + (f"\n(really {grid[(1.0, hz)]['hz']:.0f})" if hz == 200 else "") for hz in rates])
 ax0.set_yticks(range(3), [f"$\\kappa$ = {s}" for s in scales])
-ax0.set_title("distance the week 4 walker travels inside the env", fontsize=10)
-ax1.bar([f"$\\kappa$ = {s}" for s in scales], clip[:, 0], color="#e8743b")
+ax0.set_title("the week 4 walker inside the env (dark = survived)", fontsize=10)
+bars = ax1.bar([f"$\\kappa$ = {s}" for s in scales], clip[:, 0], color=ORANGE)
+ax1.bar_label(bars, fmt="%.1f%%", fontsize=8)
 ax1.set_ylabel("% of actions clipped at ±1 (at 50 Hz)")
 ax1.set_title("how often the action space is too small", fontsize=10); ax1.grid(axis="y", alpha=0.3)
 fig.tight_layout(); plt.show()
 ```
 
-Only the top-right corner walks. Reading down the right column: the rate was
-fine and the actions were being cut off. Reading across the top row: the
-actions were fine and the rate was too slow. Two separate constraints, each
-sufficient to break it.
+Only the top row's two right-hand cells walk. Reading down the right column:
+the rate was fine and the actions were being cut off. Reading across the top
+row: the actions were fine and 50 Hz was too slow. Two separate constraints,
+each sufficient to break it. (Cells are shaded by *survived*, not by distance —
+distance alone would rank the 1.55 m falls above the walks.)
 
 ---
 
@@ -407,12 +937,21 @@ you have committed to.
 
 ---
 
-## One trap in that table
+## One trap in that table {.smaller}
 
-Compare returns across the three control rates. They differ by roughly 5×.
+```{python}
+for key in ((1.0, 100), (1.0, 200), (0.3, 50), (0.3, 200)):
+    g_ = grid[key]
+    print(f"kappa {key[0]}  {g_['hz']:4.0f} Hz: return {g_['ret']:7.1f}  in {g_['steps']:5d} steps"
+          f"  over {g_['t']:4.1f} s   travelled {g_['x']:+.2f} m  ({'fell' if g_['fell'] else 'walked'})")
+```
 
-Nothing got better. **A 200 Hz episode contains four times as many steps as a
-50 Hz one**, and each step adds reward.
+The two walks go the same 1.05 m in the same 12 s, and the 250 Hz one scores
+**2.5×** the 100 Hz one. The two $\kappa = 0.3$ runs fall at the same moment
+after the same ~0.24 m, and the 250 Hz one scores **5×** more.
+
+Nothing got better. **A 250 Hz episode has 2.5× as many steps as a 100 Hz one,
+and 5× as many as a 50 Hz one**, and each step adds reward.
 
 > Return is only comparable between runs that share an episode structure.
 
@@ -430,12 +969,12 @@ for key, value in info.items():
     print(f"  {key:18s} {value:+.4f}")
 ```
 
-Four terms and an alive bonus:
+$${\color{#2a9d5c}{r}} = 1.5\,\underbrace{e^{-(v-0.5)^2/0.25}}_{\text{tracking}} + 0.5\,\underbrace{(-g_z)}_{\text{upright}} - 0.01\,\underbrace{\textstyle\sum_j {\color{#e8743b}{a_j^2}}}_{\text{effort}} - 0.05\,\underbrace{\textstyle\sum_j ({\color{#e8743b}{a_j}} - {\color{#e8743b}{a_j^{\text{prev}}}})^2}_{\text{smooth}} + 0.5\,\underbrace{1}_{\text{alive}}$$
 
-- **track** a target forward velocity — the actual objective
-- stay **upright** — shaping, to make early learning less hopeless
-- pay for **effort** and for **jerky** actions — so it does not thrash
-- **alive bonus** — so early death is worse than mediocre survival
+- $v$ — forward velocity of the pelvis (m/s); target 0.5
+- $-g_z$ — the vertical component of the body-frame gravity direction, sign
+  flipped: 1 upright, $\cos\theta$ at tilt $\theta$
+- `stand_still` and `air_time` are printed too, but their weights are 0 this week (week 9 turns them on)
 
 Every one of those is a decision, and every one is exploitable. **Week 9 breaks
 them on purpose.**
@@ -453,13 +992,14 @@ ax0.plot(v, DEFAULT_REWARD["tracking"] * np.exp(-((v - env.target_velocity) ** 2
 ax0.axvline(env.target_velocity, color="0.5", ls=":"); ax0.set_xlabel("forward velocity (m/s)")
 ax0.set_title("tracking: $1.5\\,e^{-(v-0.5)^2/0.25}$", fontsize=9)
 ax1.plot(tilt, DEFAULT_REWARD["upright"] * np.cos(np.radians(tilt)), lw=2, color="#2a9d5c")
-ax1.axvline(np.degrees(env.max_tilt), color="#c0392b", ls="--")
-ax1.text(np.degrees(env.max_tilt) + 2, 0.4, "terminate", color="#c0392b", fontsize=8)
+tilt_end = np.degrees(np.arcsin(env.max_tilt))
+ax1.axvline(tilt_end, color="#c0392b", ls="--")
+ax1.text(tilt_end + 2, 0.4, f"terminate\n({tilt_end:.0f}°)", color="#c0392b", fontsize=8)
 ax1.set_xlabel("tilt from vertical (deg)"); ax1.set_title("upright: $0.5\\,(-g_z)$", fontsize=9)
 ax2.plot(a, DEFAULT_REWARD["effort"] * 12 * a**2, lw=2, color="#e8743b", label="effort: all 12 joints at $a$")
 ax2.plot(a, DEFAULT_REWARD["smooth"] * 12 * a**2, lw=2, color="#8e44ad", label="smooth: all 12 change by $a$")
 ax2.axhline(DEFAULT_REWARD["alive"], color="k", ls=":", label="alive bonus")
-ax2.set_xlabel("action"); ax2.legend(fontsize=7, loc="center right"); ax2.set_title("the small terms", fontsize=9)
+ax2.set_xlabel("action"); ax2.legend(fontsize=7, loc="lower center"); ax2.set_title("the small terms", fontsize=9)
 for ax in (ax0, ax1, ax2):
     ax.grid(alpha=0.3)
 fig.tight_layout(); plt.show()
@@ -533,11 +1073,15 @@ return by term: tracking +274.2, upright +249.9, effort +0.0, smooth +0.0, alive
 3. **Torque actions.** Add a mode that outputs torques instead of residuals.
    Roll out the zero action in each. Why does one stand and the other collapse?
 4. **Find the rate limit.** Bisect the control rate between 50 and 100 Hz at
-   $\kappa = 1.0$. Where exactly does the walker start surviving?
+   $\kappa = 1.0$. Where exactly does the walker start surviving? (Remember the
+   decimation is rounded: list which rates you can actually get.)
 5. **Fair comparison.** Design a metric that compares 50 Hz and 200 Hz runs
    honestly. Show it ranks the runs differently from raw return.
 6. **Truncation bug.** Explain what a policy would learn if truncation were
    treated as termination. Which of our four reward terms would it exploit?
+7. **Horizon by hand.** For $\gamma = 0.98$ at 50 Hz, compute $H$ in decisions
+   and in seconds, and the half-life. Then say what $\gamma$ gives the *same*
+   2 s horizon at 100 Hz.
 
 ---
 

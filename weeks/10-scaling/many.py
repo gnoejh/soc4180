@@ -16,8 +16,9 @@ Two ways to get more robot-steps out of one laptop, both measured here:
 The script builds each scene, walks it with the week 4 controller tiled
 across the robots, prints robot-steps/s and the cost per robot, compares it
 with `predict_rate` (a model you correct), runs the process benchmark, and
-turns the best rate into hours for 150 million steps -- the Berkeley
-Humanoid budget. Then it opens the simulator on the largest scene, walking.
+turns the best rate into hours for 150 million training steps -- the Berkeley
+Humanoid budget. A training step is one decision at 50 Hz = 10 physics steps,
+so 150M training steps are 1.5 billion physics steps. Then it opens the simulator on the largest scene, walking.
 
     --robots 1 2 4 8     robots per scene to try     --seconds 2   per measurement
     --procs 1 2 4 8      processes to try (one robot each)
@@ -139,7 +140,7 @@ def main(argv=None) -> int:
     one = soc4180.load_g1()
     single = _bench_one(1.0)
     print(f"{os.cpu_count()} CPU cores. One G1 alone, standing: {single:,.0f} physics steps/s "
-          f"({single / 500:.0f}x real time); 150M steps at that rate = {150e6 / single / 3600:.1f} h")
+          f"({single / 500:.0f}x real time); 150M training steps (x10 physics) = {150e6 * 10 / single / 3600:.1f} h")
 
     # -- 2. more robots per scene ------------------------------------------------------------------
     # Two measurements per scene: holding the crouch (physics only, what
@@ -181,7 +182,7 @@ def main(argv=None) -> int:
         print(f"   {p:2d} processes: {total:9,.0f} robot-steps/s   ({total / single:4.1f}x one process; wall {wall:.1f} s)")
 
     # -- 4. the budget -------------------------------------------------------------------------------------
-    print(f"\nbest rate here {best:,.0f} robot-steps/s: 150M steps = {150e6 / best / 3600:.1f} hours. "
+    print(f"\nbest rate here {best:,.0f} robot-steps/s: 150M training steps (1.5e9 physics steps) = {150e6 * 10 / best / 3600:.1f} hours. "
           f"Berkeley Humanoid trains 150M steps at 8192 envs on one GPU in a few hours -- a different kind of processor.")
 
     if args.no_viewer or soc4180.is_colab() or largest is None:

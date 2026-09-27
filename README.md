@@ -33,6 +33,14 @@ result. Every deck is readable in a browser at
 | [14](weeks/14-vision/) | Learning from pixels — a camera, a CNN, visual randomisation | [deck](https://gnoejh.github.io/soc4180/14-vision/slides.html) | [![Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gnoejh/soc4180/blob/main/weeks/14-vision/lab.ipynb) | [`lab_look.py`](weeks/14-vision/lab_look.py) (graded game, edit [`eyes.py`](weeks/14-vision/eyes.py)), [`look.py`](weeks/14-vision/look.py) | GPU (render) |
 | [15](weeks/15-language/) | Language — grounding words in pixels, a tiny VLA, an agent | [deck](https://gnoejh.github.io/soc4180/15-language/slides.html) | [![Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gnoejh/soc4180/blob/main/weeks/15-language/lab.ipynb) | [`lab_agent.py`](weeks/15-language/lab_agent.py) (graded game, edit [`instructions.py`](weeks/15-language/instructions.py)), [`ground.py`](weeks/15-language/ground.py) | GPU (render) |
 
+Every deck derives its equations step by step, defines each symbol, draws each
+concept, and reads its printed numbers aloud; every number on a slide is printed by
+a cell in the deck.
+
+Every deck derives its equations step by step, defines each symbol, draws each
+concept, and reads its printed numbers aloud; every number on a slide is printed
+by a cell in the deck.
+
 00 is the day-one lecture, taught before 01. 02b is 02's
 **lab class** — the same robot read as code — not a separate week.
 

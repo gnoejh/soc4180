@@ -23,13 +23,37 @@ jupyter: python3
 
 ## Where we are going
 
-By week 5 you will make a humanoid walk using nothing but geometry and physics
+By week 4 you will make a humanoid walk using nothing but geometry and physics
 you derived yourself.
 
-By week 11 you will replace that hand-written controller with a policy the robot
-learned on its own.
+From week 7 on you will replace hand-written control with policies the robot
+learns on its own (weeks 8–10 train them, week 12 makes one survive pushes).
 
-Today: why simulation, and how to drive one.
+Today: why simulation, and how to drive one — the file that describes a robot
+(**MJCF**), the arrays it compiles into (`qpos`, `qvel`), and the loop that
+moves it forward in time (the **integrator**), including the one way it fails.
+
+This is **Layers 1 and 2** of the week-0 stack: the physics engine and the
+robot model.
+
+---
+
+## Colour code for the week {.smaller}
+
+The same colours mean the same things in every equation and every drawing:
+
+| symbol | meaning | in MuJoCo | colour |
+| --- | --- | --- | --- |
+| ${\color{#3b7dd8}{q}}$ | **position**: joint angles, and where the base is | `data.qpos` | <span style="color:#3b7dd8">blue</span> |
+| ${\color{#2a9d5c}{v = \dot q}}$ | **velocity**: how fast each of those is changing | `data.qvel` | <span style="color:#2a9d5c">green</span> |
+| ${\color{#e8743b}{\tau,\ F}}$ | a **torque** (on a hinge) or a **force** (on a body) | `qfrc_*` | <span style="color:#e8743b">orange</span> |
+| ${\color{#c0392b}{h}}$ | the **timestep**: how far one step jumps in time | `model.opt.timestep` | <span style="color:#c0392b">red</span> |
+| ${\color{#8e44ad}{\omega}}$ | a spring's **natural frequency**: how fast it would oscillate, rad/s | — | <span style="color:#8e44ad">purple</span> |
+
+Plain letters are constants you can read off the model: $m$ a mass (kg),
+$k$ a stiffness (N/m, or N·m/rad for a hinge — the servo gain `kp` is one),
+$g = 9.81\ \mathrm{m/s^2}$, $\zeta$ ("zeta") a damping ratio. A subscript $n$
+is the step number, so ${\color{#3b7dd8}{q_n}}$ is the position after $n$ steps.
 
 ---
 
@@ -416,6 +440,62 @@ head and arms.
 
 ---
 
+## The G1's tree, drawn {.smaller}
+
+The same `body_parentid` array, drawn instead of printed. Every line is one
+parent → child link, and every child hangs on its parent by exactly one joint.
+
+```{python}
+#| fig-align: center
+import numpy as np
+import matplotlib.pyplot as plt
+
+par = model.body_parentid
+kids = {b: [c for c in range(1, model.nbody) if par[c] == b] for b in range(model.nbody)}
+row, depth = {}, {0: 0}
+def place(b, slot=[0]):
+    """Each chain's tip gets its own row; a parent sits level with the middle of its children."""
+    for c in kids[b]:
+        depth[c] = depth[b] + 1
+        place(c)
+    if kids[b]:
+        row[b] = np.mean([row[c] for c in kids[b]])
+    else:
+        row[b] = slot[0]; slot[0] += 1
+place(0)
+
+def chain_colour(b):
+    n = mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_BODY, b) or "world"
+    if "left" in n and ("hip" in n or "knee" in n or "ankle" in n):  return "#3b7dd8"
+    if "right" in n and ("hip" in n or "knee" in n or "ankle" in n): return "#2a9d5c"
+    if "left" in n:  return "#8e44ad"
+    if "right" in n: return "#e8743b"
+    return "0.35"
+
+fig, ax = plt.subplots(figsize=(11, 4.6))
+for b in range(1, model.nbody):
+    ax.plot([depth[par[b]], depth[b]], [-row[par[b]], -row[b]], color="0.75", lw=1.2, zorder=1)
+for b in range(model.nbody):
+    n = (mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_BODY, b) or "world")
+    short = n.replace("_link", "").replace("left_", "L ").replace("right_", "R ")
+    ax.scatter(depth[b], -row[b], s=45, color=chain_colour(b), zorder=2)
+    ax.text(depth[b] - 0.05, -row[b] + 0.12, short, rotation=30, ha="left", va="bottom", fontsize=7.5)
+ax.set_xlim(-0.4, max(depth.values()) + 1.3); ax.set_ylim(-max(row.values()) - 0.4, 1.0); ax.axis("off")
+ax.set_title("the G1's body tree, root on the left: blue left leg, green right leg, "
+             "purple left arm, orange right arm, grey trunk", fontsize=9)
+fig.tight_layout(); plt.show()
+print("deepest body:", mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_BODY, max(depth, key=depth.get)),
+      "at depth", max(depth.values()))
+```
+
+Read it left to right: `world` → `pelvis` (through the free joint) → five
+chains. **A body's position depends only on the joints on its path to the
+root** — the path from a hand back up passes through the waist and never
+through a leg, which is why a knee cannot move a hand. Week 2b measures exactly
+that.
+
+---
+
 ## Every link is drawn twice {.smaller}
 
 ```{python}
@@ -470,6 +550,87 @@ orientation as a 4-number quaternion for 3 real freedoms.
 
 The G1 is one `freejoint` plus 29 hinges — `nq` = 7 + 29 = 36, `nv` = 6 + 29 = 35.
 The gap you met a few slides ago is now fully explained.
+
+---
+
+## `qpos` and `qvel`, drawn {.smaller}
+
+```{python}
+#| fig-align: center
+fj = 0                                           # joint 0 is the free joint
+print("free joint : qpos", model.jnt_qposadr[fj], "..", model.jnt_qposadr[fj] + 6,
+      "| qvel", model.jnt_dofadr[fj], "..", model.jnt_dofadr[fj] + 5)
+kn = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, "left_knee_joint")
+print("left knee  : qpos", model.jnt_qposadr[kn], "| qvel", model.jnt_dofadr[kn])
+
+segs_q = [("base\nx y z", 3, "#3b7dd8"), ("base quaternion\nw x y z", 4, "#8e44ad"),
+          ("left leg", 6, "0.55"), ("right leg", 6, "0.7"), ("waist", 3, "0.55"),
+          ("left arm", 7, "0.7"), ("right arm", 7, "0.55")]
+segs_v = [("base\nlinear", 3, "#2a9d5c"), ("base\nangular", 3, "#8e44ad")] + segs_q[2:]
+fig, ax = plt.subplots(figsize=(11, 2.7))
+for row, segs, label in ((1, segs_q, f"qpos ({model.nq})"), (0, segs_v, f"qvel ({model.nv})")):
+    x = 0
+    for name, n, col in segs:
+        for i in range(n):
+            ax.add_patch(plt.Rectangle((x + i, row), 0.95, 0.6, color=col, alpha=0.85))
+        ax.text(x + n / 2, row + 0.75 if row else row - 0.25, name, ha="center",
+                va="bottom" if row else "top", fontsize=7.5)
+        x += n
+    ax.text(-0.6, row + 0.3, label, ha="right", va="center", fontsize=9, weight="bold")
+qa, da = model.jnt_qposadr[kn], model.jnt_dofadr[kn]
+ax.annotate("", xy=(da + 0.47, 0.62), xytext=(qa + 0.47, 0.98), arrowprops=dict(arrowstyle="->", color="#c0392b", lw=1.8))
+ax.text(qa + 1.4, 0.8, f"left knee: qpos[{qa}] ↔ qvel[{da}]", color="#c0392b", fontsize=8, va="center")
+ax.set_xlim(-6, 37); ax.set_ylim(-0.9, 2.2); ax.axis("off")
+fig.tight_layout(); plt.show()
+```
+
+- **Top row, `qpos`:** 3 numbers say *where* the pelvis is (metres), 4 say *how
+  it is turned* (a quaternion), then one angle per hinge (radians).
+- **Bottom row, `qvel`:** 3 for how fast the pelvis moves, but only **3** for how
+  fast it turns (an angular velocity, rad/s), then one rate per hinge.
+- Because the base spends one more number in `qpos`, **every hinge sits one slot
+  further along in `qpos` than in `qvel`** (the red arrow). Always look addresses
+  up with `jnt_qposadr` and `jnt_dofadr`; never reuse one index on the other array.
+
+---
+
+## Four numbers for three turns: the quaternion {.smaller}
+
+A turn by angle $\theta$ about a unit axis $\mathbf{n}$ is stored as
+
+$$\mathbf{u} = (w,\ x,\ y,\ z) = \big(\cos\tfrac{\theta}{2},\ \ \mathbf{n}\,\sin\tfrac{\theta}{2}\big),
+\qquad w^2 + x^2 + y^2 + z^2 = 1 .$$
+
+- $\mathbf{n}$ — the axis you turn about (3 numbers, length 1); $\theta$ — how far, in radians
+- the **scalar $w$ comes first** in MuJoCo; `(1, 0, 0, 0)` means "not turned"
+- the length-1 rule is **one constraint on four numbers**, leaving **3 freedoms** — so `nv` counts 3
+
+Why not three angles? Three angles have a pose where two of them do the same
+thing and a freedom disappears (week 2 measures it). Four numbers with one rule
+never do. And why only 3 numbers in `qvel`? A velocity lives in the directions
+you can actually move — the angular velocity ${\color{#2a9d5c}{\boldsymbol\omega}}$,
+3 numbers, rad/s.
+
+That means the integrator cannot do "quaternion + $h$ × velocity" — the sizes do
+not even match. It **turns** the quaternion instead, by angle
+$h\,|{\color{#2a9d5c}{\boldsymbol\omega}}|$ about ${\color{#2a9d5c}{\boldsymbol\omega}}$, every step. Test it:
+spin a free box at 1 rad/s about $z$ for 1 s, with gravity off.
+
+```{python}
+BOX = """<mujoco><option gravity="0 0 0"/><worldbody><body>
+         <freejoint/><geom type="box" size=".1 .2 .3"/></body></worldbody></mujoco>"""
+box = mujoco.MjModel.from_xml_string(BOX)
+db = mujoco.MjData(box)
+db.qvel[3:6] = [0, 0, 1.0]                 # angular velocity: 1 rad/s about z
+while db.time < 1.0 - 1e-9:
+    mujoco.mj_step(box, db)
+print("quaternion after 1 s :", np.round(db.qpos[3:7], 6))
+print("cos(1/2), sin(1/2)   :", round(np.cos(0.5), 6), round(np.sin(0.5), 6))
+print("length |u| - 1       :", f"{np.linalg.norm(db.qpos[3:7]) - 1:.1e}")
+```
+
+One radian about $z$ gives exactly $(\cos\frac12, 0, 0, \sin\frac12)$, and the
+quaternion is still length 1 after 500 steps.
 
 ---
 
@@ -599,19 +760,88 @@ fall over, only swing.
 
 ---
 
+## Frames: every `pos` is measured from the parent {.smaller}
+
+Each `<body>` is a **frame** — an origin plus three axes — and its `pos` is
+written in its parent's frame. Bend the hip 1.2 rad and the knee −0.8 rad (the
+pose the next slide holds) and let MuJoCo place everything:
+
+```{python}
+#| fig-align: center
+pose = np.array([1.2, -0.8])
+dl = mujoco.MjData(leg); dl.qpos[:] = pose
+mujoco.mj_forward(leg, dl)                 # joint angles -> every frame in world coordinates
+
+fig, ax = plt.subplots(figsize=(8.8, 4.2))
+ax.axhline(0, color="0.3", lw=2)
+for b, col in ((0, "0.3"), (1, "#3b7dd8"), (2, "#2a9d5c")):
+    o, R = dl.xpos[b], dl.xmat[b].reshape(3, 3)
+    for axis, c in ((0, "#c0392b"), (2, "#3b7dd8")):         # x axis red, z axis blue
+        tip = o + 0.18 * R[:, axis]
+        ax.annotate("", xy=(tip[0], tip[2]), xytext=(o[0], o[2]),
+                    arrowprops=dict(arrowstyle="->", lw=1.8, color=c))
+    ax.plot(o[0], o[2], "o", color=col, ms=8, zorder=3)
+    if b:
+        end = o + R @ np.array([0, 0, -0.4])                 # the capsule, in the body's own frame
+        ax.plot([o[0], end[0]], [o[2], end[2]], lw=9, color=col, alpha=0.35, solid_capstyle="round")
+names = ["world  (0, 0, 0)", "upper_leg  pos = 0 0 1\n(in world)", "lower_leg  pos = 0 0 -0.4\n(in upper_leg's frame)"]
+for b, txt in enumerate(names):
+    left = b == 2                                            # keep the shin's label off the thigh
+    ax.text(dl.xpos[b][0] + (-0.06 if left else 0.05), dl.xpos[b][2] + (0.1 if b == 1 else 0.05), txt, fontsize=8.5,
+            ha="right" if left else "left")
+ax.set_xlim(-1.25, 0.65); ax.set_ylim(-0.1, 1.3); ax.set_aspect("equal")
+ax.set_xlabel("x (m)"); ax.set_ylabel("z (m)"); ax.grid(alpha=0.3)
+ax.set_title("each body's frame: red = its x axis, blue = its z axis (the hinges turn about y, into the page)", fontsize=9)
+fig.tight_layout(); plt.show()
+```
+
+The shin's `pos` never changed — it is still `0 0 -0.4` — but the thigh's frame
+turned, so the knee landed somewhere else. Positive rotation about $+y$ swings
+a downward leg towards $-x$: the right-hand rule, thumb along $+y$ (into the
+page here).
+
+---
+
+## Frames: the rule, checked {.smaller}
+
+$${\color{#3b7dd8}{\mathbf{p}_{\text{child}}}} = \mathbf{p}_{\text{parent}} + R_{\text{parent}}\;\mathbf{pos}_{\text{child}}$$
+
+- $\mathbf{p}$ — a frame's origin in **world** coordinates (`data.xpos`)
+- $R_{\text{parent}}$ — the parent frame's 3×3 rotation, its axes as columns (`data.xmat`)
+- $\mathbf{pos}_{\text{child}}$ — the number you typed in the XML (`model.body_pos`)
+
+Read it as: start at the parent's origin, then walk the typed offset *along the
+parent's own axes*, wherever they now point. Check it against MuJoCo for the
+pose on the last slide:
+
+```{python}
+R_up = dl.xmat[1].reshape(3, 3)
+predicted = dl.xpos[1] + R_up @ leg.body_pos[2]
+print("lower_leg origin, from MuJoCo            :", np.round(dl.xpos[2], 4))
+print("parent origin + R_parent @ pos, by hand   :", np.round(predicted, 4))
+print("difference                                :", f"{np.abs(predicted - dl.xpos[2]).max():.1e} m")
+```
+
+Exactly zero: this is how MuJoCo places every child's origin (orientations
+compose the same way). Apply it from the root outwards and you have every body
+in the robot — week 2 builds it into forward kinematics.
+
+---
+
 ## Your robot, servos on and off {.smaller}
 
 Start it bent, and ask the servos to **hold that bent pose** — a pose gravity
 would never choose.
 
 ```{python}
-TARGET = np.array([1.2, -0.8])          # hip forward, knee bent
+TARGET = np.array([1.2, -0.8])          # the pose drawn on the last slide
 
 data_leg = mujoco.MjData(leg)
 data_leg.qpos[:] = TARGET
 data_leg.ctrl[:] = TARGET               # servos: stay exactly where you are
 servo = soc4180.render_rollout(leg, data_leg, duration=3.0, fps=30, width=480, height=360)
 print("servos on :", np.round(data_leg.qpos, 3), " droop:", np.round(data_leg.qpos - TARGET, 3))
+data_leg_servo_q = data_leg.qpos.copy()   # kept for the next slide
 
 data_leg = mujoco.MjData(leg)
 data_leg.qpos[:] = TARGET
@@ -634,11 +864,63 @@ wins a little. That residue is where week 5 begins.
 
 ---
 
+## The droop, derived {.smaller}
+
+The servo's torque on each joint is a spring plus a damper:
+
+$${\color{#e8743b}{\tau}} = k_p\,(\text{ctrl} - {\color{#3b7dd8}{q}}) - k_v\,{\color{#2a9d5c}{\dot q}}$$
+
+- $k_p$ — stiffness, N·m per radian of error (200 in our file)
+- $k_v$ — damping, N·m per rad/s; `dampratio="1"` told the compiler to pick it for us
+- $\text{ctrl}$ — the angle you asked for; ${\color{#3b7dd8}{q}}$ the angle it has
+
+**Step 1 — at rest** the velocity is zero, so the damper does nothing:
+${\color{#e8743b}{\tau}} = k_p(\text{ctrl} - {\color{#3b7dd8}{q}})$.
+
+**Step 2 — at rest nothing accelerates**, so the servo's torque must exactly
+cancel gravity's torque ${\color{#e8743b}{\tau_g}}({\color{#3b7dd8}{q}})$ on that joint:
+$k_p(\text{ctrl} - {\color{#3b7dd8}{q}}) = {\color{#e8743b}{\tau_g}}$.
+
+**Step 3 — solve for the error:**
+$${\color{#3b7dd8}{q}} - \text{ctrl} = -\,{\color{#e8743b}{\tau_g}} / k_p .$$
+
+**A non-zero load needs a non-zero error.** A proportional servo makes torque
+only by being wrong, so to hold up a leg it must stay a little wrong.
+
+---
+
+## The droop, predicted {.smaller}
+
+MuJoCo reports the gravity torque at any pose as `qfrc_bias` (at rest it is
+gravity alone), so Step 3 predicts the droop before simulating anything:
+
+```{python}
+d0 = mujoco.MjData(leg); d0.qpos[:] = TARGET
+mujoco.mj_forward(leg, d0)
+kp_leg = leg.actuator_gainprm[:, 0]
+print("gravity torque at TARGET  :", np.round(d0.qfrc_bias, 2), "N·m  (hip, knee)")
+print("predicted droop  -tau_g/kp :", np.round(-d0.qfrc_bias / kp_leg, 4), "rad")
+
+q = TARGET.copy()                          # Step 3 used tau_g at TARGET; the leg is really at q
+for _ in range(20):
+    d0.qpos[:] = q; mujoco.mj_forward(leg, d0)
+    q = TARGET - d0.qfrc_bias / kp_leg     # re-evaluate gravity where the leg actually is
+print("same, with tau_g at the drooped pose:", np.round(q - TARGET, 4), "rad")
+print("measured after 3 s (last slide)     :", np.round(data_leg_servo_q - TARGET, 4), "rad")
+```
+
+The first guess is a few per cent off because gravity's torque changes as the
+leg sags; evaluate it where the leg actually ends up and the prediction agrees
+with the simulation. **Nothing in the simulator is magic: the servo equation
+and Newton's balance give the number.**
+
+---
+
 ## The droop, against the gain {.smaller}
 
-A proportional servo produces torque only through its error, so holding a load
-means holding an error: $\tau = k_p(\text{ctrl} - q)$ balances gravity's
-torque $\tau_g$ at a droop of $q - \text{ctrl} = -\tau_g / k_p$.
+Step 3 says the droop is ${\color{#3b7dd8}{q}} - \text{ctrl} = -{\color{#e8743b}{\tau_g}}/k_p$:
+double the gain, halve the error. Test that across a range of gains
+(`LEG.replace` edits the XML text, then it is recompiled):
 
 ```{python}
 #| fig-align: center
@@ -705,6 +987,10 @@ print(f"after   t={d.time:.3f}s  pelvis z={d.qpos[2]:.6f}  max |qvel|={np.abs(d.
 print(f"\none step advanced time by exactly opt.timestep = {model.opt.timestep} s")
 ```
 
+Reading it: the clock moved by exactly one timestep, and the pelvis moved
+**up** by 0.018 mm — the keyframe starts the feet a hair inside the floor and
+the floor is pushing them out (*Watching the floor push back*, below).
+
 That is the whole simulation. Everything else in this course is a decision about
 what to write into `data.ctrl` before each step:
 
@@ -717,6 +1003,350 @@ while not done:
 `mj_step` advances time. Its cousin **`mj_forward`** computes positions from
 `qpos` *without* advancing time — that is what draws a pose without letting the
 robot fall over, and why `render_poses` exists for the kinematics weeks.
+
+---
+
+## Inside `mj_step`: the equation it solves {.smaller}
+
+Newton's $F = ma$, written for a whole tree of bodies at once, in joint coordinates:
+
+$$M({\color{#3b7dd8}{q}})\;{\color{#2a9d5c}{\dot v}} \;+\; {\color{#e8743b}{c}}({\color{#3b7dd8}{q}}, {\color{#2a9d5c}{v}})
+\;=\; {\color{#e8743b}{\tau}} \;+\; {\color{#e8743b}{\tau_{\text{contact}}}}$$
+
+- $M({\color{#3b7dd8}{q}})$ — the **mass matrix**, `nv × nv` (35 × 35): the "$m$" of $F = ma$ for every joint at once. It depends on the pose — a stretched arm is harder to swing than a folded one
+- ${\color{#2a9d5c}{\dot v}}$ — the accelerations, `data.qacc`: the unknown
+- ${\color{#e8743b}{c}}$ — gravity plus the forces that come from moving (Coriolis, centrifugal), `qfrc_bias`
+- ${\color{#e8743b}{\tau}}$ — what the motors push with, `qfrc_actuator` (plus springs in the model, `qfrc_passive`)
+- ${\color{#e8743b}{\tau_{\text{contact}}}}$ — the floor and the joint limits pushing back, `qfrc_constraint`
+
+`mj_step` does two things, in order: **(1) solve** this equation for
+${\color{#2a9d5c}{\dot v}}$, then **(2) integrate**: use ${\color{#2a9d5c}{\dot v}}$ to jump
+${\color{#3b7dd8}{q}}$ and ${\color{#2a9d5c}{v}}$ forward by one timestep ${\color{#c0392b}{h}}$. Check (1) on the standing G1:
+
+```{python}
+d = soc4180.keyframe_data(model, "stand")
+for _ in range(500):
+    mujoco.mj_step(model, d)
+mujoco.mj_forward(model, d)                     # recompute every quantity at this state
+M = np.zeros((model.nv, model.nv))
+mujoco.mj_fullM(model, d, M)                    # the dense 35 x 35 mass matrix
+lhs = M @ d.qacc + d.qfrc_bias
+rhs = d.qfrc_actuator + d.qfrc_passive + d.qfrc_constraint
+print(f"largest term       : {np.abs(rhs).max():8.2f} N or N·m")
+print(f"|left - right| max : {np.abs(lhs - rhs).max():8.1e}")
+```
+
+Both sides agree to round-off. Everything the simulator "knows" about physics is
+in that one line; the rest is how to take step (2) without lying.
+
+---
+
+## One call of `mj_step`, drawn {.smaller}
+
+```{python}
+#| fig-align: center
+from matplotlib.patches import FancyBboxPatch
+fig, ax = plt.subplots(figsize=(10.5, 3.3)); ax.axis("off"); ax.set_xlim(0, 10.5); ax.set_ylim(0, 3.3)
+boxes = [(0.2, "state\n$q_n,\\ v_n$\n(qpos, qvel)", "#3b7dd8"),
+         (2.3, "your controller\nwrites ctrl", "0.45"),
+         (4.4, "forces\nactuators, gravity,\ncontacts found", "#e8743b"),
+         (6.5, "solve\n$M\\dot v = \\tau - c$\nfor $\\dot v$ (qacc)", "#2a9d5c"),
+         (8.6, "integrate\njump by $h$", "#c0392b")]
+for x, txt, col in boxes:
+    ax.add_patch(FancyBboxPatch((x, 1.3), 1.7, 1.4, boxstyle="round,pad=0.05", fc=col, alpha=0.18, ec=col, lw=1.5))
+    ax.text(x + 0.85, 2.0, txt, ha="center", va="center", fontsize=9)
+for x in (1.9, 4.0, 6.1, 8.2):
+    ax.annotate("", xy=(x + 0.4, 2.0), xytext=(x + 0.05, 2.0), arrowprops=dict(arrowstyle="->", lw=1.8))
+ax.annotate("", xy=(1.05, 1.25), xytext=(9.45, 1.25),
+            arrowprops=dict(arrowstyle="->", lw=1.8, color="#c0392b", connectionstyle="arc3,rad=-0.1"))
+ax.text(5.25, 0.25,"$q_{n+1},\\ v_{n+1}$: the new state, time advanced by $h$ = 0.002 s — then repeat",
+        ha="center", fontsize=9, color="#c0392b")
+fig.tight_layout(); plt.show()
+```
+
+The loop on the last slide runs this cycle 500 times per simulated second. The
+controller is the only box that is yours; the red arrow is the integrator, and
+it is the subject of the next slides.
+
+---
+
+## From a derivative to a step {.smaller}
+
+The integrator turns "how fast things change" into "where things are next".
+
+**Step 1 — the definition of velocity:**
+${\color{#2a9d5c}{v}}(t) = \dfrac{d{\color{#3b7dd8}{q}}}{dt} = \lim_{{\color{#c0392b}{h}} \to 0} \dfrac{{\color{#3b7dd8}{q}}(t + {\color{#c0392b}{h}}) - {\color{#3b7dd8}{q}}(t)}{{\color{#c0392b}{h}}}$.
+
+**Step 2 — stop before the limit.** Keep ${\color{#c0392b}{h}}$ small but finite and
+rearrange: ${\color{#3b7dd8}{q}}(t + {\color{#c0392b}{h}}) \approx {\color{#3b7dd8}{q}}(t) + {\color{#c0392b}{h}}\,{\color{#2a9d5c}{v}}(t)$.
+The same for velocity and acceleration: ${\color{#2a9d5c}{v}}(t + {\color{#c0392b}{h}}) \approx {\color{#2a9d5c}{v}}(t) + {\color{#c0392b}{h}}\,{\color{#2a9d5c}{\dot v}}(t)$.
+
+**Step 3 — count steps instead of seconds** ($t = n{\color{#c0392b}{h}}$):
+
+$${\color{#3b7dd8}{q_{n+1}}} = {\color{#3b7dd8}{q_n}} + {\color{#c0392b}{h}}\,{\color{#2a9d5c}{v_n}},
+\qquad
+{\color{#2a9d5c}{v_{n+1}}} = {\color{#2a9d5c}{v_n}} + {\color{#c0392b}{h}}\,{\color{#2a9d5c}{\dot v_n}} .$$
+
+This is **explicit (forward) Euler**: everything on the right is already known.
+
+**What it costs.** The exact motion is ${\color{#3b7dd8}{q}}(t+{\color{#c0392b}{h}}) = {\color{#3b7dd8}{q}} + {\color{#c0392b}{h}}{\color{#2a9d5c}{v}} + \tfrac12 {\color{#c0392b}{h}}^2{\color{#2a9d5c}{\dot v}} + \dots$
+(Taylor's series). Step 2 dropped the ${\color{#c0392b}{h}}^2$ term, so each step is wrong by about
+$\tfrac12{\color{#c0392b}{h}}^2{\color{#2a9d5c}{\dot v}}$; one second takes $1/{\color{#c0392b}{h}}$ steps, so the errors add up to about
+$\tfrac12{\color{#c0392b}{h}}\,{\color{#2a9d5c}{\dot v}}$ per second. **Halve the step, halve the error** — that is what
+"first-order" means.
+
+---
+
+## MuJoCo's "Euler" is *semi-implicit* {.smaller}
+
+MuJoCo makes one change to Step 3: update the velocity **first**, then move
+with the **new** velocity:
+
+$${\color{#2a9d5c}{v_{n+1}}} = {\color{#2a9d5c}{v_n}} + {\color{#c0392b}{h}}\,{\color{#2a9d5c}{\dot v_n}},
+\qquad
+{\color{#3b7dd8}{q_{n+1}}} = {\color{#3b7dd8}{q_n}} + {\color{#c0392b}{h}}\,{\color{#2a9d5c}{v_{n+1}}} .$$
+
+Check it on a dropped ball, where $\dot v = -g$ exactly. Starting at rest,
+${\color{#2a9d5c}{v_n}} = -g{\color{#c0392b}{h}}n$, and adding up $N$ position steps:
+
+- semi-implicit: $z_N = z_0 - g{\color{#c0392b}{h}}^2\,(1 + 2 + \dots + N) = z_0 - g{\color{#c0392b}{h}}^2\,\tfrac{N(N+1)}{2}$
+- explicit: the sum stops one term earlier, $z_0 - g{\color{#c0392b}{h}}^2\,\tfrac{N(N-1)}{2}$
+- exact: $z_0 - \tfrac12 g\,(N{\color{#c0392b}{h}})^2 = z_0 - g{\color{#c0392b}{h}}^2\,\tfrac{N^2}{2}$
+
+```{python}
+BALL = """<mujoco><worldbody><body pos="0 0 10">
+          <freejoint/><geom type="sphere" size="0.1"/></body></worldbody></mujoco>"""
+ball = mujoco.MjModel.from_xml_string(BALL); dball = mujoco.MjData(ball)
+N, h, g = 500, ball.opt.timestep, 9.81
+for _ in range(N):
+    mujoco.mj_step(ball, dball)
+print(f"MuJoCo after {N} steps : z = {dball.qpos[2]:.5f} m")
+print(f"semi-implicit formula : z = {10 - g * h**2 * N * (N + 1) / 2:.5f} m")
+print(f"explicit formula      : z = {10 - g * h**2 * N * (N - 1) / 2:.5f} m")
+print(f"exact physics         : z = {10 - g * (N * h)**2 / 2:.5f} m")
+```
+
+MuJoCo matches the semi-implicit formula to every printed digit. After 1 s
+($N = 500$) it is **1 cm** below the exact answer, which is $\tfrac12 g{\color{#c0392b}{h}}\,t$
+= ½ × 9.81 × 0.002 × 1 m — the first-order error of the last slide, exactly.
+One swapped line looks cosmetic. The next slide shows it is the difference
+between a spring that works and one that explodes.
+
+---
+
+## A stiff spring, one step as a matrix {.smaller}
+
+A mass $m$ on a spring of stiffness $k$ — a servo holding a joint is exactly this:
+
+$$m\,\ddot x = -k\,x \quad\Longrightarrow\quad \ddot x = -{\color{#8e44ad}{\omega}}^2 x,
+\qquad {\color{#8e44ad}{\omega}} = \sqrt{k/m}\ \ (\mathrm{rad/s}) .$$
+
+**Step 1 — one explicit Euler step is a matrix** acting on the state $(x, v)$:
+$$\begin{pmatrix} x_{n+1} \\ v_{n+1} \end{pmatrix} =
+\underbrace{\begin{pmatrix} 1 & {\color{#c0392b}{h}} \\ -{\color{#c0392b}{h}}{\color{#8e44ad}{\omega}}^2 & 1 \end{pmatrix}}_{A}
+\begin{pmatrix} x_n \\ v_n \end{pmatrix} .$$
+
+**Step 2 — $n$ steps is $A^n$.** If $A$ has an eigenvalue $\lambda$ with
+$|\lambda| > 1$, the state is multiplied by $|\lambda|$ every step and grows
+without bound. $|\lambda| \le 1$ for both eigenvalues: it stays bounded.
+
+**Step 3 — the eigenvalues** solve $(1-\lambda)^2 + {\color{#c0392b}{h}}^2{\color{#8e44ad}{\omega}}^2 = 0$, so
+$\lambda = 1 \pm i\,{\color{#c0392b}{h}}{\color{#8e44ad}{\omega}}$ and
+
+$$|\lambda| = \sqrt{1 + {\color{#c0392b}{h}}^2{\color{#8e44ad}{\omega}}^2} \;>\; 1 \quad\text{for every } {\color{#c0392b}{h}} > 0 .$$
+
+**Explicit Euler cannot hold an undamped spring at any timestep**: the swing
+grows a little every step, for ever. Smaller ${\color{#c0392b}{h}}$ only slows the growth.
+
+---
+
+## The same spring, semi-implicit: $h < 2/\omega$ {.smaller}
+
+**Step 4 — MuJoCo's order.** $v_{n+1} = v_n - {\color{#c0392b}{h}}{\color{#8e44ad}{\omega}}^2 x_n$, then
+$x_{n+1} = x_n + {\color{#c0392b}{h}}\,v_{n+1} = (1 - {\color{#c0392b}{h}}^2{\color{#8e44ad}{\omega}}^2)\,x_n + {\color{#c0392b}{h}}\,v_n$:
+
+$$A = \begin{pmatrix} 1 - {\color{#c0392b}{h}}^2{\color{#8e44ad}{\omega}}^2 & {\color{#c0392b}{h}} \\ -{\color{#c0392b}{h}}{\color{#8e44ad}{\omega}}^2 & 1 \end{pmatrix},
+\qquad \det A = 1, \qquad \operatorname{tr} A = 2 - {\color{#c0392b}{h}}^2{\color{#8e44ad}{\omega}}^2 .$$
+
+**Step 5 — read the eigenvalues off det and trace.** They solve
+$\lambda^2 - (\operatorname{tr}A)\,\lambda + \det A = 0$, so $\lambda_1\lambda_2 = 1$.
+
+- If $|\operatorname{tr}A| \le 2$ the roots are a complex pair with equal size; their product is 1, so **both have $|\lambda| = 1$**: bounded, for ever.
+- If $|\operatorname{tr}A| > 2$ the roots are real with product 1, so **one is bigger than 1**: it explodes.
+
+**Step 6 — solve** $|2 - {\color{#c0392b}{h}}^2{\color{#8e44ad}{\omega}}^2| \le 2 \iff {\color{#c0392b}{h}}^2{\color{#8e44ad}{\omega}}^2 \le 4$:
+
+$$\boxed{\;{\color{#c0392b}{h}} \;<\; \frac{2}{{\color{#8e44ad}{\omega}}} = 2\sqrt{\frac{m}{k}}\;}$$
+
+Read it aloud: **the stiffer the spring or the lighter the thing on it, the
+smaller the step must be.** Four times the stiffness halves the largest safe
+step. A spring's period is $2\pi/{\color{#8e44ad}{\omega}}$, so the rule says: take more
+than $\pi \approx 3$ steps per oscillation, or the simulation cannot see it.
+
+---
+
+## The bound, measured {.smaller}
+
+A 1 kg block on a servo spring with $k = 10\,000$ N/m and no damping:
+${\color{#8e44ad}{\omega}} = \sqrt{10\,000/1} = 100$ rad/s, so the bound says
+${\color{#c0392b}{h}} < 2/100 = 0.02$ s (the stiffness is chosen so the bound lands on
+the lab's broken timestep).
+
+```{python}
+#| fig-align: center
+def spring(h, integrator="Euler", steps=200):
+    xml = f"""<mujoco><option timestep="{h}" gravity="0 0 0" integrator="{integrator}"/>
+      <worldbody><body><joint name="x" type="slide" axis="1 0 0"/>
+      <inertial pos="0 0 0" mass="1" diaginertia="1 1 1"/></body></worldbody>
+      <actuator><position joint="x" kp="10000"/></actuator></mujoco>"""
+    m = mujoco.MjModel.from_xml_string(xml); d = mujoco.MjData(m); d.qpos[0] = 0.01
+    xs = [d.qpos[0]]
+    for _ in range(steps):
+        mujoco.mj_step(m, d); xs.append(d.qpos[0])
+    return np.array(xs), d.warning[mujoco.mjtWarning.mjWARN_BADQACC].number
+
+fig, ax = plt.subplots(figsize=(9, 3.1))
+for h, col in ((0.002, "#2a9d5c"), (0.019, "#e8743b"), (0.0199, "#c0392b")):
+    xs, bad = spring(h, steps=max(200, round(1.0 / h)))       # at least 1 s of simulated time
+    ax.plot(np.arange(len(xs)) * h, xs * 100, lw=1.2, color=col, label=f"h = {h} s  (h·ω = {h*100:.2f})")
+    print(f"h = {h:<6}  h*omega = {h*100:.2f}   largest |x| = {np.abs(xs).max()*100:5.2f} cm   BADQACC: {bad}")
+for h in (0.0201, 0.021):
+    xs, bad = spring(h)
+    print(f"h = {h:<6}  h*omega = {h*100:.2f}   BADQACC: {bad}  -> MuJoCo gave up and reset x to {xs[-1]}")
+x, v = 0.01, 0.0                                # explicit Euler, by hand, the "safe-looking" h = 0.002
+for _ in range(500):
+    x, v = x + 0.002 * v, v - 0.002 * 100**2 * x
+print(f"explicit Euler by hand, h = 0.002, after 1 s: |x| = {abs(x)*100:,.0f} cm  (started at 1 cm)")
+ax.set_xlim(0, 1.0); ax.set_xlabel("time (s)"); ax.set_ylabel("x (cm)"); ax.grid(alpha=0.3)
+ax.legend(fontsize=8, loc="upper right", ncol=3); ax.set_ylim(-12, 16)
+ax.set_title("released from 1 cm: the same spring at three timesteps (MuJoCo's Euler)", fontsize=9)
+fig.tight_layout(); plt.show()
+```
+
+---
+
+## The bound, read {.smaller}
+
+Each straight segment of the last figure is one step. The spring's period is
+$2\pi/{\color{#8e44ad}{\omega}}$ = 0.063 s, so at ${\color{#c0392b}{h}}$ = 0.0199 s the simulator gets
+barely 3 snapshots per oscillation — the "more than $\pi$ steps" rule, right at
+its edge.
+
+- **Green, ${\color{#c0392b}{h}}{\color{#8e44ad}{\omega}} = 0.2$:** a clean 1 cm oscillation, 16 Hz — what the physics says.
+- **Below the bound but close:** bounded, yet wrong — at ${\color{#c0392b}{h}}{\color{#8e44ad}{\omega}} = 1.9$ a 1 cm
+  release swings to 3.2 cm, at 1.99 to 10 cm. **Stable is not the same as accurate.**
+- **Past 2.00:** it explodes within a few steps, MuJoCo raises `BADQACC` and
+  resets the state to zero — which reads like a spring resting where it should.
+- **Explicit Euler by hand, even at the safe-looking 0.002 s:** the 1 cm swing
+  has grown to tens of metres after 1 s, as Step 3 promised.
+
+---
+
+## Damping moves the bound — in both directions {.smaller}
+
+Real servos damp: ${\color{#e8743b}{\tau}} = -k\,x - c\,v$, with damping ratio
+$\zeta = c / (2\sqrt{km})$ ($\zeta = 1$ is what `dampratio="1"` asks for). The
+integrator can use the damper's force at the **old** velocity or at the **new** one:
+
+| integrator | damper uses | step is stable when |
+| --- | --- | --- |
+| `Euler` (MuJoCo's default) | old $v_n$ (explicit) | ${\color{#c0392b}{h}}{\color{#8e44ad}{\omega}} < 2\big(\sqrt{1+\zeta^2} - \zeta\big)$ |
+| `implicitfast` (the G1's) | new $v_{n+1}$ (implicit) | ${\color{#c0392b}{h}}{\color{#8e44ad}{\omega}} < 2\big(\sqrt{1+\zeta^2} + \zeta\big)$ |
+
+**Where they come from** — the same three moves as before. **(a)** Write one step
+as a 2 × 2 matrix. **(b)** Compute its determinant and trace: explicit damping
+gives $\det A = 1 - 2\zeta{\color{#c0392b}{h}}{\color{#8e44ad}{\omega}}$ and
+$\operatorname{tr}A = 2 - {\color{#c0392b}{h}}^2{\color{#8e44ad}{\omega}}^2 - 2\zeta{\color{#c0392b}{h}}{\color{#8e44ad}{\omega}}$.
+**(c)** A 2 × 2 step is stable when $|\det A| < 1$ and $|\operatorname{tr}A| < 1 + \det A$;
+the second rule is the quadratic $({\color{#c0392b}{h}}{\color{#8e44ad}{\omega}})^2 + 4\zeta\,{\color{#c0392b}{h}}{\color{#8e44ad}{\omega}} - 4 < 0$, whose positive root is the table's
+first row. Implicit damping flips the sign of the $\zeta$ term (exercise 17).
+
+```{python}
+for z in (0.0, 1.0, 2.0):
+    print(f"zeta = {z:.1f}:   Euler  h*omega < {2*(np.sqrt(1+z*z)-z):.3f}"
+          f"     implicitfast  h*omega < {2*(np.sqrt(1+z*z)+z):.3f}")
+```
+
+With no damping both are the $2/{\color{#8e44ad}{\omega}}$ of the last slide. **An
+explicitly computed damper makes the stiff spring *less* stable** — at
+$\zeta = 1$ the safe step shrinks from $2/{\color{#8e44ad}{\omega}}$ to $0.83/{\color{#8e44ad}{\omega}}$ — while
+computing it at the new velocity makes it *more* stable, to $4.83/{\color{#8e44ad}{\omega}}$.
+
+---
+
+## Our leg at h = 0.02 s: predict, then measure {.smaller}
+
+Two joints push on each other through $M$, so the leg does not have "a hip
+$\omega$" and "a knee $\omega$". It has two **modes** — patterns in which
+both joints swing together — found from $K\boldsymbol\phi = {\color{#8e44ad}{\omega}}^2 M \boldsymbol\phi$:
+
+```{python}
+d0 = mujoco.MjData(leg); d0.qpos[:] = TARGET; mujoco.mj_forward(leg, d0)
+M_leg = np.zeros((2, 2)); mujoco.mj_fullM(leg, d0, M_leg)
+K_leg = np.diag(leg.actuator_gainprm[:, 0]); C_leg = np.diag(-leg.actuator_biasprm[:, 2])
+L = np.linalg.cholesky(M_leg); Li = np.linalg.inv(L)       # K phi = w^2 M phi, made symmetric
+w2, y = np.linalg.eigh(Li @ K_leg @ Li.T); modes = Li.T @ y
+limit = []
+for i in range(2):
+    phi = modes[:, i]
+    w = np.sqrt(w2[i]); z = (phi @ C_leg @ phi) / (2 * np.sqrt((phi @ K_leg @ phi) * (phi @ M_leg @ phi)))
+    limit.append(2 * (np.sqrt(1 + z * z) - z) / w)
+    print(f"mode {i}: shape (hip, knee) = {np.round(phi / np.abs(phi).max(), 2)}   "
+          f"omega = {w:5.1f} rad/s   zeta = {z:.2f}   Euler needs h < {limit[-1]:.4f} s")
+print(f"prediction: Euler is stable only below h = {min(limit):.4f} s\n")
+
+for integ in ("Euler", "implicitfast"):
+    for h in (0.002, 0.009, 0.0095, 0.015, 0.02):
+        m = mujoco.MjModel.from_xml_string(LEG.replace('timestep="0.002"', f'timestep="{h}" integrator="{integ}"'))
+        d = mujoco.MjData(m); d.qpos[:] = TARGET; d.ctrl[:] = TARGET; fastest = 0.0
+        while d.time < 3.0:
+            mujoco.mj_step(m, d)
+            if d.time > 2.0: fastest = max(fastest, np.abs(d.qvel).max())
+        print(f"{integ:12s} h = {h:<6}  fastest joint in the last second: {fastest:6.2f} rad/s"
+              f"   BADQACC: {d.warning[mujoco.mjtWarning.mjWARN_BADQACC].number}")
+```
+
+The fast mode is mostly knee, and coupling gives it more damping than the
+`dampratio="1"` we asked for — which, with an explicit damper, *lowers* its
+limit. Past the predicted limit, `Euler` first **chatters without any warning**
+(the leg "holds" while vibrating at tens of rad/s), then at 0.02 s fails on the
+first step and resets. `implicitfast` holds still at every step size tried.
+
+---
+
+## Why `g1.xml` says `implicitfast` {.smaller}
+
+The same test on the G1 standing for 3 s. Its stiffest servo is where the least
+mass sits on a 500 N·m/rad spring — estimated per joint as
+${\color{#8e44ad}{\omega}} \approx \sqrt{k_p / M_{ii}}$, with $M_{ii}$ the diagonal of the mass matrix:
+
+```{python}
+d = soc4180.keyframe_data(model, "stand"); mujoco.mj_forward(model, d)
+M = np.zeros((model.nv, model.nv)); mujoco.mj_fullM(model, d, M)
+dof = model.jnt_dofadr[model.actuator_trnid[:, 0]]
+w_joint = np.sqrt(model.actuator_gainprm[:, 0] / M[dof, dof])
+i = int(np.argmax(w_joint))
+zeta_i = -model.actuator_biasprm[i, 2] / (2 * np.sqrt(model.actuator_gainprm[i, 0] * M[dof[i], dof[i]]))
+print(f"stiffest servo: {mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_ACTUATOR, i)}, "
+      f"omega = {w_joint[i]:.0f} rad/s, zeta = {zeta_i:.2f};  Euler then needs h*omega < 0.83")
+print(f"   h*omega at 0.002 s = {0.002 * w_joint[i]:.2f},   at 0.004 s = {0.004 * w_joint[i]:.2f}\n")
+
+saved = (model.opt.timestep, model.opt.integrator)
+for integ in (mujoco.mjtIntegrator.mjINT_EULER, mujoco.mjtIntegrator.mjINT_IMPLICITFAST):
+    for h in (0.002, 0.004, 0.01):
+        model.opt.timestep, model.opt.integrator = h, integ
+        d = soc4180.keyframe_data(model, "stand")
+        while d.time < 3.0:
+            mujoco.mj_step(model, d)
+        print(f"{integ.name[6:]:13s} h = {h:<6} pelvis height after 3 s: {d.qpos[2]:.3f} m")
+model.opt.timestep, model.opt.integrator = saved      # put the G1 back exactly as loaded
+```
+
+At 500 Hz both integrators hold the robot — the stiffest servo sits at
+${\color{#c0392b}{h}}{\color{#8e44ad}{\omega}} \approx 0.44$, inside even `Euler`'s 0.83. Double the step and
+it crosses 0.83: `Euler` shakes the robot to the floor, `implicitfast` does not
+notice. **The integrator line in the file is a safety margin**, and the formula
+from two slides back predicted where it matters.
 
 ---
 
@@ -778,7 +1408,7 @@ answer one question —
 
 > what should the motors do, at each instant, so that it does not fall?
 
-Weeks 2–6 answer it with mathematics. Weeks 8–14 answer it with learning.
+Weeks 2–6 answer it with mathematics. Weeks 7–15 answer it with learning.
 
 ---
 
@@ -813,11 +1443,69 @@ contact forces act.
 
 ---
 
+## Why the sum must equal the weight {.smaller}
+
+**Step 1 — Newton, vertically, for the whole robot:**
+$m\,\ddot z_{\text{CoM}} = \sum_i {\color{#e8743b}{F_{n,i}}} - m g$, where
+${\color{#e8743b}{F_{n,i}}}$ is contact $i$'s push along the floor's normal (`force[0]`
+from `mj_contactForce`, which reports each force in that contact's own frame
+— normal first) and $z_{\text{CoM}}$ is the height of the centre of mass.
+
+**Step 2 — standing still**, $\ddot z_{\text{CoM}} = 0$, so
+$\sum_i {\color{#e8743b}{F_{n,i}}} = m g$ = 33.3 kg × 9.81 = 327.1 N. The motors cannot
+change this sum: they push the robot against itself.
+
+**Step 3 — no turning either**, so the forces' moments balance too: the
+force-weighted average of the contact points (the **centre of pressure**, week 4)
+must sit directly under the centre of mass.
+
+The next slide checks both predictions against the eight contacts MuJoCo found.
+
+---
+
+## Where the 327 N lands, drawn {.smaller}
+
+```{python}
+#| fig-align: center
+d = soc4180.keyframe_data(model, "stand")
+for _ in range(1000):
+    mujoco.mj_step(model, d)
+F, P = [], []
+for i in range(d.ncon):
+    mujoco.mj_contactForce(model, d, i, force); F.append(force[0]); P.append(d.contact[i].pos[:2].copy())
+F, P = np.array(F), np.array(P)
+cop = (F[:, None] * P).sum(0) / F.sum()
+com = d.subtree_com[1][:2]                      # body 1 = pelvis: the whole robot hangs below it
+
+fig, ax = plt.subplots(figsize=(9.5, 3.6))
+ax.scatter(P[:, 0], P[:, 1], s=F * 4, color="#e8743b", alpha=0.6, edgecolor="k")
+for (x, y), f in zip(P, F):
+    heel = x < 0
+    ax.text(x + (-0.022 if heel else 0.022), y, f"{f:.0f} N", ha="right" if heel else "left",
+            va="center", fontsize=8)
+ax.plot(*cop, "x", color="#c0392b", ms=12, mew=2.5, label=f"centre of pressure  x = {cop[0]*1000:+.1f} mm")
+ax.plot(*com, "o", mfc="none", mec="#3b7dd8", ms=14, mew=2, label=f"centre of mass       x = {com[0]*1000:+.1f} mm")
+ax.set_aspect("equal"); ax.set_xlim(-0.14, 0.52); ax.set_ylim(-0.2, 0.2); ax.grid(alpha=0.3)
+ax.set_xlabel("x forward (m)"); ax.set_ylabel("y left (m)"); ax.legend(fontsize=8, loc="center right")
+ax.set_title("the 8 foot spheres seen from above; disc area ∝ normal force", fontsize=9)
+fig.tight_layout(); plt.show()
+print(f"sum = {F.sum():.1f} N;  heels (x < 0) carry {F[P[:,0] < 0].sum():.0f} N, toes {F[P[:,0] > 0].sum():.0f} N")
+```
+
+The heel spheres push about twice as hard as the toe spheres, because the
+centre of mass is closer to the heels (heel spheres at $x = -5$ cm, toe
+spheres at $+12$ cm, centre of mass at $+0.3$ cm) — and the centre of pressure lands under
+it to a tenth of a millimetre, as Step 3 demands.
+
+---
+
 ## Watching the floor push back {.smaller}
 
 ```{python}
 #| fig-align: center
 d = soc4180.keyframe_data(model, "stand")
+mujoco.mj_forward(model, d)                     # find the contacts at t = 0, before any step
+print(f"at t = 0: {d.ncon} contacts, each sphere {-d.contact[0].dist * 1000:.2f} mm INTO the floor")
 t, total, ncon = [], [], []
 force = np.zeros(6)
 while d.time < 1.0:
@@ -831,17 +1519,21 @@ fig, ax = plt.subplots(figsize=(8.4, 3.2))
 ax.plot(t, total, lw=1.5, color="#3b7dd8", label="sum of contact normal forces")
 ax.axhline(model.body_mass.sum() * 9.81, color="k", ls="--", lw=1, label="weight $mg$")
 ax.set_xlabel("time (s)"); ax.set_ylabel("N"); ax.legend(fontsize=9, loc="lower right"); ax.grid(alpha=0.3)
-ax2 = ax.twinx(); ax2.plot(t, ncon, color="#e8743b", lw=1, drawstyle="steps-post"); ax2.set_ylabel("contacts", color="#e8743b")
-ax.set_title("the keyframe starts a hair above the floor; the robot lands, rings, and settles", fontsize=10)
+ax2 = ax.twinx(); ax2.plot(t, ncon, color="#e8743b", lw=1, drawstyle="steps-post")
+ax2.set_ylabel("contacts", color="#e8743b"); ax2.set_ylim(0, 10)
+ax.set_title("the keyframe starts the feet slightly inside the floor; the floor pushes them out, then settles", fontsize=10)
 fig.tight_layout(); plt.show()
+print(f"largest push: {max(total):.0f} N at t = {t[int(np.argmax(total))]:.3f} s;  "
+      f"after 0.5 s: {total[int(0.5 / model.opt.timestep)]:.1f} N;  weight {model.body_mass.sum() * 9.81:.1f} N")
 ```
 
-$$\sum_i F_{n,i} = m g \quad\text{once nothing is accelerating}$$
-
-The first few milliseconds are a landing: the keyframe places the robot a
-fraction of a millimetre above the floor, the spheres touch down one by one,
-and the force overshoots before the servos settle. After that the sum is the
-weight, to the decimal.
+The first tenth of a second is **not** a landing. The `stand` keyframe puts the
+pelvis at 0.79 m, which leaves all eight foot spheres about 2 mm *inside* the
+floor, so all eight contacts exist from the very first step (orange line, flat
+at 8). MuJoCo's contacts are slightly soft — penetration makes force — so the
+floor starts by pushing with well over the weight, pushes the robot up (the
+pelvis *rises* in the one-step slide), undershoots once, and settles. From
+about 0.15 s on, $\sum_i {\color{#e8743b}{F_{n,i}}} = mg$ to the decimal.
 
 ---
 
@@ -902,19 +1594,28 @@ def fall_trace(nudge, steps=1500):
 ref = fall_trace(0.0)
 tt = np.arange(1, 1501) * model.opt.timestep
 fig, ax = plt.subplots(figsize=(8.4, 3.4))
+gaps = {}
 for nudge, col in ((1e-12, "#3b7dd8"), (1e-9, "#2a9d5c"), (1e-6, "#e8743b")):
-    gap = np.abs(fall_trace(nudge) - ref).max(axis=1)
+    gaps[nudge] = gap = np.abs(fall_trace(nudge) - ref).max(axis=1)
     ax.semilogy(tt, np.maximum(gap, 1e-17), lw=1.5, color=col, label=f"knee nudged {nudge:.0e} rad")
-ax.semilogy(tt, 1e-12 * np.exp(3.8 * tt), ls=":", color="0.4", label=r"$10^{-12}\,e^{3.8\,t}$")
+# fit the slope: a straight line through log(gap) against t, for the smallest nudge
+# (from 0.2 s, past the first transient, to 3 s, while the gap is still small)
+sel = (tt > 0.2) & (gaps[1e-12] > 0)
+lam, logA = np.polyfit(tt[sel], np.log(gaps[1e-12][sel]), 1)
+ax.semilogy(tt, np.exp(logA + lam * tt), ls=":", color="0.4", label=rf"fit: $\propto e^{{{lam:.1f}\,t}}$")
+print(f"fitted growth rate lambda = {lam:.2f} per second  ->  x{np.exp(lam):.0f} per second, "
+      f"x{np.exp(lam * 3):,.0f} over 3 s")
 ax.set_xlabel("time (s)"); ax.set_ylabel("max |difference in qpos|"); ax.legend(fontsize=8, loc="lower right")
 ax.grid(alpha=0.3, which="both"); ax.set_title("three nudges, one slope: the slope is the robot's", fontsize=10)
 fig.tight_layout(); plt.show()
 ```
 
-Parallel lines on a log axis: the *rate* of separation is the same for all
-three, and it is about $e^{3.8}$ — forty-fold — per second. That number belongs
-to the falling robot, and it is why the same code gives a different heap on a
-different machine.
+**Reading a log axis:** a straight line means "the same factor every second".
+The dotted line fits $\ln\delta = \ln\delta_0 + \lambda t$ to the blue curve:
+$\lambda \approx 3.7$/s, i.e. $\times 40$ per second, $\times 7\times 10^{4}$ over
+3 s — the five orders of magnitude *Run it twice* measured. The curves climb
+roughly in parallel (the rate is the robot's, not the nudge's) until the gap is
+as big as the robot: the orange one flattens near 1.
 
 ---
 
@@ -1010,6 +1711,16 @@ gravity as flags: compile → print → simulate → replay, in six numbered ste
 16. Replace the repeated `rgba` on the two capsules with a `<default>` class.
     Confirm the render is unchanged — this is the same mechanism that hides
     `kp=500` in the G1.
+17. **Derive the `implicitfast` row.** With the damper at the new velocity,
+    $v_{n+1} = v_n - h\omega^2 x_n - 2\zeta\omega h\, v_{n+1}$. Solve for
+    $v_{n+1}$, write the step as a 2 × 2 matrix, and show
+    $\det A = 1/(1 + 2\zeta h\omega)$. Then apply the rule
+    $|\operatorname{tr}A| < 1 + \det A$ and recover
+    $h\omega < 2(\sqrt{1+\zeta^2} + \zeta)$. Check your answer against the
+    `implicitfast` column the slide printed.
+18. In *The bound, measured*, change `kp="10000"` to `kp="40000"`. Predict the
+    new largest safe step from $h < 2/\omega$ before you run it, then find it by
+    bisection on `h`.
 
 ---
 

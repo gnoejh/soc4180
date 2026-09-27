@@ -43,6 +43,24 @@ one since week 1.
 
 ---
 
+## Colour code for the week {.smaller}
+
+The same colours mean the same things in every equation and every drawing:
+
+| symbol | meaning | colour |
+| --- | --- | --- |
+| ${\color{#3b7dd8}{x_t}}$ | the robot's **state** at step $t$: everything physics needs (`qpos`, `qvel`, …) | <span style="color:#3b7dd8">blue</span> |
+| ${\color{#e8743b}{u_t}}$, ${\color{#e8743b}{U}}$ | a **control** at step $t$; the **plan** $U = (u_0, \dots, u_{H-1})$ | <span style="color:#e8743b">orange</span> |
+| ${\color{#2a9d5c}{c}}$, ${\color{#2a9d5c}{J}}$ | the **cost** of one step; the total cost of one imagined future | <span style="color:#2a9d5c">green</span> |
+| ${\color{#b07d12}{\varepsilon_k}}$, ${\color{#b07d12}{\sigma}}$ | a random **change** to the plan; its standard deviation (the sampling width) | <span style="color:#b07d12">gold</span> |
+| ${\color{#8e44ad}{w_k}}$ | the **weight** given to future $k$ | <span style="color:#8e44ad">purple</span> |
+| ${\color{#c0392b}{\lambda}}$ | the **temperature**: how strongly low cost wins the weight | <span style="color:#c0392b">red</span> |
+
+$H$ is the **horizon** (how many plan steps ahead), $K$ the number of sampled
+futures, $f$ the simulator: ${\color{#3b7dd8}{x_{t+1}}} = f({\color{#3b7dd8}{x_t}}, {\color{#e8743b}{u_t}})$.
+
+---
+
 ## Setting up {.smaller}
 
 ```{python}
@@ -99,9 +117,84 @@ ax.text(7.0, 2.2, "1. copy the state into the simulator\n2. roll K futures forwa
 fig.tight_layout(); plt.show()
 ```
 
-**Receding horizon**: the plan always reaches $H$ seconds into the future, and
+**Receding horizon**: the plan always reaches $H$ steps into the future, and
 the future keeps moving. Nothing is learned. A plan that was right 40 ms ago
-is only a starting guess now.
+is only a starting guess now. (The curves are a sketch of the idea, not data.)
+
+---
+
+## MPC, written as an optimisation problem {.smaller}
+
+At every decision the planner tries to solve
+
+$$\min_{{\color{#e8743b}{u_0}},\,\dots,\,{\color{#e8743b}{u_{H-1}}}} \;\;
+{\color{#2a9d5c}{J}} = \sum_{t=0}^{H-1} {\color{#2a9d5c}{c}}({\color{#3b7dd8}{x_t}}, {\color{#e8743b}{u_t}})
+\qquad\text{subject to}\qquad
+{\color{#3b7dd8}{x_{t+1}}} = f({\color{#3b7dd8}{x_t}}, {\color{#e8743b}{u_t}}),\quad
+{\color{#3b7dd8}{x_0}} = {\color{#3b7dd8}{x_{\text{now}}}}$$
+
+- ${\color{#e8743b}{u_0, \dots, u_{H-1}}}$ — the **unknowns**: what to command at each of the next $H$ steps
+- ${\color{#2a9d5c}{c}}({\color{#3b7dd8}{x_t}}, {\color{#e8743b}{u_t}})$ — how bad step $t$ is (too low, tilted, rushing); **you write this**
+- ${\color{#3b7dd8}{x_{t+1}}} = f(\cdot)$ — the future is not free: each state follows from the last by physics. Here $f$ **is** `mj_step` (20 of them per 40 ms plan step; the code adds ${\color{#2a9d5c}{c}}$ up at every physics step)
+- ${\color{#3b7dd8}{x_0}} = {\color{#3b7dd8}{x_{\text{now}}}}$ — every future starts from the robot as it is right now
+
+It is week 3's IK idea — *write down what you want as a number, then search for
+the input that makes it small* — with two differences: the unknown is a whole
+**sequence** of controls, and the number comes from **running physics
+forward**, contacts and all.
+
+How to solve it? Week 3 followed a gradient (the Jacobian). Here the gradient
+would have to pass through 200 physics steps and every foot contact that
+switches on or off along the way. **MPPI does not differentiate $f$ at all**:
+it only runs it, many times, and compares the answers.
+
+---
+
+## Receding horizon, step by step {.smaller}
+
+```{python}
+mppi_demo = planning.MPPI(model, ctrl0, planning.actuators_for(model))
+print(f"H         = {mppi_demo.H} plan steps ('knots')")
+print(f"one knot  = {mppi_demo.knot * 1000:.0f} ms = {mppi_demo.substeps} physics steps of {model.opt.timestep * 1000:.0f} ms, u held constant")
+print(f"horizon   = {mppi_demo.H} x {mppi_demo.knot * 1000:.0f} ms = {mppi_demo.H * mppi_demo.knot:.1f} s = {mppi_demo.H * mppi_demo.substeps} physics steps")
+print(f"u_t       = {len(mppi_demo.actuators)} numbers (leg servo targets, radians added to the crouch)")
+print(f"unknowns  = {mppi_demo.H} x {len(mppi_demo.actuators)} = {mppi_demo.U.size}")
+print(f"K         = {mppi_demo.K} futures per decision, sigma = {mppi_demo.sigma} rad, lambda = {mppi_demo.temperature}")
+```
+
+**Step 1 — measure** ${\color{#3b7dd8}{x_{\text{now}}}}$ (`mj_getState`).
+**Step 2 — solve** the problem above, approximately, starting from the old plan.
+**Step 3 — apply only** ${\color{#e8743b}{u_0}}$, for one knot (40 ms).
+**Step 4 — shift**: ${\color{#e8743b}{u_1, \dots, u_{H-1}}}$ become the first $H-1$ knots of next time's starting plan; a zero is appended at the end. Go to Step 1.
+
+Each decision therefore costs $K \times$ (horizon in physics steps) = 64 × 200 =
+12,800 physics steps, to choose 40 ms of action.
+
+---
+
+## Receding horizon, drawn {.smaller}
+
+```{python}
+#| fig-align: center
+fig, axs = plt.subplots(2, 1, figsize=(9.5, 2.9), sharex=True)
+vals = np.array([0.9, 0.7, 0.8, 0.5, 0.6, 0.4, 0.45, 0.3, 0.2, 0.1])       # an illustrative plan, one servo
+for row, (ax, title) in enumerate(zip(axs, ("decision at t = 0: plan 10 knots, apply knot 0",
+                                            "decision at t = 40 ms: the old plan, shifted left, starts the search"))):
+    v = vals if row == 0 else np.r_[vals[1:], 0.0]
+    for i in range(10):
+        col = "#e8743b" if i == 0 else "#f3b58f"
+        ax.bar(i * 40 + 40 * row + 20, v[i], width=36, color=col, edgecolor="k" if i == 0 else "none")
+    if row == 1:
+        ax.bar(9 * 40 + 40 + 20, 0.03, width=36, color="0.6"); ax.text(9 * 40 + 60, 0.12, "new: 0", ha="center", fontsize=8)
+    ax.axvline(40 * row, color="k", lw=1.5); ax.text(40 * row + 3, 0.95, "now", fontsize=8)
+    ax.set_title(title, fontsize=9, loc="left"); ax.set_ylim(0, 1.1); ax.set_yticks([]); ax.set_ylabel("u (one servo)", fontsize=8)
+axs[1].set_xlabel("robot time (ms): each bar is one knot, held for 40 ms"); axs[1].set_xlim(0, 450)
+fig.tight_layout(); plt.show()
+```
+
+A diagram of the bookkeeping (bar heights illustrative). The horizon slides
+40 ms to the right every decision and always covers 0.4 s — it *recedes* like a
+horizon as you walk toward it.
 
 ---
 
@@ -143,17 +236,266 @@ sensor reading of every future.
 **Model-predictive path integral** control (Williams et al., 2017) turns $K$
 scored futures into one plan:
 
-$$w_k = \frac{\exp(-J_k/\lambda)}{\sum_j \exp(-J_j/\lambda)}, \qquad
-U \leftarrow \sum_k w_k\,(U + \varepsilon_k)$$
+$${\color{#8e44ad}{w_k}} = \frac{\exp(-{\color{#2a9d5c}{J_k}}/{\color{#c0392b}{\lambda}})}{\sum_j \exp(-{\color{#2a9d5c}{J_j}}/{\color{#c0392b}{\lambda}})}, \qquad
+{\color{#e8743b}{U}} \leftarrow \sum_k {\color{#8e44ad}{w_k}}\,({\color{#e8743b}{U}} + {\color{#b07d12}{\varepsilon_k}})
+= {\color{#e8743b}{U}} + \sum_k {\color{#8e44ad}{w_k}}\,{\color{#b07d12}{\varepsilon_k}}$$
 
-- $\varepsilon_k$ — random changes to the plan, $\sigma$ radians on each servo target
-- $J_k$ — the cost of future $k$, summed over its horizon
-- $\lambda$ — the **temperature**: small trusts only the best future, large
-  averages everyone
+- ${\color{#b07d12}{\varepsilon_k}}$ — random changes to the plan, drawn with standard deviation ${\color{#b07d12}{\sigma}}$ radians on each servo target at each knot
+- ${\color{#2a9d5c}{J_k}}$ — the cost of future $k$, summed over its horizon
+- ${\color{#8e44ad}{w_k}}$ — how much future $k$ counts; all positive, summing to 1
+- ${\color{#c0392b}{\lambda}}$ — the **temperature**: small trusts only the best future, large averages everyone
+
+The right-hand form reads: **move the plan by a weighted average of the
+changes that were tried**, weighted towards the changes that went well.
 
 It is week 8's policy-gradient idea without a network: *make the plans that
 went well more likely*, with the environment only scoring, never
-differentiated. Here nothing is remembered between decisions except $U$.
+differentiated. Here nothing is remembered between decisions except
+${\color{#e8743b}{U}}$. The next three slides derive where the exponential
+comes from.
+
+---
+
+## Where the weights come from: Steps 1–2 {.smaller}
+
+**Step 1 — the obvious rule, and what is wrong with it.** Keep the best future:
+${\color{#8e44ad}{w_k}} = 1$ for the $k$ with smallest ${\color{#2a9d5c}{J_k}}$,
+0 for the rest. With 64 random tries the winner is partly luck, 63 of the 64
+simulations are thrown away, and a winner that is best by a hair and one that
+is best by a mile are treated the same.
+
+**Step 2 — ask for a compromise, as a number to minimise.** Look for weights
+${\color{#8e44ad}{w_k}} \ge 0$, $\sum_k {\color{#8e44ad}{w_k}} = 1$, that make
+
+$$F({\color{#8e44ad}{w}}) \;=\; \underbrace{\sum_k {\color{#8e44ad}{w_k}}\,{\color{#2a9d5c}{J_k}}}_{\text{average cost: favour good futures}}
+\;+\; {\color{#c0392b}{\lambda}}\underbrace{\sum_k {\color{#8e44ad}{w_k}} \ln {\color{#8e44ad}{w_k}}}_{\text{penalty for putting all weight on one}}$$
+
+as small as possible.
+
+- The first term alone is minimised by Step 1's rule (all weight on the best).
+- The second term is $-$(entropy). It is **largest**, 0, when one ${\color{#8e44ad}{w_k}} = 1$, and **smallest**, $-\ln K$, when every ${\color{#8e44ad}{w_k}} = 1/K$. It pulls the weights towards spreading out.
+- ${\color{#c0392b}{\lambda}}$ sets the exchange rate between the two: how many units of cost one unit of spreading is worth.
+
+---
+
+## Where the weights come from: Steps 3–5 {.smaller}
+
+**Step 3 — set the derivative to zero.** Add $\mu\,(\sum_k {\color{#8e44ad}{w_k}} - 1)$
+to enforce the sum (a Lagrange multiplier) and differentiate by one weight:
+
+$$\frac{\partial}{\partial {\color{#8e44ad}{w_k}}}:\quad
+{\color{#2a9d5c}{J_k}} + {\color{#c0392b}{\lambda}}\,(\ln {\color{#8e44ad}{w_k}} + 1) + \mu = 0
+\;\;\Longrightarrow\;\;
+\ln {\color{#8e44ad}{w_k}} = -\frac{{\color{#2a9d5c}{J_k}}}{{\color{#c0392b}{\lambda}}} - 1 - \frac{\mu}{{\color{#c0392b}{\lambda}}}
+\;\;\Longrightarrow\;\;
+{\color{#8e44ad}{w_k}} = C\,e^{-{\color{#2a9d5c}{J_k}}/{\color{#c0392b}{\lambda}}}$$
+
+where $C = e^{-1-\mu/\lambda}$ is the same for every $k$.
+
+**Step 4 — find $C$ from the sum.** $\sum_k {\color{#8e44ad}{w_k}} = 1$ gives
+$C = 1/\sum_j e^{-{\color{#2a9d5c}{J_j}}/{\color{#c0392b}{\lambda}}}$, which is
+the formula on the previous slide. It is called the **softmin**: a soft version
+of "pick the minimum".
+
+**Step 5 — read it.** Compare two futures:
+
+$$\frac{{\color{#8e44ad}{w_i}}}{{\color{#8e44ad}{w_j}}} = e^{-({\color{#2a9d5c}{J_i}} - {\color{#2a9d5c}{J_j}})/{\color{#c0392b}{\lambda}}}$$
+
+**Every ${\color{#c0392b}{\lambda}}$ of extra cost divides the weight by
+$e \approx 2.72$.** Only cost *differences* matter — which is why the code may
+subtract ${\color{#2a9d5c}{J_{\min}}}$ from every cost first: the weights do
+not change, and the largest exponential becomes $e^0 = 1$ instead of
+overflowing or underflowing.
+
+---
+
+## The softmin, checked {.smaller}
+
+```{python}
+rng_chk = np.random.default_rng(0)
+Jk = rng_chk.uniform(0, 1, 8); lam_chk = 0.2
+
+def F(w):                                            # average cost + lambda * sum w ln w
+    return w @ Jk + lam_chk * np.sum(w * np.log(w))
+
+w_soft = np.exp(-(Jk - Jk.min()) / lam_chk); w_soft /= w_soft.sum()
+others = rng_chk.dirichlet(np.ones(8), 100_000)      # 100,000 random weightings that sum to 1
+print(f"F(softmin weights)          = {F(w_soft):.5f}")
+print(f"smallest F of 100,000 others = {min(F(w) for w in others):.5f}   (never lower)")
+print(f"F(all weight on the best)    = {Jk.min():.5f}")
+print(f"F(equal weights)             = {F(np.full(8, 1 / 8)):.5f}\n")
+
+J_robot = np.array([90.0, 90.5, 93.0])               # the robot's best futures just after a 300 N shove cost ~90
+with np.errstate(all="ignore"):
+    raw = np.exp(-J_robot / 0.05); print("exp(-J/lambda) as written :", raw, "->", raw / raw.sum())
+shifted = np.exp(-(J_robot - J_robot.min()) / 0.05)
+print("after subtracting J_min  :", shifted / shifted.sum())
+```
+
+- **Top block:** eight made-up costs, ${\color{#c0392b}{\lambda}} = 0.2$. The
+  softmin weights give the smallest $F$; a hundred thousand random weightings
+  never do better, and neither extreme (all on the best, all equal) comes close.
+- **Bottom block:** written naively, $e^{-90/0.05} = e^{-1800}$ is smaller than
+  the smallest number a computer can store (about $e^{-745}$): every weight
+  becomes 0, and $0/0$ is `nan`. (Costs of about 90 are what the robot's
+  planner sees just after a 300 N shove — measured a few slides on.)
+  Subtracting ${\color{#2a9d5c}{J_{\min}}}$ first gives the weights the maths promises.
+- **Last line**, read with Step 5: a future only 0.5 behind is
+  $0.5/0.05 = 10$ temperatures behind, so it gets
+  $e^{-10} \approx 4.5 \times 10^{-5}$ of the best one's weight.
+
+---
+
+## One MPPI update in one dimension {.smaller}
+
+A **made-up** cost of a single number $u$, so that everything fits on one
+drawing: a shallow valley on the left, a deeper one near $u = 1.2$. The current
+plan is ${\color{#e8743b}{U}} = 0.4$; twelve changes are drawn with
+${\color{#b07d12}{\sigma}} = 0.5$ (the first is kept at 0, as the planner does),
+and ${\color{#c0392b}{\lambda}} = 0.1$.
+
+```{python}
+#| fig-align: center
+def J1(u):
+    """A made-up 1-D cost: a shallow valley near u = -1, a deeper one near u = +1.2."""
+    return 0.5 * (u ** 2 - 1.2) ** 2 - 0.35 * u + 0.6
+
+def mppi_1d(U, sigma, lam, K, rng):
+    eps = rng.normal(0, sigma, K); eps[0] = 0.0          # sample; keep the old plan as one candidate
+    u = U + eps; J = J1(u)                               # simulate and score (here: just evaluate)
+    w = np.exp(-(J - J.min()) / lam); w /= w.sum()       # softmin weights
+    return u, J, w, w @ u                                # the new plan: the weighted mean
+
+U_1d, sig_1d, lam_1d = 0.4, 0.5, 0.1
+u_s, J_s, w_s, U_new = mppi_1d(U_1d, sig_1d, lam_1d, 12, np.random.default_rng(26))
+uu = np.linspace(-2.0, 2.2, 400)
+fig, (a0, a1) = plt.subplots(2, 1, figsize=(9.5, 4.3), sharex=True, gridspec_kw=dict(height_ratios=[1.6, 1]))
+a0.plot(uu, J1(uu), color="#2a9d5c", lw=2, label="cost J(u)")
+a0.scatter(u_s, J_s, s=30 + 600 * w_s, color="#8e44ad", zorder=3, label="samples (area ~ weight)")
+a1.bar(u_s, w_s, width=0.04, color="#8e44ad")
+for ax in (a0, a1):
+    ax.axvline(U_1d, color="#e8743b", ls=":", lw=1.5)
+    ax.axvline(u_s.mean(), color="0.5", ls="--", lw=1.5)
+    ax.axvline(U_new, color="#e8743b", lw=2.5)
+    ax.grid(alpha=0.3)
+a0.text(U_1d, 3.1, "old U ", color="#e8743b", fontsize=8, va="top", ha="right")
+a0.text(u_s.mean(), 2.7, " plain mean", color="0.4", fontsize=8, va="top")
+a0.text(U_new, 3.1, " new U (weighted mean)", color="#e8743b", fontsize=8, va="top")
+a0.set_ylim(0, 3.2); a0.set_ylabel("J (green)"); a0.legend(fontsize=8, loc="upper left")
+a1.set_ylabel("weight w"); a1.set_xlabel("u  (one number standing in for the plan)")
+fig.tight_layout(); plt.show()
+order = np.argsort(J_s)                                  # the twelve samples, best first
+print("u :", " ".join(f"{u_s[i]:+5.2f}" for i in order))
+print("J :", " ".join(f"{J_s[i]:5.2f}" for i in order))
+print("w :", " ".join(f"{w_s[i]:5.2f}" for i in order))
+print(f"best sample {u_s[order[0]]:+.3f}   plain mean {u_s.mean():+.3f}   weighted mean {U_new:+.3f}   "
+      f"(old U {U_1d:+.3f})")
+```
+
+---
+
+## Reading the 1-D update {.smaller}
+
+- Each purple dot is one imagined future: a trial value of $u$ and its cost.
+  **Low dots are big**: weight falls by $e$ for every
+  ${\color{#c0392b}{\lambda}} = 0.1$ of extra cost.
+- The **plain mean** (grey dashed) counts every sample equally, so the samples
+  that did badly — including the one in the other valley — hold it close to
+  where it started: 0.54 against the old 0.40.
+- The **new ${\color{#e8743b}{U}}$** lands near the best samples but is not
+  any one of them: it averages the few that did well.
+- Nothing needed $dJ/du$. The planner only *evaluated* $J$ at twelve points —
+  which is all a simulator can do for us.
+
+Repeat this every decision, starting from the shifted old plan, and
+${\color{#e8743b}{U}}$ walks downhill. On the robot, $u$ is 120 numbers and
+each evaluation of ${\color{#2a9d5c}{J}}$ is 200 physics steps, but the
+update is exactly this.
+
+---
+
+## The temperature λ, drawn {.smaller}
+
+Same twelve samples, same costs; only ${\color{#c0392b}{\lambda}}$ changes.
+
+```{python}
+#| fig-align: center
+lams = np.logspace(-3, 2, 200)
+means, ess = [], []
+for lam_ in lams:
+    w_ = np.exp(-(J_s - J_s.min()) / lam_); w_ /= w_.sum()
+    means.append(w_ @ u_s); ess.append(1 / np.sum(w_ ** 2))
+fig, (a0, a1) = plt.subplots(1, 2, figsize=(10.4, 3.2))
+a0.semilogx(lams, means, color="#e8743b", lw=2.5, label="new U (weighted mean)")
+a0.axhline(u_s[np.argmin(J_s)], color="#8e44ad", ls="--", label="best sample (argmin)")
+a0.axhline(u_s.mean(), color="0.5", ls="--", label="plain mean")
+a0.set_xlabel("temperature lambda (log scale)"); a0.set_ylabel("new U"); a0.legend(fontsize=8)
+a1.semilogx(lams, ess, color="#8e44ad", lw=2.5)
+a1.axhline(1, color="0.5", ls=":"); a1.axhline(len(u_s), color="0.5", ls=":")
+a1.text(1.2e-3, 1.4, "one future counts", fontsize=8); a1.text(1.2e-3, len(u_s) - 1.3, "all 12 count equally", fontsize=8)
+a1.set_xlabel("temperature lambda (log scale)"); a1.set_ylabel("effective samples 1 / sum w^2")
+for ax in (a0, a1):
+    ax.axvline(lam_1d, color="#c0392b", lw=1); ax.grid(alpha=0.3, which="both")
+fig.tight_layout(); plt.show()
+for lam_ in (0.001, 0.1, 100):
+    w_ = np.exp(-(J_s - J_s.min()) / lam_); w_ /= w_.sum()
+    print(f"lambda {lam_:>6}: new U {w_ @ u_s:+.3f}, effective samples {1 / np.sum(w_ ** 2):5.2f} of {len(u_s)}")
+```
+
+- ${\color{#c0392b}{\lambda}} \to 0$: $e^{-\Delta J/\lambda}$ crushes everything but the best → **argmin**, Step 1's rule.
+- ${\color{#c0392b}{\lambda}} \to \infty$: $e^{-\Delta J/\lambda} \to 1$ for all → equal weights, the **plain mean**: the costs are ignored.
+- The **effective number of samples** $1/\sum_k {\color{#8e44ad}{w_k}}^2$ counts how many futures really vote: 1 if one weight is 1, $K$ if all are $1/K$. The red line is the ${\color{#c0392b}{\lambda}}$ used on the previous slide.
+
+---
+
+## The sampling width σ, drawn {.smaller}
+
+Start in the **shallow** valley, ${\color{#e8743b}{U}} = -1$, and repeat the
+update 30 times (16 samples, ${\color{#c0392b}{\lambda}} = 0.1$): 20 runs per
+width, the first five drawn.
+
+```{python}
+#| fig-align: center
+fig, axs = plt.subplots(1, 3, figsize=(10.5, 2.9), sharey=True)
+for ax, sig in zip(axs, (0.1, 0.8, 3.0)):
+    finals = []
+    for seed in range(20):
+        r_ = np.random.default_rng(seed); U_ = -1.0; path = [U_]
+        for _ in range(30):
+            U_ = mppi_1d(U_, sig, 0.1, 16, r_)[3]; path.append(U_)
+        finals.append(U_)
+        if seed < 5:
+            ax.plot(path, color="#e8743b", lw=1.2, alpha=0.8)
+    finals = np.array(finals)
+    ax.axhline(uu[np.argmin(J1(uu))], color="#2a9d5c", ls="--", lw=1)
+    ax.axhline(-1.0, color="0.5", ls=":", lw=1)
+    ax.set_title(f"sigma = {sig}: {np.sum(finals > 0)}/20 runs reach the deep valley", fontsize=9)
+    ax.set_xlabel("update number"); ax.grid(alpha=0.3)
+    print(f"sigma {sig}: {np.sum(finals > 0):2d}/20 escape;  final U spread (std) {finals.std():.3f}")
+axs[0].set_ylabel("U"); axs[0].text(30, -0.9, "shallow valley", ha="right", fontsize=8, color="0.4")
+axs[0].text(30, 1.05, "deep valley", ha="right", va="top", fontsize=8, color="#2a9d5c")
+fig.tight_layout(); plt.show()
+```
+
+---
+
+## Reading σ {.smaller}
+
+- **Too narrow**: every sample lands in the same valley, so every sample says
+  "stay". The planner cannot prefer a future it never imagined — it is stuck in a
+  **local minimum**, the same kind of trap as the SQUAT slide later today.
+- **Wide enough**: a few samples land in the deep valley, win the weight, and
+  pull the plan across.
+- **Too wide**: most samples land far up the walls with huge cost and almost no
+  weight; the few that count are scattered, so the plan settles less precisely.
+  Over the 20 runs the final ${\color{#e8743b}{U}}$ scatters by a standard
+  deviation of 0.059 at ${\color{#b07d12}{\sigma}} = 3$ against 0.038 at 0.8.
+  Wider costs precision.
+
+${\color{#b07d12}{\sigma}}$ and $K$ trade against each other: a rare good future
+is found by drawing *more* samples, or by drawing them *further out*. That is
+the robot table later today — 16 samples at ${\color{#b07d12}{\sigma}} = 0.15$
+miss stepping under 300 N; 16 samples at ${\color{#b07d12}{\sigma}} = 0.25$ find it.
 
 ---
 
@@ -209,6 +551,48 @@ instead of the past.
 
 ---
 
+## On the robot: how many futures vote? {.smaller}
+
+Run the real planner for 1.5 s from the crouch, with a 300 N sideways shove
+from 1.0 to 1.2 s, and keep the 64 costs of every decision:
+
+```{python}
+d_w = mujoco.MjData(model); d_w.qpos[:] = q0; d_w.qpos[2] = 0.74; mujoco.mj_forward(model, d_w)
+mppi_w = planning.MPPI(model, ctrl0, planning.actuators_for(model))
+cost_log = []
+while d_w.time < 1.5:
+    c_ = mppi_w.plan(d_w); cost_log.append((d_w.time, mppi_w.last_costs.copy()))
+    for _ in range(mppi_w.substeps):
+        d_w.xfrc_applied[torso, 1] = 300 if 1.0 <= d_w.time < 1.2 else 0.0
+        d_w.ctrl[:] = c_; mujoco.mj_step(model, d_w)
+
+def ess_of(J, lam):
+    w = np.exp(-(J - J.min()) / lam); w /= w.sum()
+    return 1 / np.sum(w ** 2)
+
+for label, sel in (("before the shove (t < 1.0 s)", [c for t, c in cost_log if t < 1.0]),
+                   ("during and after (t >= 1.0 s)", [c for t, c in cost_log if t >= 1.0])):
+    spread = np.median([c.max() - c.min() for c in sel]); lowest = np.median([c.min() for c in sel])
+    gap = np.median([np.sort(c)[1] - np.sort(c)[0] for c in sel])
+    row = "  ".join(f"lam {l:<5}: {np.median([ess_of(c, l) for c in sel]):5.1f}" for l in (0.005, 0.05, 0.5, 5.0))
+    print(f"{label}: best J ~ {lowest:6.1f}, runner-up behind by ~ {gap:5.2f}, worst behind by ~ {spread:6.1f}")
+    print(f"    median effective samples of 64 ->  {row}")
+```
+
+Read it with Step 5: what matters is the **spread** of costs measured in units
+of ${\color{#c0392b}{\lambda}}$. The worst future costs hundreds more than the
+best, and even the runner-up is typically 4 to 9 behind — at the planner's
+default ${\color{#c0392b}{\lambda}} = 0.05$ that is 75 to 180 temperatures,
+a weight of $e^{-75}$ or less. So the **effective number of samples is 1**. On this robot, with this cost, MPPI is in
+practice Step 1's rule: *keep the best of 64*. The averaging only begins
+around ${\color{#c0392b}{\lambda}} = 5$.
+
+That is not a bug — it stands at 300 N, as the next slides show — but it means
+the 1-D picture's gentle averaging is not what happens here. Exercise 1 asks
+what changes when you raise ${\color{#c0392b}{\lambda}}$.
+
+---
+
 ## Shove it {.smaller}
 
 ```{python}
@@ -245,6 +629,11 @@ for label, push, ctl in (("hold the crouch, 65 N", 65, "hold"), ("hold the crouc
 Week 7 found the crouch falls at 70 N and the ankle strategy at 80 N. The
 planner, with a four-line cost, stands at **300**.
 
+How to read a line: `lowest pelvis` is the lowest the pelvis got in 4 s (it
+starts at 0.74 m; below 0.5 m counts as a fall, as does ending tilted more than
+15°). `feet travelled` adds the two feet's distances from where they started —
+a few centimetres means the feet stayed put; metres means the robot walked.
+
 ---
 
 ## How: it steps {.smaller}
@@ -267,7 +656,8 @@ stepping** — the one recovery week 7 said no stance could do — because among
 64 random futures some happened to put a foot out, and those were the ones
 that did not end on the floor.
 
-And it never stops: three metres and counting. The cost asks for balance,
+And it never stops: the pelvis is still moving sideways at 4 s, metres from
+where it started. The cost asks for balance,
 not for *staying where you are*.
 
 ---
@@ -321,7 +711,10 @@ print(f"one decision: {ms:.0f} ms of planning for 40 ms of robot time -> {40 / m
 | a PPO policy (week 12) | ~0.1 ms | one small network |
 | **MPPI, 64 × 0.4 s** | **~100 ms** | **12,800 physics steps** |
 
-This machine plans at about half of real time; a laptop with fewer cores, less. Real systems that plan this
+Read the printed ratio: below 1 means the planner is *slower* than the robot
+it drives — on the 36-core machine these slides were written on, about half
+of real time when the machine is idle (74 ms a decision) and a third when it
+is busy; a laptop with fewer cores, less. Real systems that plan this
 way (DeepMind's MuJoCo MPC, Boston Dynamics' Atlas) run a simplified model,
 fewer samples, or a GPU. **Weeks 12 and 13 are both answers to this slide**:
 learn a policy that is fast to run, or copy a slow planner into one.

@@ -29,8 +29,8 @@ Nothing here trains: the policies were trained for 16 minutes each on a
 MPPI stood through a 300 N shove — and paid 100 ms of computing for every
 40 ms of robot time, with a perfect model of the world.
 
-A **policy** pays once, in training, and then answers in a tenth of a
-millisecond. Today:
+A **policy** pays once, in training, and then answers in well under a
+millisecond (measured below). Today:
 
 1. Train one to take a shove (PPO, weeks 8–10, done right).
 2. Measure what it learned — and the worlds where it did not.
@@ -40,6 +40,24 @@ The question changes from *"can it learn?"* to *"what did it learn to
 depend on?"*
 
 **Layer 5**, and the sim-to-real gap, measured without leaving simulation.
+
+---
+
+## Colour code for the week {.smaller}
+
+The same colours mean the same things in every equation and every drawing:
+
+| symbol | meaning | colour |
+| --- | --- | --- |
+| ${\color{#3b7dd8}{\pi_\theta,\ \theta}}$ | the **policy** (a network) and its weights | <span style="color:#3b7dd8">blue</span> |
+| ${\color{#e8743b}{\xi}}$ | the **world**: friction, torso mass, servo stiffness | <span style="color:#e8743b">orange</span> |
+| ${\color{#2a9d5c}{r_t,\ R}}$ | **reward**: per decision, and summed over an episode | <span style="color:#2a9d5c">green</span> |
+| ${\color{#c0392b}{f}}$ | the **shove**, in newtons | <span style="color:#c0392b">red</span> |
+| ${\color{#8e44ad}{\hat A_t,\ \rho_t}}$ | PPO's **advantage** and **probability ratio** | <span style="color:#8e44ad">purple</span> |
+
+Also: $o_t$ the 42 numbers the policy observes at decision $t$, $a_t$ its 12
+actions, $\tau = (o_0, a_0, o_1, a_1, \dots)$ one episode (a **trajectory**),
+$\mathbb E$ "the average over", and $p(\cdot)$ "the probability of".
 
 ---
 
@@ -97,6 +115,47 @@ see the shove coming.
 
 ---
 
+## The task, written out {.smaller}
+
+**Observation** $o_t \in \mathbb R^{42}$: gravity in the torso frame (3) and
+the gyro (3) from the IMU; the 12 leg angles minus the crouch; their 12
+velocities; the previous action (12).
+
+**Action** $a_t \in [-1, 1]^{12}$: a *residual* on the crouch,
+$q^{\text{target}} = q^{\text{crouch}} + 0.3\,a_t$ rad, held by the servos
+for 0.02 s (ten physics steps).
+
+**Reward** per decision, with $v_x$ the pelvis's forward speed (the target
+is 0) and $g_z$ the vertical component of gravity in the torso frame ($-1$
+when upright):
+
+$${\color{#2a9d5c}{r_t}} = \underbrace{1.5\,e^{-v_x^2/0.25}}_{\text{stay put}}
++ \underbrace{0.5\,(-g_z)}_{\text{upright}}
+- \underbrace{0.01\,\lVert a_t\rVert^2}_{\text{effort}}
+- \underbrace{0.05\,\lVert a_t - a_{t-1}\rVert^2}_{\text{smooth}}
++ \underbrace{0.5}_{\text{alive}}$$
+
+**The episode ends** after 250 decisions (5 s), or earlier if the pelvis
+drops below 0.5 m or the torso tilts past $|g_{xy}| > 0.7$ — a fall.
+
+```{python}
+env.world = {k: (1.0, 1.0) if k != "mass" else (0.0, 0.0) for k in env.world}
+obs, _ = env.reset(seed=0); env.push_force = np.zeros(2); R = []
+while True:
+    obs, r, term, trunc, _ = env.step(np.zeros(12, np.float32)); R.append(r)
+    if term or trunc:
+        break
+print(f"hold the crouch, no shove: {len(R)} decisions, r_t = {np.mean(R):.3f} on average "
+      f"(the most any step can pay is 1.5 + 0.5 + 0.5 = 2.5), R = {sum(R):.0f}")
+print(f"a fall ends the episode: tilt past {np.degrees(np.arcsin(0.7)):.0f} degrees")
+```
+
+Standing still already earns almost everything. What the reward really pays
+for is **not falling**: each decision survived is worth about 2.5, so
+**episode length is the score** — which is why the next slides plot it.
+
+---
+
 ## Training: week 8's lesson, applied {.smaller}
 
 ```python
@@ -115,6 +174,62 @@ agent.learn(total_timesteps=3_000_000)
 
 Two policies, identical except for the world they trained in: `nominal`
 and `random`. `robust.py --train` reproduces either.
+
+---
+
+## PPO, recalled from week 8 {.smaller}
+
+**The policy is a Gaussian.** The network outputs a mean; the action is drawn around it:
+$$a_t \sim \mathcal N\big(\mu_{\color{#3b7dd8}{\theta}}(o_t),\ \sigma^2\big),
+\qquad \sigma = e^{\,\ell} = e^{-2} = 0.135 \text{ at the start,}$$
+
+with $\ell$ the `log_std` parameter, one per joint, learned alongside ${\color{#3b7dd8}{\theta}}$.
+
+**The goal** is the expected discounted return,
+$J({\color{#3b7dd8}{\theta}}) = \mathbb E_{\tau \sim \pi_\theta}\big[\sum_t \gamma^t {\color{#2a9d5c}{r_t}}\big]$, $\gamma = 0.99$.
+
+**Step 1 — the advantage.** How much better than usual was action $a_t$?
+${\color{#8e44ad}{\hat A_t}}$ = (return actually collected after $a_t$) − (the
+value network's prediction of it); SB3 smooths it over time with GAE,
+$\lambda = 0.95$. Positive: do it more. Negative: do it less.
+
+**Step 2 — the ratio.** How much more likely is $a_t$ under the new weights
+than under the ones that collected the data?
+$${\color{#8e44ad}{\rho_t}}({\color{#3b7dd8}{\theta}}) = \frac{\pi_{\color{#3b7dd8}{\theta}}(a_t \mid o_t)}{\pi_{\theta_{\text{old}}}(a_t \mid o_t)} .$$
+
+**Step 3 — the clipped objective**, maximised over 5 epochs of each batch:
+$$L^{\text{CLIP}}({\color{#3b7dd8}{\theta}}) = \mathbb E_t\Big[\min\big({\color{#8e44ad}{\rho_t}}\,{\color{#8e44ad}{\hat A_t}},\ \operatorname{clip}({\color{#8e44ad}{\rho_t}},\,1-\epsilon,\,1+\epsilon)\,{\color{#8e44ad}{\hat A_t}}\big)\Big],\qquad \epsilon = 0.2 .$$
+
+---
+
+## What the clip does {.smaller}
+
+```{python}
+#| fig-align: center
+p = policies["random"]
+rho = np.linspace(0.4, 1.8, 300)
+fig, axes = plt.subplots(1, 2, figsize=(10, 2.9), sharey=False)
+for ax, A, title in ((axes[0], 1.0, "a good action ($\\hat A > 0$)"), (axes[1], -1.0, "a bad action ($\\hat A < 0$)")):
+    eps = p.clip_range(1.0)
+    ax.plot(rho, rho * A, color="0.6", ls="--", lw=1.2, label="$\\rho\\,\\hat A$ (unclipped)")
+    ax.plot(rho, np.minimum(rho * A, np.clip(rho, 1 - eps, 1 + eps) * A), color="#8e44ad", lw=2.5, label="$L^{CLIP}$")
+    ax.axvspan(1 - eps, 1 + eps, color="#8e44ad", alpha=0.08)
+    ax.axvline(1, color="0.3", lw=0.8)
+    ax.set_xlabel("$\\rho$ = new probability / old probability"); ax.set_title(title, fontsize=9)
+    ax.legend(fontsize=8); ax.grid(alpha=0.3)
+axes[0].set_ylabel("objective per sample")
+fig.tight_layout(); plt.show()
+print(f"read from the trained model: clip eps {p.clip_range(1.0)}, GAE lambda {p.gae_lambda}, gamma {p.gamma}, "
+      f"{sum(x.numel() for x in p.policy.parameters()):,} weights (policy + value network)")
+print(f"log_std after 3 M steps: {p.policy.log_std.detach().numpy().min():.2f} to "
+      f"{p.policy.log_std.detach().numpy().max():.2f} (started at -2.00)")
+```
+
+Left: once an action has become 20 % more likely, pushing further earns
+nothing — the purple line goes flat. Right: once it is 20 % less likely,
+the same. **Each update may move the policy only a little**, whatever the
+batch seemed to say; that is what keeps 3 million noisy steps from undoing
+themselves.
 
 ---
 
@@ -179,6 +294,32 @@ random crouch they start from.
 
 ---
 
+## What ten episodes can tell you {.smaller}
+
+Each cell is a count $k$ out of $n = 10$. Suppose the controller's true
+survival probability at that shove is $p$. If the episodes are independent,
+the count follows the **binomial** law:
+
+$$P(k \text{ of } n) = \binom{n}{k}\,p^k (1-p)^{n-k}, \qquad \binom{n}{k} = \frac{n!}{k!\,(n-k)!}$$
+
+```{python}
+from math import comb
+def at_least(k, n, p):
+    return sum(comb(n, j) * p ** j * (1 - p) ** (n - j) for j in range(k, n + 1))
+print(f"{'true survival p':>16s}   P(10 of 10)   P(at least 7 of 10)")
+for p in (0.5, 0.7, 0.9, 0.99):
+    print(f"{p:16.2f}   {at_least(10, 10, p):11.3f}   {at_least(7, 10, p):19.3f}")
+```
+
+- A controller that survives only half the time almost never shows 10 of 10.
+  So **10/10 means "reliable"**, and a 9/10 next to a 10/10 is **not** a
+  difference — both are consistent with $p = 0.9$.
+- The lab's referee passes a limit at **7 of 10**: a controller with
+  $p = 0.9$ clears it 99 times in 100, one with $p = 0.5$ about one time in
+  six. It is a margin, not a knife edge.
+
+---
+
 ## What it learned {.smaller}
 
 ```{python}
@@ -204,12 +345,15 @@ for k, lab in ((3, "left hip roll"), (4, "left ankle roll"), (5, "right hip roll
 axes[1].axvspan(t_push, t_push + 0.2, color="#c0392b", alpha=0.15)
 axes[1].set_xlabel("time (s)"); axes[1].set_ylabel("residual (rad)"); axes[1].legend(fontsize=7, ncol=2); axes[1].grid(alpha=0.3)
 fig.tight_layout(); plt.show()
+before = tr[:, 0] < t_push
+print(f"policy: largest tilt {np.abs(tr[:, 2]).max():.1f} deg; largest roll residual before the shove "
+      f"{0.3 * np.abs(tr[before, 3:7]).max():.3f} rad, after it {0.3 * np.abs(tr[~before, 3:7]).max():.3f} rad")
 ```
 
 Left: an 80 N shove. The crouch tips over; the policy's tilt peaks at two
 degrees and comes back. Right: what the policy does with the four roll
-joints — it never holds still, correcting by up to 0.1 rad at 50 Hz before
-the shove as much as after it. Whatever it learned, it is not written in a
+joints — it never holds still, correcting by up to 0.12 rad at 50 Hz before
+the shove, nearly as much as the 0.13 rad after it (printed above). Whatever it learned, it is not written in a
 form anyone can read off the plot: **a learned controller can work without
 being explainable**, which is exactly why it has to be measured.
 
@@ -222,41 +366,116 @@ physics differs from the one it trained in. Mass, friction and motor
 strength are exactly the numbers a real robot gets wrong.
 
 ```{python}
-WORLDS = {"heavy (+15 kg torso)": dict(friction=1.0, mass=15.0, kp=1.0),
+WORLDS = {"nominal": NOMINAL,
+          "ice (friction 0.2)": dict(friction=0.2, mass=0.0, kp=1.0),
+          "heavy (+15 kg torso)": dict(friction=1.0, mass=15.0, kp=1.0),
+          "light (-5 kg torso)": dict(friction=1.0, mass=-5.0, kp=1.0),
           "weak servos (kp x0.6)": dict(friction=1.0, mass=0.0, kp=0.6),
-          "ice (friction 0.2)": dict(friction=0.2, mass=0.0, kp=1.0)}
+          "stiff servos (kp x1.5)": dict(friction=1.0, mass=0.0, kp=1.5)}
+GRID_PUSHES = (0,) + PUSHES
 t0 = time.time()
+GRID = {}                      # (world, controller) -> survivals at each shove
 for wname, w in WORLDS.items():
-    print(f"{wname}   " + "".join(f"{f:>6} N" for f in PUSHES))
     for name, p in rows.items():
-        print(f"   {name:24s}" + "".join(f"{survived(p, w, f):8d}" for f in PUSHES))
-print(f"({time.time() - t0:.0f} s)")
+        if wname == "nominal":             # measured on the previous slide already
+            GRID[wname, name] = [survived(p, w, 0)] + table[name]
+        else:
+            GRID[wname, name] = [survived(p, w, f) for f in GRID_PUSHES]
+print(f"6 worlds x 3 controllers x {len(GRID_PUSHES)} shoves x 10 episodes, in {time.time() - t0:.0f} s; "
+      "the next slide draws them")
 ```
 
 ---
 
 ## The whole grid {.smaller}
 
-Measured with `robust.py` (10 episodes per cell, shoves from the right):
+```{python}
+#| fig-align: center
+from matplotlib.colors import LinearSegmentedColormap
+cmap = LinearSegmentedColormap.from_list("survive", ["#c0392b", "#f4e1c1", "#2a9d5c"])
+fig, axes = plt.subplots(1, 3, figsize=(11, 3.6), sharey=True)
+for ax, name in zip(axes, rows):
+    M = np.array([GRID[w, name] for w in WORLDS])
+    ax.imshow(M, cmap=cmap, vmin=0, vmax=10, aspect="auto")
+    for i in range(M.shape[0]):
+        for j in range(M.shape[1]):
+            ax.text(j, i, M[i, j], ha="center", va="center", fontsize=8.5,
+                    color="white" if M[i, j] <= 2 or M[i, j] >= 9 else "0.2")
+    ax.set_xticks(range(len(GRID_PUSHES)), [f"{f}" for f in GRID_PUSHES], fontsize=8)
+    ax.set_xlabel("sideways shove (N)", fontsize=8.5); ax.set_title(name, fontsize=9.5)
+axes[0].set_yticks(range(len(WORLDS)), list(WORLDS), fontsize=8.5)
+fig.suptitle("episodes survived, of 10: green = all, red = none", fontsize=9, color="0.35", y=0.99)
+fig.tight_layout(); plt.show()
+```
 
-| world | hold | PPO nominal | PPO random |
-| --- | --- | --- | --- |
-| nominal | 60 N | 80 N | **100 N** (9/10) |
-| ice (friction 0.2) | 60 | 80 (9/10) | **100** |
-| heavy (+15 kg) | **falls with no push** | 60 (8/10 at 80) | **120** |
-| light (−5 kg) | 60 | 60 (3/10 at 80) | **80** (9/10) |
-| weak servos (kp × 0.6) | **falls at 60** | 60 (3/10 at 80) | **80** |
-| stiff servos (kp × 1.5) | 80 | 60 (8/10 at 80) | **80** |
+Each square is one world and one shove, ten episodes. Read a row left to
+right: how big a shove that controller takes in that world. Read the three
+panels at the same square: which controller to ship to that world.
 
-Largest shove survived by all 10 episodes unless stated. Three things:
+---
 
-1. The nominal policy is **brittle where hold is brittle**: +15 kg and weak
-   servos take away most of its margin.
-2. Randomising the training world fixed that — including **+15 kg**, outside
-   the −5…+10 range it trained on.
-3. It is not worse in the nominal world; here it is better. **Randomisation
+## Reading the grid {.smaller}
+
+Four things:
+
+1. **Hold** has no margin to lose: +15 kg drops it with no shove at all
+   (the 0 N column), weak servos at 60 N.
+2. The **nominal policy** takes 80 N 10/10 only in the nominal world and on
+   ice. Every change of body — heavier, lighter, weaker, stiffer — costs it
+   margin: 8, 3, 3 and 8 of 10 at 80 N.
+3. The **randomised policy** holds 80 N in every world (9 of 10 when
+   light), and with +15 kg —
+   outside the −5…+10 range it trained on — takes even 120 N.
+4. It is not worse in the nominal world; here it is better. **Randomisation
    has no guaranteed price** — with a small network and a hard task it can
    act as a regulariser. (Week 14 finds a case where it does cost accuracy.)
+
+---
+
+## Robust to what it trained on {.smaller}
+
+Slide one world parameter at a time through and past the training range,
+with the same 80 N shove (the nominal policy's own limit):
+
+```{python}
+#| fig-align: center
+SWEEPS = {"mass": (-10, -5, 0, 5, 10, 15, 20, 25, 30), "kp": (0.4, 0.5, 0.6, 0.7, 0.8, 1.0, 1.3, 1.5, 1.8)}
+t0 = time.time()
+sweep = {(k, n): [survived(policies[n], {**NOMINAL, k: v}, 80) for v in vals]
+         for k, vals in SWEEPS.items() for n in ("nominal", "random")}
+from soc4180.envs import RANDOM_WORLD
+fig, axes = plt.subplots(1, 2, figsize=(10.5, 3.2), sharey=True)
+for ax, (k, vals), label in zip(axes, SWEEPS.items(), ("torso mass added (kg)", "servo stiffness (x nominal)")):
+    lo, hi = RANDOM_WORLD[k]
+    ax.axvspan(lo, hi, color="#e8743b", alpha=0.15, label="randomised training range")
+    ax.axvline(NOMINAL[k], color="#3b7dd8", ls=":", lw=1.5, label="the one nominal world")
+    ax.plot(vals, sweep[k, "nominal"], "o-", color="#3b7dd8", lw=2, label="PPO, nominal world")
+    ax.plot(vals, sweep[k, "random"], "s-", color="#e8743b", lw=2, label="PPO, randomised world")
+    ax.set_xlabel(label); ax.set_ylim(-0.5, 10.8); ax.grid(alpha=0.3)
+axes[0].set_ylabel("survived of 10 (80 N)"); axes[1].legend(fontsize=7, loc="lower center")
+fig.tight_layout(); plt.show()
+print(f"({time.time() - t0:.0f} s)")
+```
+
+---
+
+## Reading the sweep {.smaller}
+
+- **Blue** — trained in one world, it is good in a neighbourhood of that
+  world (0 to +10 kg; stiffness ×0.7 to ×1.0) and falls off on both sides:
+  3 of 10 at −5 kg, none at +20 kg, 3 of 10 at ×0.6.
+- **Orange** — trained on the whole shaded band, it holds across the band and
+  well past it on the heavy side (10 of 10 up to +25 kg, where the band
+  stops at +10) and the weak side (×0.5). But the band has **edges**: 5 kg
+  lighter than its lightest training torso (−10 kg) it survives **none** of ten,
+  worse than the nominal policy's two.
+- Neither policy was ever told the parameter. The orange one survives
+  because its behaviour had to work for every world in the band at once.
+
+**"Robust" is always "robust to something".** A randomised policy is
+robust to the variation it was trained on, plus a margin that must be
+measured, not assumed. The real robot is safe only if it lands inside that
+region — which is why the range is the engineering decision.
 
 ---
 
@@ -270,10 +489,83 @@ Randomise them, and exploiting them stops paying: the only strategies that
 score well are those that work **across** the range. The policy is forced
 to become a feedback controller for a *family* of robots.
 
-$$\max_\pi \; \mathbb{E}_{\xi \sim p(\xi)}\; \mathbb{E}_{\tau \sim \pi, \xi}\big[R(\tau)\big]$$
+$$\max_{\color{#3b7dd8}{\pi}} \; \mathbb{E}_{{\color{#e8743b}{\xi}} \sim p(\xi)}\; \mathbb{E}_{\tau \sim {\color{#3b7dd8}{\pi}}, {\color{#e8743b}{\xi}}}\big[{\color{#2a9d5c}{R(\tau)}}\big]$$
 
-where $\xi$ is the world (mass, friction, gains). The real robot is then, one
-hopes, one more sample from $p(\xi)$.
+where ${\color{#e8743b}{\xi}}$ is the world (mass, friction, gains). The real
+robot is then, one hopes, one more sample from $p({\color{#e8743b}{\xi}})$.
+The next two slides take this line apart.
+
+---
+
+## Domain randomisation, written out {.smaller}
+
+**Step 1 — one world.** In a fixed world ${\color{#e8743b}{\xi}}$, an episode
+$\tau$ is random (the shove, the start, the action noise), and PPO maximises
+its average return:
+$$J({\color{#3b7dd8}{\pi}};\,{\color{#e8743b}{\xi}}) = \mathbb E_{\tau \sim p(\tau \mid {\color{#3b7dd8}{\pi}}, {\color{#e8743b}{\xi}})}\big[{\color{#2a9d5c}{R(\tau)}}\big],
+\qquad {\color{#2a9d5c}{R(\tau)}} = \textstyle\sum_{t} \gamma^t {\color{#2a9d5c}{r_t}} .$$
+
+**Step 2 — we do not know the world.** Describe what we believe about it by
+a probability distribution $p({\color{#e8743b}{\xi}})$. Here it is uniform on
+a box — friction ×0.3…1.2, mass −5…+10 kg, stiffness ×0.7…1.3 — so its
+density is constant inside the box:
+$p({\color{#e8743b}{\xi}}) = 1 / (0.9 \times 15 \times 0.6) = 1/8.1$, and 0 outside.
+
+**Step 3 — average over worlds** (the law of total expectation):
+$$J_{\text{DR}}({\color{#3b7dd8}{\pi}}) = \mathbb E_{{\color{#e8743b}{\xi}} \sim p}\big[J({\color{#3b7dd8}{\pi}};{\color{#e8743b}{\xi}})\big]
+= \int p({\color{#e8743b}{\xi}})\; J({\color{#3b7dd8}{\pi}};{\color{#e8743b}{\xi}})\; d{\color{#e8743b}{\xi}} .$$
+
+**Step 4 — PPO already computes this.** Each episode draws a fresh
+${\color{#e8743b}{\xi}}$ in `reset`, then a trajectory in that world. PPO's
+batch average over episodes is therefore a Monte-Carlo estimate of the
+double average $\mathbb E_{\xi}\,\mathbb E_\tau$. **No change to PPO** — one
+line in `reset` changes the objective it optimises.
+
+What it cannot do: Step 3 weighs the worlds by $p$. A world outside the box
+has weight **zero** — nothing in training asks the policy to be good there.
+The −10 kg point of the sweep, a few slides back, is that zero, measured.
+
+---
+
+## A distribution of worlds, drawn {.smaller}
+
+```{python}
+#| fig-align: center
+draw = G1PushEnv(world=RANDOM_WORLD)
+xi = []
+for k in range(300):                                   # 300 training episodes' worlds, as `reset` draws them
+    draw.reset(seed=k); xi.append([draw.drawn["friction"], draw.drawn["mass"], draw.drawn["kp"]])
+xi = np.array(xi)
+tests = {"heavy": (1.0, 15.0, 1.0), "light": (1.0, -5.0, 1.0), "weak": (1.0, 0.0, 0.6),
+         "stiff": (1.0, 0.0, 1.5), "ice": (0.2, 0.0, 1.0)}
+shown = (("heavy", "light", "weak", "stiff"), ("heavy", "light", "ice"))   # the ones that differ in each view
+fig, axes = plt.subplots(1, 2, figsize=(10.5, 3.5))
+for ax, (i, j), (xl, yl), names in zip(axes, ((1, 2), (1, 0)), (("torso mass added (kg)", "servo stiffness (x)"),
+                                                                 ("torso mass added (kg)", "friction (x)")), shown):
+    ax.add_patch(plt.Rectangle((RANDOM_WORLD["mass"][0], RANDOM_WORLD[["friction", "mass", "kp"][j]][0]),
+                               15.0, np.ptp(RANDOM_WORLD[["friction", "mass", "kp"][j]]),
+                               color="#e8743b", alpha=0.10, lw=0))
+    ax.plot(xi[:, i], xi[:, j], ".", color="#e8743b", ms=4, label="training worlds $\\xi \\sim p(\\xi)$ (300 draws)")
+    ax.plot(0.0, 1.0, "*", color="#3b7dd8", ms=16, label="the nominal world (one point)")
+    for name in names:
+        w = tests[name]
+        ax.plot(w[i], w[j], "kx", ms=8, mew=2); ax.annotate(name, (w[i], w[j]), xytext=(4, 4), textcoords="offset points", fontsize=8)
+    ax.set_xlabel(xl); ax.set_ylabel(yl); ax.set_xlim(-9, 19)
+    ax.set_ylim(0.0, 1.7); ax.grid(alpha=0.3)
+axes[0].legend(fontsize=7, loc="upper right")
+fig.tight_layout(); plt.show()
+```
+
+Orange dots: the worlds the randomised policy trained in; the nominal policy
+saw only the blue star. Black crosses: the grid's test worlds (each view
+shows the ones that differ in its two parameters). **Heavy, weak, stiff and
+ice lie outside the box**, light on its edge — no training episode was like
+them — and the real robot is one more unknown point, somewhere, that we hope
+is inside.
+
+---
+
+## Where the idea is used {.smaller}
 
 - **Tobin et al., 2017**: randomised textures for vision (week 14).
 - **OpenAI, 2019**: a Rubik's cube solved by a robot hand trained entirely in
@@ -303,10 +595,18 @@ and the policy learns to be timid. **Choosing the ranges is the engineering.**
 
 ## Planner against policy {.smaller}
 
+```{python}
+obs, _ = env.reset(seed=0); t0 = time.perf_counter()
+for _ in range(1000):
+    policies["random"].predict(obs, deterministic=True)
+ms = (time.perf_counter() - t0) / 1000 * 1e3
+print(f"one policy decision: {ms:.2f} ms on this machine, against 20 ms between decisions")
+```
+
 | | MPPI (week 11) | PPO, randomised |
 | --- | --- | --- |
 | largest sideways shove survived | **300 N** (by stepping) | 100 N |
-| thinking per decision | ~100 ms | **~0.1 ms** |
+| thinking per decision | ~100 ms | **well under 1 ms** (above) |
 | model needed at run time | an exact one | none |
 | training | none | 16 min on 36 cores |
 | a heavier torso | falls if its model is not told | **fine** (trained for it) |

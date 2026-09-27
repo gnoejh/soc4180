@@ -51,16 +51,165 @@ A motor must be corrected thousands of times a second. A decision about *where
 to walk* need not be revised more than once a second. Bolting those together in
 one program produces something that is both too slow and too twitchy.
 
-Written as equations, one loop is three functions, and each is a layer:
-
-$$x_{k+1} = f(x_k, u_k)\qquad y_k = h(x_k)\qquad u_k = \pi(y_k)$$
-
-$f$ is the world (Layer 1), $h$ is what the sensors declared in the model can
-see (Layer 2), and $\pi$ is everything that decides (Layers 4 and 5). The
-whole semester is about $\pi$; the first half writes it by hand, the second
-half learns it.
+The next slides write that loop as three equations, draw it, and then show
+why its parts must run at different speeds.
 
 **Layers are a consequence of timescales, not of tidiness.**
+
+---
+
+## Colour code for the week {.smaller}
+
+The same colours mean the same things in every equation and every drawing:
+
+| symbol | meaning | on our G1 | colour |
+| --- | --- | --- | --- |
+| ${\color{#3b7dd8}{x}}$ | the **state**: everything needed to predict what happens next | `qpos`, `qvel` | <span style="color:#3b7dd8">blue</span> |
+| ${\color{#e8743b}{u}}$ | the **action** (command) sent to the motors | `ctrl` | <span style="color:#e8743b">orange</span> |
+| ${\color{#2a9d5c}{y}}$ | the **observation**: what the sensors report | `sensordata` | <span style="color:#2a9d5c">green</span> |
+| ${\color{#8e44ad}{\pi}}$ | the **policy**: the rule that turns an observation into an action | your code | <span style="color:#8e44ad">purple</span> |
+| ${\color{#c0392b}{\Delta t}}$ | the **timestep**: how much time one tick of the loop covers | `opt.timestep` | <span style="color:#c0392b">red</span> |
+
+A subscript $k$ counts ticks: ${\color{#3b7dd8}{x_k}}$ is the state after $k$
+timesteps, i.e. at time $t = k\,{\color{#c0392b}{\Delta t}}$.
+
+---
+
+## The loop as three equations {.smaller}
+
+$${\color{#3b7dd8}{x_{k+1}}} = f({\color{#3b7dd8}{x_k}}, {\color{#e8743b}{u_k}})
+\qquad
+{\color{#2a9d5c}{y_k}} = h({\color{#3b7dd8}{x_k}})
+\qquad
+{\color{#e8743b}{u_k}} = {\color{#8e44ad}{\pi}}({\color{#2a9d5c}{y_k}})$$
+
+- $f$ — **the world** (Layer 1): given where everything is and what the motors
+  were told, where is everything one timestep later? In simulation $f$ is one
+  call, `mujoco.mj_step`; on hardware it is reality.
+- $h$ — **the sensors** (Layer 2): what the robot can read about its own state.
+  It is a function *of* the state, but usually shows only part of it — an IMU
+  reports turning and acceleration, never where the robot stands.
+- ${\color{#8e44ad}{\pi}}$ — **the decision** (Layers 4 and 5): the only part you write.
+
+Read them in order and they are one lap of the loop: **sense** (${\color{#2a9d5c}{y_k}}$ from
+${\color{#3b7dd8}{x_k}}$), **decide** (${\color{#e8743b}{u_k}}$ from ${\color{#2a9d5c}{y_k}}$),
+**act** (${\color{#3b7dd8}{x_{k+1}}}$ from both) — then again, for ever. The whole
+semester is about ${\color{#8e44ad}{\pi}}$: the first half writes it by hand, the
+second half learns it. Sizes on our robot:
+
+```{python}
+try:
+    import soc4180
+except ImportError:
+    %pip install -q "soc4180 @ git+https://github.com/gnoejh/soc4180.git"
+    import soc4180
+import mujoco
+
+model = soc4180.load_g1()
+print(f"state x       : qpos {model.nq} + qvel {model.nv} = {model.nq + model.nv} numbers")
+print(f"action u      : ctrl {model.nu} numbers (one target angle per motor)")
+print(f"observation y : sensordata {model.nsensordata} numbers (2 IMUs x 2 sensors x 3 axes)")
+```
+
+The robot is described by 71 numbers but *senses* only 12 of them directly.
+Closing that gap — estimating ${\color{#3b7dd8}{x}}$ from ${\color{#2a9d5c}{y}}$ — is week 6.
+
+---
+
+## The loop, drawn {.smaller}
+
+```{python}
+#| fig-align: center
+import numpy as np
+import matplotlib.pyplot as plt
+from matplotlib.patches import FancyBboxPatch
+
+fig, ax = plt.subplots(figsize=(10, 3.6)); ax.axis("off"); ax.set_xlim(0, 10); ax.set_ylim(0, 3.6)
+def box(x, y, txt, col, w=2.6, h=1.0):
+    ax.add_patch(FancyBboxPatch((x, y), w, h, boxstyle="round,pad=0.06", fc=col, alpha=0.15, ec=col, lw=1.8))
+    ax.text(x + w / 2, y + h / 2, txt, ha="center", va="center", fontsize=10)
+def arrow(a, b, col, label, off=(0, 0.15), rad=0.0):
+    ax.annotate("", xy=b, xytext=a, arrowprops=dict(arrowstyle="->", lw=2, color=col,
+                                                   connectionstyle=f"arc3,rad={rad}"))
+    ax.text((a[0] + b[0]) / 2 + off[0], (a[1] + b[1]) / 2 + off[1], label, ha="center", fontsize=11, color=col)
+box(3.7, 2.4, "world  $f$\nLayer 1: mj_step", "#e8743b")
+box(0.3, 0.3, "policy  $\\pi$\nLayers 4-5: your code", "#8e44ad")
+box(7.1, 0.3, "sensors  $h$\nLayer 2: declared in MJCF", "#2a9d5c")
+arrow((1.6, 1.4), (3.65, 2.9), "#e8743b", "action $u_k$\n(ctrl)", off=(-0.6, 0.1))
+arrow((6.35, 2.9), (8.4, 1.4), "#3b7dd8", "state $x_{k+1}$\n(qpos, qvel)", off=(0.7, 0.1))
+arrow((7.05, 0.8), (2.95, 0.8), "#2a9d5c", "observation $y$ (sensordata)", off=(0, 0.12))
+ax.text(5.0, 0.2, "one lap = one timestep $\\Delta t$ = 0.002 s on our G1", ha="center", fontsize=9, color="#c0392b")
+fig.tight_layout(); plt.show()
+```
+
+Follow the arrows clockwise from the policy: an action goes into the world, the
+world moves on by one timestep, the sensors read the new state, and the policy
+sees that reading before it chooses the next action. **No box can skip
+another**: the policy never touches the state directly, only what $h$ lets it
+see, and it never moves the robot directly, only through $f$.
+
+---
+
+## What one timestep is {.smaller}
+
+The real world changes continuously; a computer can only compute a list of
+snapshots ${\color{#c0392b}{\Delta t}}$ apart. The rule that jumps from one
+snapshot to the next is the **integrator**, and the simplest one comes straight
+from the definition of speed.
+
+**Step 1 — speed is change over time:** $v = \dfrac{\text{change in position}}{\text{time taken}}$,
+exactly, in the limit of a tiny time.
+
+**Step 2 — use it for a small but finite time:**
+$\text{position}_{k+1} = \text{position}_k + {\color{#c0392b}{\Delta t}} \times \text{velocity}$,
+and in the same way $\text{velocity}_{k+1} = \text{velocity}_k + {\color{#c0392b}{\Delta t}} \times \text{acceleration}$.
+
+**Step 3 — let physics supply the acceleration** (for a dropped ball, $-g$;
+for a robot, Newton's laws for every link) and repeat.
+
+That is all $f$ is: a physics engine computes the accelerations, then takes one
+Step 2. It is only an approximation — it pretends nothing changes *during*
+${\color{#c0392b}{\Delta t}}$ — so the smaller the step, the closer to reality,
+and the more steps a second of robot time costs.
+
+---
+
+## A timestep, drawn {.smaller}
+
+A ball dropped from the G1's pelvis height (0.79 m), computed with Step 2 at
+two timesteps and compared with the exact answer $z = z_0 - \tfrac12 g t^2$:
+
+```{python}
+#| fig-align: center
+g, z0 = 9.81, 0.79
+def drop(dt, t_end=0.4):
+    z, v, ts, zs = z0, 0.0, [0.0], [z0]
+    for k in range(round(t_end / dt)):
+        v = v - dt * g                 # velocity from acceleration
+        z = z + dt * v                 # position from velocity (the new one, as MuJoCo does)
+        ts.append((k + 1) * dt); zs.append(z)
+    return np.array(ts), np.array(zs)
+
+fig, ax = plt.subplots(figsize=(8.8, 3.3))
+tt = np.linspace(0, 0.4, 400)
+ax.plot(tt, z0 - 0.5 * g * tt**2, color="0.2", lw=2, label="exact")
+for dt, col in ((0.05, "#c0392b"), (0.002, "#3b7dd8")):
+    ts, zs = drop(dt)
+    ax.plot(ts, zs, "o-" if dt > 0.01 else "-", color=col, ms=5, lw=1.4, drawstyle="steps-post" if dt > 0.01 else "default",
+            label=f"$\\Delta t$ = {dt} s ({round(0.4 / dt)} steps)")
+    print(f"dt = {dt:5.3f} s: z at t = 0.4 s is {zs[-1]:.4f} m, exact {z0 - 0.5 * g * 0.16:.4f} m, "
+          f"error {abs(zs[-1] - (z0 - 0.5 * g * 0.16)) * 1000:.1f} mm")
+ax.set_xlabel("time (s)"); ax.set_ylabel("height z (m)"); ax.grid(alpha=0.3); ax.legend(fontsize=9)
+ax.set_title("the simulator sees the world as a staircase of snapshots", fontsize=10)
+fig.tight_layout(); plt.show()
+```
+
+(A sketch with no floor, so the coarse ball sinks below zero.) Each red dot is
+one snapshot; between dots the simulator knows nothing. At
+${\color{#c0392b}{\Delta t}}$ = 0.05 s the fall is visibly wrong; at the G1's 0.002 s
+it lies on the exact curve. **Twenty-five times smaller step, twenty-five times
+smaller error** — and twenty-five times more work. Week 1 shows the other price
+of a step that is too big: not an error, an explosion.
 
 ---
 
@@ -149,7 +298,7 @@ interesting happens where the foot meets the floor.
 
 ## Layer 1: what it computes {.smaller}
 
-- **Integration** — advance the state by one timestep
+- **Integration** — advance the state by one timestep (*What one timestep is*, above)
 - **Contact detection and response** — who is touching what, with what force
 - **Friction** — whether the foot slips
 - **Inertia and mass distribution** — how the body resists being moved
@@ -180,8 +329,11 @@ print(f"integrator : {mujoco.mjtIntegrator(model.opt.integrator).name}")
 print(f"gravity    : {model.opt.gravity}")
 ```
 
-The physics runs far faster than any decision-making layer above it. Remember
-that number.
+500 Hz means one step covers 2 ms of robot time: the loop of the earlier
+slides turns 500 times per simulated second. The integrator is `implicitfast`,
+a more stable relative of the Step 2 rule (week 1 explains the difference);
+gravity is $-9.81\ \mathrm{m/s^2}$ along $z$. The physics runs far faster than
+any decision-making layer above it. Remember that number.
 
 ---
 
@@ -262,7 +414,7 @@ switches. If a controller needs them, you add them to the model.
 
 ---
 
-## Layer 2: actuators are not joints
+## Layer 2: actuators are not joints {.smaller}
 
 ```{python}
 import numpy as np
@@ -278,11 +430,34 @@ print(f"gains used across all {model.nu} actuators: "
 These are **position servos**: you command an *angle*, and an internal
 proportional loop with gain 500 produces the torque:
 
-$$\tau = k_p\,(\text{ctrl} - q) \;-\; k_v\,\dot q, \qquad k_p = 500$$
+$$\tau = k_p\,({\color{#e8743b}{\text{ctrl}}} - q) \;-\; k_v\,\dot q, \qquad k_p = 500$$
 
-A spring pulling the joint toward its setpoint, plus a damper. Week 5 takes
-this apart; today it is enough to know that a *command* is an angle, and a
-*torque* is what the spring produces when the joint is not there yet.
+- ${\color{#e8743b}{\text{ctrl}}}$ — the angle you command (rad): the action ${\color{#e8743b}{u}}$
+- $q$, $\dot q$ — the joint's actual angle (rad) and angular speed (rad/s), part of the state ${\color{#3b7dd8}{x}}$
+- $k_p$ — stiffness, N·m of torque per radian of error; $k_v$ — damping, N·m per rad/s
+- $\tau$ — the torque the motor applies (N·m)
+
+---
+
+## Layer 2: the servo law, in numbers {.smaller}
+
+```{python}
+knee =mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, "left_knee_joint")
+kv_knee = -model.actuator_biasprm[knee, 2]         # MuJoCo stores the damper as a negative bias
+print(f"left knee: kp = {model.actuator_gainprm[knee, 0]:.0f} N·m/rad, kv = {kv_knee:.1f} N·m·s/rad")
+print(f"a 0.1 rad error, joint still     -> tau = {500 * 0.1:.0f} N·m pushing it back")
+print(f"no error, joint moving at 1 rad/s -> tau = {-kv_knee:.1f} N·m braking it")
+```
+
+A spring pulling the joint toward its setpoint, plus a damper resisting
+motion. Week 5 takes this apart; today it is enough to know that a *command*
+is an angle, and a *torque* is what the spring produces when the joint is not
+there yet.
+
+**Notice where this law runs**: inside the actuator model, so inside
+`mj_step` — inside $f$. On our G1 the fastest part of Layer 4 is computed by
+the physics engine at every timestep, which is also how a real servo drive
+works: the motor's own electronics close that loop, below anything you write.
 
 Hold on to this — it is about to matter more than anything else today.
 
@@ -458,11 +633,18 @@ for limp, col, label in ((True, "#e8743b", "servos OFF: layers 1 + 2 only"),
 ax.set_xlabel("time (s)"); ax.set_ylabel("torso height (m)"); ax.legend(fontsize=9); ax.grid(alpha=0.3)
 ax.set_title("one model, one physics engine, one starting pose", fontsize=10)
 fig.tight_layout(); plt.show()
+t, z = height_trace(True)
+print(f"servos OFF: {z[np.argmin(abs(t - 0.5))]:.3f} m at 0.5 s, below 0.2 m at {t[np.argmax(z < 0.2)]:.2f} s, "
+      f"lowest {z.min():.3f} m at {t[z.argmin()]:.2f} s")
+print(f"free fall from 0.79 m to 0.2 m would take {np.sqrt(2 * (0.79 - 0.2) / 9.81):.2f} s")
 ```
 
-The blue line is flat to the width of the line. The orange one takes about
-half a second to reach the floor and then bounces in the heap. **Nothing about
-the robot differs between the two lines.**
+The blue line is flat to the width of the line. The orange one hardly moves
+for half a second — straight legs buckle slowly at first, the way a pencil
+standing on its tip starts to tip — then drops through 0.2 m after about
+1.3 s — far slower than a free fall, because the body is not dropped: it
+pivots and folds on legs whose feet stay on the floor. **Nothing about the robot differs between
+the two lines.**
 
 ---
 
@@ -500,7 +682,7 @@ the layer that *replaces* hand-written parts of Layer 4.
 | Task planning | Decompose a goal into steps |
 | Vision-language-action models | Map instructions to robot actions |
 
-Weeks 8–14 are Layer 5. This is where the "AI" in the course title lives.
+Weeks 7–15 are Layer 5. This is where the "AI" in the course title lives.
 
 ---
 
@@ -528,7 +710,7 @@ to twenty times faster.
 
 | Layer | Typical rate | Why |
 | --- | --- | --- |
-| 1 Physics | 500 Hz *(ours)* – 1 kHz+ | Contact needs small steps to stay stable |
+| 1 Physics | 500 Hz *(ours)* – 1 kHz+ | Stiff contacts and servos need small steps to stay stable (week 1 derives the limit) |
 | 4 Joint servo | 500 Hz – 1 kHz | A motor drifts out of position quickly |
 | 4 Balance / WBC | 100 – 500 Hz | Falling happens in a few hundred ms |
 | 5 Learned policy | ~50 Hz | Enough for gait; more is wasted compute |
@@ -562,6 +744,40 @@ decision**, and the servos correct the joints ten times between two thoughts.
 
 ---
 
+## Ten steps per decision, drawn {.smaller}
+
+A rate $f$ (Hz, "per second") and a period $T$ (seconds per tick) are the same
+fact: $T = 1/f$. Physics at 500 Hz ticks every $T_{\text{phys}} = 1/500$ s = 2 ms;
+a policy at 50 Hz every $T_{\text{pol}} = 1/50$ s = 20 ms. Physics steps per decision:
+
+$$N = \frac{T_{\text{pol}}}{T_{\text{phys}}} = \frac{f_{\text{phys}}}{f_{\text{pol}}} = \frac{500}{50} = 10 .$$
+
+```{python}
+#| fig-align: center
+fig, ax = plt.subplots(figsize=(9.5, 2.4))
+T = 0.06
+for k in range(int(round(T / 0.002)) + 1):
+    ax.plot([k * 0.002] * 2, [0, 0.35], color="#e8743b", lw=1)
+for k in range(int(round(T / 0.02)) + 1):
+    ax.plot([k * 0.02] * 2, [0.6, 1.1], color="#8e44ad", lw=3)
+    ax.text(k * 0.02, 1.2, f"decide\n$u$ = $\\pi(y)$", ha="center", fontsize=8, color="#8e44ad")
+ax.text(-0.004, 0.17, "physics + servo\nevery 2 ms", ha="right", va="center", fontsize=8, color="#e8743b")
+ax.text(-0.004, 0.85, "policy\nevery 20 ms", ha="right", va="center", fontsize=8, color="#8e44ad")
+ax.annotate("", xy=(0.02, -0.15), xytext=(0.0, -0.15), arrowprops=dict(arrowstyle="<->", color="0.3"))
+ax.text(0.01, -0.33, "10 physics steps, one held action", ha="center", fontsize=8)
+ax.set_xlim(-0.03, T + 0.003); ax.set_ylim(-0.45, 1.7); ax.set_yticks([])
+ax.set_xticks([0, 0.02, 0.04, 0.06])
+ax.set_xlabel("time (s)"); ax.spines[["left", "top", "right"]].set_visible(False)
+fig.tight_layout(); plt.show()
+```
+
+Between two purple decisions the action is **held**: the same `ctrl` is sent to
+ten physics steps, and the servo law on the previous slides keeps correcting
+the joints at every orange tick. The slow layer sets the goal; the fast layer
+chases it.
+
+---
+
 ## Real versus simulated, aligned {.smaller}
 
 | Layer | Real Unitree G1 | Our MuJoCo G1 |
@@ -570,7 +786,7 @@ decision**, and the servos correct the joints ten times between two thoughts.
 | **2 Model** | Onboard kinematic and dynamic model | **MJCF** from Menagerie, pinned |
 | **3 Middleware** | Vendor SDK + ROS 2 bridge | One Python process |
 | **4 Control** | Onboard joint servos, WBC, MPC | Controllers we write (weeks 2–6) |
-| **5 AI** | Policies deployed to the onboard computer | Policies we train (weeks 8–14) |
+| **5 AI** | Policies deployed to the onboard computer | Policies we train (weeks 8–15) |
 | **Body** | Motors, encoders, IMU, battery, frame | Numbers in the MJCF |
 
 **Layers 2–5 transfer between the columns. Layer 1 never does.**
@@ -594,25 +810,23 @@ Because **Layer 1 was replaced by reality**, and reality disagrees:
 
 None of these appear in the MJCF unless somebody puts them there.
 
-**Week 13** attacks this directly: we build a deliberately worse simulator and
-measure how far our policies degrade.
+**Week 12** attacks this directly: a policy meets physics it did not train in
+(other friction, extra mass, weaker servos), and we measure how far it degrades.
 
 ---
 
 ## Where this course lives {.smaller}
 
 | Weeks | Layer | What you do |
-| --- | --- | --- |
-| **0** | all | This lecture — the map |
-| **1** | 1 + 2 | Drive the engine; read the blueprint |
+| ------ | ------ | ------------------------------------------------------------ |
+| **0–1** | all; 1 + 2 | The map; drive the engine and read the blueprint |
 | **2–3** | 2 + 4 | Transforms, forward and inverse kinematics |
-| **4–5** | 4 | Contact, balance, and **an analytic walking robot** |
-| **6** | 4 | Joint control, PD tuning, CPG gaits |
-| **7** | 4 → 5 | Reframe walking as a learning problem |
-| **8–10** | 5 | Policy gradients, PPO, reward design |
-| **11–12** | 5 | Parallel training on GPU; robustness |
-| **13** | 1 | The sim-to-real gap, measured |
-| **14–15** | 5 | Perception, and the capstone |
+| **4–5** | 4 | **An analytic walking robot**; actuation, PD control, CPG gaits |
+| **6** | 2 + 4 | Sensing and state estimation |
+| **7–10** | 4 → 5 | Walking as a learning problem; PPO, reward design, GPU training |
+| **11** | 4 | Planning at run time: MPC by sampling |
+| **12** | 1 + 5 | Robustness: push recovery, domain randomisation, the sim-to-real gap |
+| **13–15** | 5 | Imitation, then pixels, then language |
 
 We spend the first half **building Layer 4 by hand**, so that when Layer 5
 replaces it you know exactly what it replaced.

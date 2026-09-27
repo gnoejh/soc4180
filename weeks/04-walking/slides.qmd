@@ -1,6 +1,6 @@
 ---
 title: "4 — Making a Humanoid Walk"
-subtitle: "LIPM, ZMP, and an analytic gait · SOC4180 Robot and AI"
+subtitle: "LIPM, ZMP, the capture point, and an analytic gait · SOC4180 Robot and AI"
 author: "Hong Jeong"
 format:
   revealjs:
@@ -28,62 +28,34 @@ No reinforcement learning. No training. No neural network.
 Everything today comes from **one linear differential equation** and the inverse
 kinematics you wrote in Week 3.
 
-This is **Layer 4** — control and planning — doing the whole job on its own. When
-we replace parts of it with learning in Week 8 onward, this is what gets replaced,
-and you will know exactly what it was.
+1. Why walking is hard: the body has no motor of its own.
+2. Where the floor can push: CoM, CoP, ZMP, the support polygon.
+3. The model: the linear inverted pendulum — derived, solved, read.
+4. The one number that decides balance: the **capture point**.
+5. A gait: footsteps, a swinging leg, double support, IK. Then it walks.
+
+This is **Layer 4** — control and planning — doing the whole job on its own.
 
 ---
 
-## Why walking is hard
+## Colour code for the week {.smaller}
 
-Standing still is a solved problem: put the centre of mass over the feet.
+The same colours mean the same things in every equation and every drawing:
 
-Walking means **deliberately falling and catching yourself, twice a second.**
+| symbol | meaning | colour |
+| --- | --- | --- |
+| ${\color{#3b7dd8}{x,\ \dot x,\ \ddot x}}$ | the **centre of mass** (CoM): position, velocity, acceleration (horizontal) | <span style="color:#3b7dd8">blue</span> |
+| ${\color{#e8743b}{p}}$ | the **ZMP** — where the floor's push acts | <span style="color:#e8743b">orange</span> |
+| ${\color{#2a9d5c}{f}}$ | a **force** from the floor | <span style="color:#2a9d5c">green</span> |
+| ${\color{#c0392b}{\omega}}$ | how fast the robot falls: $\omega = \sqrt{g/z_c}$ | <span style="color:#c0392b">red</span> |
+| ${\color{#8e44ad}{\xi}}$ | the **capture point** | <span style="color:#8e44ad">purple</span> |
 
-- A humanoid is **underactuated** — no motor connects the robot to the ground,
-  so you cannot simply command the body where to go
-- The only way to push the body is **through a foot that is touching the floor**
-- To move forward you must first become unbalanced
-- The support region *changes shape* every step, and briefly is one small foot
-
----
-
-## The two ways to walk
-
-**Static walking** keeps the centre of mass over the support foot at all times.
-The robot can freeze at any instant and stay upright. It is slow, and it looks
-like a robot from 1985.
-
-**Dynamic walking** allows the centre of mass to leave the support region,
-relying on momentum to carry it to the next foothold. It is faster, more
-efficient, and how humans actually move — but freeze it mid-step and it falls.
-
-We build the dynamic kind. The tool that makes it tractable is a model so
-simplified it seems like cheating.
+$z_c$ is the height of the centre of mass, $g = 9.81\ \mathrm{m/s^2}$, $m$ the
+robot's mass (33.3 kg for the G1).
 
 ---
 
-## Centre of pressure, and the ZMP
-
-The floor can only **push**, never pull. All the little contact forces under a
-foot sum to one resultant force, and the point where it acts is the
-**centre of pressure (CoP)**.
-
-The CoP **cannot leave the support polygon** — the convex hull of the contact
-points. That is not a control law, it is geometry: there is no floor outside the
-foot to push with.
-
-In walking this point is usually called the **Zero Moment Point (ZMP)**. The
-balance criterion for the whole semester:
-
-> **ZMP inside the support polygon ⟹ the foot does not rotate about its edge.**
-> Outside, the robot tips, and no ankle torque can stop it.
-
----
-
-## Our support polygon {.smaller}
-
-Each G1 foot has four contact spheres. Their spread *is* the polygon:
+## Why walking is hard: count the motors {.smaller}
 
 ```{python}
 try:
@@ -94,9 +66,185 @@ except ImportError:
 
 import numpy as np
 import mujoco
+import matplotlib.pyplot as plt
 
 model = soc4180.load_g1()
+mass = float(model.body_mass.sum())
+print(f"degrees of freedom  nv = {model.nv}   (6 for the floating pelvis + 29 hinges)")
+print(f"motors              nu = {model.nu}")
+print(f"unactuated             = {model.nv - model.nu}   <- the whole body's position and orientation")
+print(f"total mass             = {mass:.1f} kg")
+```
 
+The G1 has 35 ways to move and 29 motors. The 6 missing ones are exactly the
+pelvis's free joint: **there is no motor between the robot and the world.**
+A system with fewer inputs than degrees of freedom is **underactuated**.
+
+Every motor pushes one link against another *inside* the robot. Internal
+forces come in equal and opposite pairs, so they cannot move the robot as a
+whole. The next slide says what can.
+
+---
+
+## Newton, for the whole robot {.smaller}
+
+Add up $F = ma$ over every link. The internal (motor) forces cancel in pairs,
+and what is left is one equation for the **centre of mass** ${\color{#3b7dd8}{\mathbf{c}}}$:
+
+$$m\,{\color{#3b7dd8}{\ddot{\mathbf{c}}}} \;=\; {\color{#2a9d5c}{\mathbf{f}_{\text{floor}}}} \;+\; m\,\mathbf{g}$$
+
+- ${\color{#3b7dd8}{\ddot{\mathbf{c}}}}$ — how the CoM accelerates
+- ${\color{#2a9d5c}{\mathbf{f}_{\text{floor}}}}$ — the sum of every contact force under the feet
+- $m\mathbf{g}$ — gravity, which we cannot change
+
+**The only thing that can move the body horizontally is the floor.** And the
+floor has rules: it can **push** (never pull), only **where a foot touches it**,
+and only as hard as **friction** allows sideways.
+
+So the robot cannot say "move my body 10 cm forward". It can only move its
+legs so that the floor pushes the body where it wants. That is why walking is
+**deliberately falling and catching yourself**:
+
+1. lean so gravity starts to carry the body forward,
+2. let the stance foot's floor force steer it,
+3. put the next foot where it will catch the fall.
+
+---
+
+## The broom on your hand {.smaller}
+
+```{python}
+#| fig-align: center
+fig, axes = plt.subplots(1, 3, figsize=(10.5, 3.3))
+titles = ["upright: floor force through the CoM\nno turning, no fall",
+          "leaning: floor force behind the CoM\nthe body accelerates forward",
+          "catch: a new foot ahead of the CoM\nthe floor pushes it back"]
+for ax, (lean, foot, title) in zip(axes, ((0.0, 0.0, titles[0]), (0.15, 0.0, titles[1]), (0.15, 0.30, titles[2]))):
+    ax.axhline(0, color="0.3", lw=2)
+    ax.fill_between([-0.4, 0.7], -0.05, 0, color="0.9")
+    cx, cz = lean, 0.6
+    ax.plot([foot, cx], [0, cz], color="0.5", lw=2.5)
+    ax.plot(cx, cz, "o", ms=16, color="#3b7dd8")
+    ax.annotate("", xy=(cx, cz - 0.22), xytext=(cx, cz), arrowprops=dict(arrowstyle="->", lw=2, color="0.3"))
+    ax.text(cx + 0.03, cz - 0.16, "$mg$", fontsize=10)
+    d = np.array([cx - foot, cz]); d = 0.28 * d / np.linalg.norm(d)
+    ax.annotate("", xy=(foot + d[0], d[1]), xytext=(foot, 0), arrowprops=dict(arrowstyle="->", lw=2.5, color="#2a9d5c"))
+    ax.plot(foot, 0, "v", color="#e8743b", ms=10)
+    if lean:
+        ax.annotate("", xy=(cx + 0.14 * (1 if foot < cx else -1), cz + 0.08), xytext=(cx, cz + 0.08),
+                    arrowprops=dict(arrowstyle="->", lw=2, color="#3b7dd8"))
+    ax.set_xlim(-0.35, 0.65); ax.set_ylim(-0.08, 0.8); ax.set_aspect("equal"); ax.axis("off")
+    ax.set_title(title, fontsize=9)
+fig.text(0.5, 0.02, "green: the floor's push (along the leg);  orange: where it acts;  blue arrow: where the CoM accelerates",
+         ha="center", fontsize=8.5, color="0.35")
+fig.tight_layout(rect=(0, 0.05, 1, 1)); plt.show()
+```
+
+Balancing a broom: you cannot push the top, only move the bottom. When the
+floor's force points *through* the CoM nothing turns; when it points behind,
+the body is flung forward — faster the further it leans. Walking uses that
+fall on purpose, and ends it by putting a foot down ahead of the body.
+
+---
+
+## Two ways to walk {.smaller}
+
+```{python}
+#| fig-align: center
+fig, (a0, a1) = plt.subplots(1, 2, figsize=(10.5, 3.2))
+for ax, title in ((a0, "static: the CoM (blue) never leaves the foot under it"),
+                  (a1, "dynamic: the CoM travels between the feet")):
+    for k in range(4):
+        y = 0.12 if k % 2 == 0 else -0.12
+        ax.add_patch(plt.Rectangle((0.2 * k - 0.085, y - 0.03), 0.17, 0.06, color="#e8743b", alpha=0.25))
+    ax.set_xlim(-0.15, 0.8); ax.set_ylim(-0.2, 0.2); ax.set_aspect("equal"); ax.set_title(title, fontsize=9)
+    ax.set_xlabel("x forward (m)"); ax.grid(alpha=0.3)
+xs, ys = [], []
+for k in range(4):                        # static: shift fully over each foot, then move
+    y = 0.12 if k % 2 == 0 else -0.12
+    xs += [0.2 * k - 0.05, 0.2 * k + 0.05]; ys += [y * 0.9, y * 0.9]
+a0.plot(xs, ys, "-o", color="#3b7dd8", ms=3)
+t = np.linspace(0, 0.6, 200)
+a1.plot(t + 0.0, 0.059 * np.sin(np.pi * t / 0.2 + np.pi / 2), color="#3b7dd8", lw=2)
+a0.set_ylabel("y left (m)")
+fig.tight_layout(); plt.show()
+```
+
+**Static walking** (left) carries the CoM all the way over each foot before
+lifting the other: freeze it at any instant and it stays up. Slow — the look
+of a 1985 robot. **Dynamic walking** (right) lets the CoM sway only about 6
+centimetres and spend most of its time *between* the feet, over no foot at
+all, falling toward the next one. Fast and efficient — and frozen mid-step it
+falls. Both paths are sketches; the dynamic one's real shape is derived later
+today from the LIPM.
+
+Real humanoids combine the two ideas: a **plan** (where the feet and the body
+should go) and **feedback** that uses the natural fall. Today is the plan.
+
+---
+
+## Where the floor pushes: CoP {.smaller}
+
+```{python}
+#| fig-align: center
+xs_c = np.array([-0.05, 0.0, 0.05, 0.12])            # contact points along the foot
+fz = np.array([60.0, 110.0, 90.0, 67.0])             # an illustrative split of 327 N
+cop = (fz * xs_c).sum() / fz.sum()
+fig, axes = plt.subplots(1, 2, figsize=(10, 3.0))
+for ax, title in zip(axes, ("what the floor does: many pushes", "what it is equivalent to: one push at the CoP")):
+    ax.add_patch(plt.Rectangle((-0.06, 0.0), 0.19, 0.035, color="0.75"))
+    ax.axhline(0, color="0.3", lw=2)
+    ax.set_xlim(-0.1, 0.2); ax.set_ylim(-0.4, 0.06); ax.set_aspect("equal"); ax.axis("off")
+    ax.set_title(title, fontsize=9)
+for x, f in zip(xs_c, fz):
+    axes[0].annotate("", xy=(x, 0.0), xytext=(x, -f / 1000), arrowprops=dict(arrowstyle="->", lw=2, color="#2a9d5c"))
+    axes[0].text(x, -f / 1000 - 0.03, f"{f:.0f} N", ha="center", fontsize=8, color="#2a9d5c")
+axes[1].annotate("", xy=(cop, 0.0), xytext=(cop, -fz.sum() / 1000), arrowprops=dict(arrowstyle="->", lw=3, color="#e8743b"))
+axes[1].text(cop + 0.01, -0.25, f"{fz.sum():.0f} N at x = {cop:+.3f} m", fontsize=8.5, color="#e8743b")
+fig.tight_layout(); plt.show()
+```
+
+Many small upward forces ${\color{#2a9d5c}{f_i}} \ge 0$ at contact points $x_i$
+act like **one** force of size $\sum_i f_i$ at the **centre of pressure**:
+
+$${\color{#e8743b}{p}} = \frac{\sum_i {\color{#2a9d5c}{f_i}}\, x_i}{\sum_i {\color{#2a9d5c}{f_i}}}
+ = \sum_i w_i\,x_i, \qquad w_i = \frac{{\color{#2a9d5c}{f_i}}}{\sum_j {\color{#2a9d5c}{f_j}}} \ge 0,\ \ \sum_i w_i = 1 .$$
+
+The weights are **non-negative and sum to one** (the floor only pushes), so
+${\color{#e8743b}{p}}$ is a weighted average of the contact points: it lies
+between them, **inside the support polygon**, always. The forces above are
+illustrative; the geometry is not.
+
+---
+
+## The ZMP, and the balance rule {.smaller}
+
+The **Zero Moment Point** is the point on the floor about which gravity plus
+the body's inertia produce **no tipping moment** (no moment about horizontal
+axes). On flat ground it is the same point as the CoP — the two names come from
+two ways of computing it, one from the motion, one from the forces.
+
+The rule that follows from the last slide:
+
+> **The ZMP must be inside the support polygon.** A motion that would need it
+> outside cannot happen with the feet flat: the foot rolls about its edge
+> instead, and no ankle torque can stop that.
+
+- one foot on the floor: the polygon is that foot, about 17 × 6 cm on the G1
+- both feet down: the convex hull around both feet (**double support**)
+- walking: the polygon changes shape every step, and for most of each step it
+  is one small foot
+
+The whole gait is an argument about keeping the orange point in the shaded
+area — which we measure at the end of the lecture.
+
+---
+
+## Our support polygon {.smaller}
+
+Each G1 foot touches the floor through four small spheres. Their spread *is* the polygon:
+
+```{python}
 pts = [(model.geom_pos[g][0], model.geom_pos[g][1])
        for g in range(model.ngeom)
        if mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_BODY, model.geom_bodyid[g])
@@ -117,8 +265,6 @@ the entire margin.
 
 ```{python}
 #| fig-align: center
-import matplotlib.pyplot as plt
-
 data = soc4180.keyframe_data(model, "stand")
 mujoco.mj_forward(model, data)
 feet_xy = {}
@@ -161,39 +307,36 @@ print(f"centre of mass projects to x = {com[0]:+.3f}, y = {com[1]:+.3f}")
 ```
 
 Standing on both feet the polygon is the big grey shape. Lift one foot and it
-collapses to a single 17 cm by 6 cm patch — and the centre of mass, the red
-star, has to be *above* it or the robot tips.
+collapses to a single patch — and while standing still, the CoM (red star)
+has to be above it.
 
 ---
 
-## The Linear Inverted Pendulum Model
+## The Linear Inverted Pendulum Model {.smaller}
 
-Replace the robot with a point mass on a massless leg, and impose one
-assumption: **the centre of mass stays at constant height.**
+Replace the 29-joint robot with the simplest thing that can fall over:
 
-That assumption removes the vertical dynamics and linearises everything:
+- all the mass in **one point** at the CoM, ${\color{#3b7dd8}{x}}$ horizontally
+- a **massless leg** from that point to the floor, touching at ${\color{#e8743b}{p}}$
+- one assumption that makes it solvable: **the CoM stays at constant height** $z_c$
 
-$$\ddot{x} = \omega^2\,(x - p), \qquad \omega = \sqrt{g / z_c}$$
+The legs can hold the height constant (they are servo-controlled, and the IK
+will be told to keep the pelvis level), so the model gives up only the
+vertical motion. What is left is one equation:
 
-where $p$ is the ZMP. Read it as: **the mass accelerates away from the ZMP**, and
-faster the further away it gets. Balancing is unstable, which is why it needs
-constant attention.
+$${\color{#3b7dd8}{\ddot{x}}} \;=\; {\color{#c0392b}{\omega^2}}\,({\color{#3b7dd8}{x}} - {\color{#e8743b}{p}}),
+\qquad {\color{#c0392b}{\omega}} = \sqrt{g / z_c}$$
 
-$\omega$ is the only parameter, and $1/\omega$ is the natural timescale of
-falling.
+- ${\color{#3b7dd8}{x}} - {\color{#e8743b}{p}}$ — how far the CoM is from the point the floor pushes at
+- ${\color{#c0392b}{\omega^2}}$ — how strongly that distance turns into acceleration
+
+Read it in words: **the CoM accelerates away from the ZMP, harder the further away it is.**
+That is a hill, not a valley. The next two slides derive it; the two after
+that solve it.
 
 ---
 
-## Where the equation comes from {.smaller}
-
-Take moments about the ZMP. The floor pushes up through $p$; gravity pulls down
-through the mass. Hold the height at $z_c$ and the vertical acceleration is
-zero, so the floor force is exactly $mg$, and the moment balance is the whole
-equation of motion:
-
-$$m\,z_c\,\ddot{x} \;=\; m\,g\,(x - p)
-\qquad\Longrightarrow\qquad
-\ddot{x} = \frac{g}{z_c}\,(x - p) = \omega^2 (x - p)$$
+## Where the equation comes from: the forces {.smaller}
 
 ```{python}
 #| fig-align: center
@@ -202,67 +345,225 @@ fig, ax = plt.subplots(figsize=(6.4, 4.0))
 ax.axhline(0, color="0.3", lw=2); ax.fill_between([-0.3, 0.5], -0.06, 0, color="0.9")
 ax.plot([pz, xm], [0, zc], color="0.5", lw=2, ls="--")                       # massless leg
 ax.plot(xm, zc, "o", ms=18, color="#3b7dd8"); ax.text(xm + 0.03, zc, "$m$", fontsize=12, va="center")
-ax.plot(pz, 0, "kv", ms=10); ax.text(pz, -0.045, "ZMP  $p$", ha="center", fontsize=10)
-ax.annotate("", xy=(xm, zc - 0.22), xytext=(xm, zc), arrowprops=dict(arrowstyle="->", lw=2, color="#e8743b"))
-ax.text(xm + 0.02, zc - 0.13, "$mg$", color="#e8743b", fontsize=11)
-ax.annotate("", xy=(pz, 0.22), xytext=(pz, 0), arrowprops=dict(arrowstyle="->", lw=2, color="#2a9d5c"))
-ax.text(pz + 0.02, 0.15, "$mg$ (floor)", color="#2a9d5c", fontsize=10)
+ax.plot(pz, 0, "v", color="#e8743b", ms=10); ax.text(pz, -0.045, "ZMP  $p$", ha="center", fontsize=10, color="#e8743b")
+ax.annotate("", xy=(xm, zc - 0.22), xytext=(xm, zc), arrowprops=dict(arrowstyle="->", lw=2, color="0.3"))
+ax.text(xm + 0.02, zc - 0.13, "$mg$", color="0.3", fontsize=11)
+F = np.array([xm - pz, zc]); F = 0.33 * F / np.linalg.norm(F)
+ax.annotate("", xy=(pz + F[0], F[1]), xytext=(pz, 0), arrowprops=dict(arrowstyle="->", lw=2.5, color="#2a9d5c"))
+ax.text(pz + F[0] - 0.02, F[1] + 0.03, "$f$ (along the leg)", color="#2a9d5c", fontsize=10, ha="right")
 ax.plot([xm, xm], [0, zc], ":", color="0.6")
 ax.annotate("", xy=(xm, 0.30), xytext=(pz, 0.30), arrowprops=dict(arrowstyle="<->", lw=1.2))
 ax.text((pz + xm) / 2, 0.32, "$x - p$", ha="center", fontsize=11)
 ax.annotate("", xy=(xm + 0.09, zc), xytext=(xm + 0.09, 0), arrowprops=dict(arrowstyle="<->", lw=1.2))
 ax.text(xm + 0.11, zc / 2, "$z_c$ (held constant)", fontsize=10, va="center")
-ax.annotate("", xy=(xm + 0.10, zc + 0.03), xytext=(xm, zc + 0.03),
-            arrowprops=dict(arrowstyle="->", lw=2, color="#3b7dd8"))
-ax.text(xm + 0.11, zc + 0.03, r"$\ddot{x} = \omega^2 (x-p)$", color="#3b7dd8", fontsize=11, va="center")
 ax.set_xlim(-0.3, 0.55); ax.set_ylim(-0.08, 0.8); ax.set_aspect("equal"); ax.axis("off")
 fig.tight_layout(); plt.show()
 ```
 
-Every simplification is visible in the picture: one mass, a massless leg, a
-constant height, and a single point of support.
+A **massless** leg cannot carry a moment, so the floor's force ${\color{#2a9d5c}{\mathbf{f}}}$
+must point **along the leg**, from ${\color{#e8743b}{p}}$ to the mass. Its two
+components are therefore in the ratio of the leg's two sides:
+
+$$\frac{{\color{#2a9d5c}{f_x}}}{{\color{#2a9d5c}{f_z}}} = \frac{{\color{#3b7dd8}{x}} - {\color{#e8743b}{p}}}{z_c}.$$
+
+---
+
+## Where the equation comes from: three lines {.smaller}
+
+**Step 1 — vertical.** The height is constant, so the vertical acceleration is
+zero and Newton gives ${\color{#2a9d5c}{f_z}} - mg = m\,\ddot z = 0$:
+
+$${\color{#2a9d5c}{f_z}} = mg .$$
+
+**Step 2 — horizontal.** Newton again, with the ratio from the drawing:
+
+$$m\,{\color{#3b7dd8}{\ddot{x}}} = {\color{#2a9d5c}{f_x}}
+ = {\color{#2a9d5c}{f_z}}\,\frac{{\color{#3b7dd8}{x}} - {\color{#e8743b}{p}}}{z_c}
+ = mg\,\frac{{\color{#3b7dd8}{x}} - {\color{#e8743b}{p}}}{z_c}.$$
+
+**Step 3 — divide by $m$:**
+
+$${\color{#3b7dd8}{\ddot{x}}} = \frac{g}{z_c}\,({\color{#3b7dd8}{x}} - {\color{#e8743b}{p}})
+ = {\color{#c0392b}{\omega^2}}\,({\color{#3b7dd8}{x}} - {\color{#e8743b}{p}}).$$
+
+**The same result, as a moment balance.** Multiply Step 2 by $z_c$:
+$m z_c\,{\color{#3b7dd8}{\ddot x}} = mg\,({\color{#3b7dd8}{x}} - {\color{#e8743b}{p}})$.
+The right side is gravity's moment about ${\color{#e8743b}{p}}$ (weight × lever arm);
+the left side is the moment of the "inertial force" $m\ddot x$ at height $z_c$.
+Setting them equal is exactly "zero moment about the ZMP" — which is where the
+point gets its name. It is an **equation of motion obtained from a moment
+balance**, not itself a torque.
+
+Units check: $g/z_c$ is $\mathrm{(m/s^2)/m} = \mathrm{1/s^2}$, so ${\color{#c0392b}{\omega}}$ is in $1/\mathrm{s}$.
 
 ---
 
 ## Solving it exactly {.smaller}
 
-The equation is linear with constant coefficients, so it has a closed-form
-solution — no integration, no optimisation:
+Hold ${\color{#e8743b}{p}}$ fixed (one foot planted) and write $u = {\color{#3b7dd8}{x}} - {\color{#e8743b}{p}}$.
+Then $\ddot u = {\color{#c0392b}{\omega^2}} u$ — a linear ODE with constant coefficients.
 
-$$x(t) = p + (x_0 - p)\cosh(\omega t) + \frac{v_0}{\omega}\sinh(\omega t)$$
+**Step 1 — try $u = e^{rt}$:** $r^2 e^{rt} = {\color{#c0392b}{\omega^2}} e^{rt}$, so $r = \pm{\color{#c0392b}{\omega}}$ and
 
-```{python}
-lipm = soc4180.LIPM(com_height=0.60)
-print(f"omega   = {lipm.omega:.3f} rad/s")
-print(f"1/omega = {1/lipm.omega:.3f} s   <- how long you have to react")
+$$u(t) = A\,e^{{\color{#c0392b}{\omega}} t} + B\,e^{-{\color{#c0392b}{\omega}} t}.$$
 
-for t in (0.0, 0.1, 0.2, 0.4):
-    x, v = lipm.evolve(x0=0.0, v0=0.0, zmp=0.05, t=t)
-    print(f"  t={t:.1f}s  released 5 cm from the ZMP:  x={x:+.4f} m  v={v:+.4f} m/s")
-```
+**Step 2 — a second-order equation needs two starting facts.** Where the CoM is
+and how fast it is going at $t = 0$:
 
-Released at rest, the mass runs away exponentially. `cosh` and `sinh` *are*
-falling over, written down.
+$${\color{#3b7dd8}{x}}(0) = x_0, \qquad {\color{#3b7dd8}{\dot x}}(0) = v_0 .$$
+
+$v_0$ is not a new variable of the model: it is the **initial velocity**, the
+second integration constant. Plugging in: $A + B = x_0 - {\color{#e8743b}{p}}$ and
+${\color{#c0392b}{\omega}}(A - B) = v_0$.
+
+**Step 3 — solve for $A, B$ and use $\cosh = (e^{+} + e^{-})/2$, $\sinh = (e^{+} - e^{-})/2$:**
+
+$${\color{#3b7dd8}{x}}(t) = {\color{#e8743b}{p}} + (x_0 - {\color{#e8743b}{p}})\cosh({\color{#c0392b}{\omega}} t) + \frac{v_0}{{\color{#c0392b}{\omega}}}\sinh({\color{#c0392b}{\omega}} t),
+\qquad
+{\color{#3b7dd8}{\dot x}}(t) = (x_0 - {\color{#e8743b}{p}})\,{\color{#c0392b}{\omega}}\sinh({\color{#c0392b}{\omega}} t) + v_0\cosh({\color{#c0392b}{\omega}} t).$$
+
+Released at rest ($v_0 = 0$) it is just ${\color{#e8743b}{p}} + (x_0 - {\color{#e8743b}{p}})\cosh({\color{#c0392b}{\omega}} t)$:
+starts gently, then runs away. No numerical integration anywhere — this is
+the formula the controller evaluates, 500 times a second.
 
 ---
 
-## The trick: run it backwards {.smaller}
+## Reading the numbers {.smaller}
 
-We do not want to know where the robot falls. We want to know **what launch
-velocity puts it where we need it** at the end of the step.
+```{python}
+#| fig-align: center
+lipm = soc4180.LIPM(com_height=0.60)
+print(f"omega = sqrt(9.81/0.60) = {lipm.omega:.3f} 1/s      1/omega = {1/lipm.omega:.3f} s  <- the time constant")
+for t in (0.0, 0.1, 0.2, 0.4):
+    x, v = lipm.evolve(x0=0.0, v0=0.0, zmp=0.05, t=t)
+    print(f"  t = {t:.1f} s   x = {x:+.4f} m   v = {v:+.4f} m/s   distance from the ZMP x{np.cosh(lipm.omega * t):5.2f}")
 
-That is a two-point boundary value problem, and because the model is linear it
-also has a closed form:
+tt = np.linspace(0, 0.8, 200)
+fig, ax = plt.subplots(figsize=(8.5, 2.6))
+ax.plot(tt, [0.05 - lipm.evolve(0.0, 0.0, 0.05, t)[0] for t in tt], color="#3b7dd8", lw=2, label="distance from the ZMP (m)")
+for k in (1, 2, 3):
+    ax.axvline(k / lipm.omega, color="#c0392b", ls=":", lw=1)
+    ax.text(k / lipm.omega + 0.005, 0.02 + 0.08 * k, f"{k}/ω", color="#c0392b", fontsize=8)
+ax.set_xlabel("time since release (s)"); ax.legend(fontsize=8); ax.grid(alpha=0.3)
+fig.tight_layout(); plt.show()
+```
 
-$$v_0 = \omega\,\frac{x_T - p - (x_0 - p)\cosh(\omega T)}{\sinh(\omega T)}$$
+The CoM starts **5 cm behind** the ZMP ($x_0 = 0$, ${\color{#e8743b}{p}} = 0.05$), at rest.
+In 0.1 s it has moved 4 mm; in 0.2 s, 17 mm; in 0.4 s, 81 mm. The distance
+grows like $\cosh({\color{#c0392b}{\omega}} t)$ — roughly **×e every
+$1/{\color{#c0392b}{\omega}}$ = 0.25 s** once it gets going. A step of 0.65 s
+is 2.6 time constants: whatever error the step starts with is multiplied by
+about $\cosh 2.6 \approx 7$ by its end. That is the budget a walking
+controller works within, and why a walker must act every step.
+
+---
+
+## Every possible motion, in one picture {.smaller}
+
+```{python}
+#| fig-align: center
+w = lipm.omega
+fig, ax = plt.subplots(figsize=(6.8, 4.8))
+U, V = np.meshgrid(np.linspace(-0.1, 0.1, 17), np.linspace(-0.4, 0.4, 17))
+ax.streamplot(U, V, V, w**2 * U, color="0.75", density=1.0, linewidth=0.8)   # (u, v)' = (v, w^2 u)
+u = np.linspace(-0.1, 0.1, 2)
+ax.plot(u, -w * u, color="#2a9d5c", lw=3, label=r"$\dot x = -\omega (x-p)$: comes to rest over the ZMP")
+ax.plot(u, +w * u, color="#c0392b", lw=3, label=r"$\dot x = +\omega (x-p)$: runs away fastest")
+ax.plot(0.05, 0, "o", color="#3b7dd8", ms=8); ax.text(0.052, 0.02, "released 5 cm\nfrom the ZMP", fontsize=8, color="#3b7dd8")
+ax.set_xlim(-0.1, 0.1); ax.set_ylim(-0.4, 0.4)
+ax.set_xlabel(r"distance from the ZMP  $x - p$ (m)"); ax.set_ylabel(r"velocity $\dot x$ (m/s)")
+ax.legend(fontsize=8, loc="lower right"); ax.grid(alpha=0.3)
+fig.tight_layout(); plt.show()
+```
+
+Each grey curve is one possible motion, in the plane of **(distance from the
+ZMP, velocity)**. Two straight lines are special. On the <span style="color:#2a9d5c">green</span>
+one the CoM moves *toward* the ZMP at exactly the speed that brings it to rest
+on top of it — only $e^{-\omega t}$ is present. On the <span style="color:#c0392b">red</span>
+one only $e^{+\omega t}$ is present. Every other motion is a mix, and the
+$e^{+\omega t}$ part eventually wins: **the robot falls to the side of the green line it is on.**
+
+---
+
+## The capture point {.smaller}
+
+How far is the state from the green line? Measure it with one number:
+
+$${\color{#8e44ad}{\xi}} \;=\; {\color{#3b7dd8}{x}} + \frac{{\color{#3b7dd8}{\dot x}}}{{\color{#c0392b}{\omega}}}$$
+
+**Step 1 — differentiate:** ${\color{#8e44ad}{\dot\xi}} = {\color{#3b7dd8}{\dot x}} + {\color{#3b7dd8}{\ddot x}}/{\color{#c0392b}{\omega}}$.
+
+**Step 2 — use the LIPM**, ${\color{#3b7dd8}{\ddot x}} = {\color{#c0392b}{\omega^2}}({\color{#3b7dd8}{x}} - {\color{#e8743b}{p}})$:
+${\color{#8e44ad}{\dot\xi}} = {\color{#3b7dd8}{\dot x}} + {\color{#c0392b}{\omega}}({\color{#3b7dd8}{x}} - {\color{#e8743b}{p}}) = {\color{#c0392b}{\omega}}\big({\color{#3b7dd8}{x}} + {\color{#3b7dd8}{\dot x}}/{\color{#c0392b}{\omega}} - {\color{#e8743b}{p}}\big)$.
+
+$${\color{#8e44ad}{\dot\xi}} = {\color{#c0392b}{\omega}}\,({\color{#8e44ad}{\xi}} - {\color{#e8743b}{p}})
+\qquad\Longrightarrow\qquad
+{\color{#8e44ad}{\xi}}(t) - {\color{#e8743b}{p}} = \big({\color{#8e44ad}{\xi_0}} - {\color{#e8743b}{p}}\big)\,e^{{\color{#c0392b}{\omega}} t}$$
+
+A second-order equation became a **first-order** one, and all of the danger
+is in it: ${\color{#8e44ad}{\xi}}$ runs away from ${\color{#e8743b}{p}}$ exponentially, and nothing else does.
+(The other combination, $\eta = x - \dot x/\omega$, obeys $\dot\eta = -\omega(\eta - p)$
+and settles by itself — exercise 2.) ${\color{#8e44ad}{\xi}} = {\color{#e8743b}{p}}$ is exactly the green line of the last slide.
+
+**Its meaning.** Put the foot — the ZMP — **on** ${\color{#8e44ad}{\xi}}$. Then
+${\color{#8e44ad}{\dot\xi}} = 0$, ${\color{#8e44ad}{\xi}}$ stays put, and the CoM
+slides onto it and stops. **The capture point is where you must step to come
+to rest in one step.** Step short of it and you keep falling forward; step
+beyond it and you are pushed back.
+
+---
+
+## Capture, drawn {.smaller}
+
+```{python}
+#| fig-align: center
+x0, v0 = 0.0, 0.30                                   # the CoM over the foot, moving 0.3 m/s
+xi = x0 + v0 / w
+tt = np.linspace(0, 1.2, 200)
+fig, ax = plt.subplots(figsize=(9.5, 3.2))
+for p, col, lab in ((xi - 0.03, "#c0392b", "step 3 cm short: keeps falling forward"),
+                    (xi, "#8e44ad", "step on the capture point: comes to rest"),
+                    (xi + 0.03, "#2a9d5c", "step 3 cm beyond: pushed back")):
+    ax.plot(tt, [lipm.evolve(x0, v0, p, t)[0] for t in tt], color=col, lw=2, label=lab)
+    ax.axhline(p, color=col, ls=":", lw=1)
+ax.set_ylim(-0.02, 0.16); ax.set_xlabel("time after the step (s)"); ax.set_ylabel("CoM x (m)")
+ax.legend(fontsize=8, loc="upper left"); ax.grid(alpha=0.3)
+fig.tight_layout(); plt.show()
+print(f"CoM at x = {x0} m moving {v0} m/s:  capture point = x + v/omega = {xi:.4f} m ahead")
+```
+
+A body moving at 0.3 m/s needs a foot **7.4 cm ahead** to stop in one step. A
+G1 foot reaches 12 cm in front of the ankle, so in this model the ankle alone
+could just about absorb it; twice the speed needs 15 cm and a step. Week 11's
+planner found stepping by search; this is the reason it had to.
+
+---
+
+## The trick: choose the start so the end is right {.smaller}
+
+A gait is not about predicting where the robot falls. It is about choosing
+the motion so that at the end of the step (time $T$) the CoM is where the
+next step needs it, ${\color{#3b7dd8}{x}}(T) = x_T$. That is a **boundary
+value problem**: one condition at each end instead of two at the start.
+
+**Solve for $v_0$** from the solution of three slides ago, setting $t = T$:
+
+$$x_T = {\color{#e8743b}{p}} + (x_0 - {\color{#e8743b}{p}})\cosh({\color{#c0392b}{\omega}} T) + \frac{v_0}{{\color{#c0392b}{\omega}}}\sinh({\color{#c0392b}{\omega}} T)
+\;\;\Longrightarrow\;\;
+v_0 = {\color{#c0392b}{\omega}}\,\frac{x_T - {\color{#e8743b}{p}} - (x_0 - {\color{#e8743b}{p}})\cosh({\color{#c0392b}{\omega}} T)}{\sinh({\color{#c0392b}{\omega}} T)} .$$
+
+It is linear in $v_0$, so there is exactly one answer. "Run it backwards"
+means *reason from the end you want to the start you need* — not integrate
+backwards in time. In capture-point terms it is the same idea: ${\color{#8e44ad}{\xi}}(T)$
+is fixed by where you want to end, and ${\color{#8e44ad}{\xi_0}} = {\color{#e8743b}{p}} + ({\color{#8e44ad}{\xi_T}} - {\color{#e8743b}{p}})\,e^{-{\color{#c0392b}{\omega}} T}$
+— the exponential that explodes forward shrinks when you go from the goal back to now.
 
 ```{python}
 T = 0.65
 v0 = lipm.bvp_velocity(x0=-0.07, xT=+0.07, zmp=0.0, T=T)
 xT, vT = lipm.evolve(-0.07, v0, 0.0, T)
-print(f"required launch velocity : {v0:+.4f} m/s")
-print(f"arrives at               : {xT:+.4f} m  (asked for +0.0700)")
-print(f"with velocity            : {vT:+.4f} m/s")
+print(f"from x0 = -0.07 m to xT = +0.07 m over the stance foot at p = 0, in T = {T} s")
+print(f"  required launch velocity v0 = {v0:+.4f} m/s  ->  arrives at {xT:+.4f} m with {vT:+.4f} m/s")
 ```
 
 **Each step is one boundary value problem.** Chain them — every step starting
@@ -272,30 +573,39 @@ where the last ended — and you have a gait.
 
 ## The sideways problem {.smaller}
 
-Forward motion is a straight line. Sideways is an oscillation, and it is the part
-that makes walking *look* like walking.
+Sideways, each step's stance foot is at ${\color{#e8743b}{p}} = \pm w$ (the
+G1 stands with $w = 0.119$ m). Ask for a **periodic** gait: each step the
+mirror image of the last, $(y_T, v_T) = (-y_0, -v_0)$.
 
-Demand that each step be the mirror of the last, $(y, v) \to (-y, -v)$. Working
-that through the step map forces $y_0 = 0$: **the centre of mass is always on the
-midline at the moment support switches.**
+**Step 1 — the two ends**, from the solution with ${\color{#e8743b}{p}} = w$, $C = \cosh{\color{#c0392b}{\omega}}T$, $S = \sinh{\color{#c0392b}{\omega}}T$:
+
+$$-y_0 = w + (y_0 - w)\,C + \frac{v_0}{\omega}S, \qquad -v_0 = (y_0 - w)\,\omega S + v_0\,C .$$
+
+**Step 2 — the second equation gives $v_0$:** $v_0(1 + C) = (w - y_0)\,\omega S$, so
+$v_0 = \omega\,(w - y_0)\,S/(1 + C)$.
+
+**Step 3 — put it in the first.** Using $S^2 = C^2 - 1 = (C-1)(C+1)$, the $v_0$ term is
+$(w - y_0)(C - 1)$, and the right side collapses:
+$w + (y_0 - w)C + (w - y_0)(C - 1) = y_0$. So $-y_0 = y_0$:
+
+$$y_0 = 0, \qquad v_0 = {\color{#c0392b}{\omega}}\,w\,\frac{\sinh({\color{#c0392b}{\omega}} T)}{1 + \cosh({\color{#c0392b}{\omega}} T)} = {\color{#c0392b}{\omega}}\,w\,\tanh\!\left(\tfrac{{\color{#c0392b}{\omega}} T}{2}\right).$$
+
+**The CoM crosses the midline exactly at each support exchange**, moving toward
+the new stance foot at $v_0$. It sways toward the foot, gravity (pulling it
+*away* from the ZMP, i.e. back to the middle) turns it round, and it arrives at
+the midline with the mirrored velocity.
 
 ```{python}
-w = 0.119                       # stance foot offset
-vy = lipm.lateral_periodic_velocity(zmp_y=w, step_time=T)
-sway = [lipm.evolve(0.0, vy, w, f*T)[0] for f in np.linspace(0, 1, 41)]
-print(f"launch velocity toward the stance foot : {vy:+.4f} m/s")
-print(f"maximum sway                           : {max(sway):.4f} m")
-print(f"stance foot is at                      : {w:.4f} m")
-print(f"returns to midline at t=T              : {sway[-1]:+.6f} m")
+wy = 0.119
+vy = lipm.lateral_periodic_velocity(zmp_y=wy, step_time=T)
+sway = [lipm.evolve(0.0, vy, wy, f * T)[0] for f in np.linspace(0, 1, 41)]
+print(f"v0 = omega w tanh(omega T / 2) = {lipm.omega * wy * np.tanh(lipm.omega * T / 2):+.4f} m/s   package: {vy:+.4f}")
+print(f"maximum sway {max(sway):.4f} m (the foot is at {wy} m);   back on the midline at t = T: {sway[-1]:+.1e} m")
 ```
-
-The body sways **toward** the supporting foot, gravity turns it around, and it
-arrives back at the centre exactly when the other foot is ready. The sway is not
-decoration — it is what buys time to swing a leg.
 
 ---
 
-## Both directions, drawn {.smaller}
+## Forward and sideways, drawn {.smaller}
 
 ```{python}
 #| fig-align: center
@@ -304,38 +614,37 @@ fig, (ax0, ax1) = plt.subplots(1, 2, figsize=(9.6, 3.8))
 tt = np.linspace(0, T, 60)
 for v in (0.0, 0.2, 0.4):
     ax0.plot(tt, [lipm.evolve(-0.07, v, 0.0, t)[0] for t in tt], color="0.6", lw=1.2,
-             label=f"$v_0$ = {v:.1f} m/s" if v == 0 else None)
+             label="wrong starts: $v_0$ = 0, 0.2, 0.4 m/s" if v == 0 else None)
 v0 = lipm.bvp_velocity(-0.07, +0.07, 0.0, T)
 ax0.plot(tt, [lipm.evolve(-0.07, v0, 0.0, t)[0] for t in tt], color="#3b7dd8", lw=2.5,
          label=f"boundary value solution, $v_0$ = {v0:.3f} m/s")
-ax0.plot([0, T], [-0.07, 0.07], "ko"); ax0.axhline(0, color="k", lw=0.8, ls=":")
-ax0.text(0.01, 0.005, "ZMP (the stance foot)", fontsize=8, color="0.3")
+ax0.plot([0, T], [-0.07, 0.07], "ko"); ax0.axhline(0, color="#e8743b", lw=1, ls=":")
+ax0.text(0.01, 0.005, "ZMP (the stance foot)", fontsize=8, color="#e8743b")
+ax0.set_xlim(0, T); ax0.set_ylim(-0.12, 0.2)
 ax0.set_xlabel("time in the step (s)"); ax0.set_ylabel("forward $x$ (m)")
 ax0.legend(fontsize=8, loc="upper left"); ax0.grid(alpha=0.3)
-ax0.set_title("forward: released too slow it stalls, too fast it runs away", fontsize=10)
+ax0.set_title("forward: too slow it falls back, too fast it runs away", fontsize=10)
 
-vy = lipm.lateral_periodic_velocity(zmp_y=w, step_time=T)
 ys, ts, y, v = [], [], 0.0, vy
 for k in range(4):
-    zmp = w if k % 2 == 0 else -w
+    zmp = wy if k % 2 == 0 else -wy
     for t in np.linspace(0, T, 40):
         ys.append(lipm.evolve(y, v, zmp, t)[0]); ts.append(k * T + t)
-    y, v = lipm.evolve(y, v, zmp, T); v = v            # continue from where it ended
-    ax1.hlines(zmp, k * T, (k + 1) * T, color="#e8743b" if zmp > 0 else "#3b7dd8", lw=6, alpha=0.5)
-ax1.plot(ts, ys, color="k", lw=2, label="centre of mass $y$")
+    y, v = lipm.evolve(y, v, zmp, T)
+    ax1.hlines(zmp, k * T, (k + 1) * T, color="#e8743b", lw=6, alpha=0.4 if zmp > 0 else 0.7)
+ax1.plot(ts, ys, color="#3b7dd8", lw=2, label="centre of mass $y$")
 ax1.axhline(0, color="k", lw=0.8, ls=":")
 ax1.set_xlabel("time (s)"); ax1.set_ylabel("lateral $y$ (m)"); ax1.grid(alpha=0.3)
-ax1.text(0.02, w + 0.01, "left foot", fontsize=8, color="#e8743b")
-ax1.text(T + 0.02, -w - 0.03, "right foot", fontsize=8, color="#3b7dd8")
+ax1.text(0.02, wy - 0.03, "ZMP on the left foot", fontsize=8, color="#e8743b")
+ax1.text(T + 0.02, -wy + 0.015, "ZMP on the right foot", fontsize=8, color="#e8743b")
 ax1.set_title("sideways: sway toward the stance foot, turn, cross the midline", fontsize=10)
 fig.tight_layout(); plt.show()
 ```
 
-The left plot is $\cosh$ and $\sinh$ doing exactly what the equation says: the
-mass accelerates *away* from the ZMP, and there is one launch velocity that
-lands it where the next step needs it. The right plot never reaches the foot
-it leans toward — gravity turns it back — and crosses the midline exactly at
-each support exchange.
+Left: the grey curves start with the wrong $v_0$ and miss; the one computed
+from the boundary value problem lands exactly at $x_T$. Right: four steps of
+the periodic sway — it never reaches the foot it leans toward (5.9 cm of a
+possible 11.9) and crosses the midline at each support exchange.
 
 ---
 
@@ -354,22 +663,37 @@ for k, (support, support_xy, swing_from, swing_to) in enumerate(
 ```
 
 The first step is a half stride, because both feet start level and a full stride
-would over-reach.
+would over-reach. Each forward boundary value problem runs from half a stride
+*behind* the stance foot to half a stride *ahead* of it — the CoM passes over
+each foot at mid-step.
 
 ---
 
-## Swinging the leg
+## Swinging the leg: the formulas {.smaller}
 
-The swing foot needs a path that **starts and ends at rest**. A foot still moving
-when it lands will slip or trip, and a foot that leaves abruptly drags.
+Let $s \in [0, 1]$ be the fraction of the step. The swing foot moves only in
+the middle part; ${\color{#e8743b}{d}}$ = 0.20 is the double-support fraction at each end:
 
-- Horizontal: a cycloid-like blend, zero velocity at both ends
-- Vertical: lift and lower, peaking at mid-swing
-- **Double support**: for the first and last 20% of the step, *both* feet stay
-  planted so weight can transfer
+$$\sigma = \operatorname{clip}\!\left(\frac{s - {\color{#e8743b}{d}}}{1 - 2{\color{#e8743b}{d}}},\ 0,\ 1\right)
+\qquad(\sigma = 0 \text{ until } s = d,\ \ \sigma = 1 \text{ after } s = 1 - d)$$
 
-That double-support margin is not a detail. Without it the robot is on one foot
-100% of the time and falls within a few steps — you will test this.
+**Forward** — a cycloid-like blend from $x_A$ to $x_B$:
+
+$$x_{\text{foot}} = x_A + (x_B - x_A)\left(\sigma - \frac{\sin 2\pi\sigma}{2\pi}\right),
+\qquad \frac{d x_{\text{foot}}}{d\sigma} = (x_B - x_A)\,(1 - \cos 2\pi\sigma).$$
+
+The velocity factor $1 - \cos 2\pi\sigma$ is **0 at $\sigma = 0$ and at
+$\sigma = 1$** and largest (2) at mid-swing: the foot leaves gently and lands
+at rest. A straight line, $x_A + (x_B - x_A)\sigma$, would jump from standing to
+full speed — a jolt the servos cannot follow, and a foot still sliding when
+it lands.
+
+**Up** — lift and lower, peak $h$ = 10 cm at mid-swing, zero vertical speed at both ends:
+
+$$z_{\text{foot}} = z_0 + h\,\frac{1 - \cos 2\pi\sigma}{2}.$$
+
+The foot must clear the floor — dragged, it trips — and must arrive vertically
+at rest, or the landing is an impact.
 
 ---
 
@@ -393,7 +717,7 @@ for side, y0 in (("left", +params.stance_width), ("right", -params.stance_width)
     ax0.add_patch(plt.Rectangle((-0.085, y0 - 0.03), 0.17, 0.06, fill=False, ls="--", color="0.5"))
 ax0.set_xlim(-0.15, 1.0); ax0.set_ylim(-0.25, 0.25); ax0.set_aspect("equal")
 ax0.set_xlabel("x forward (m)"); ax0.set_ylabel("y left (m)")
-ax0.set_title(f"{len(plan)} footsteps; step 0 is a half stride", fontsize=10); ax0.grid(alpha=0.3)
+ax0.set_title(f"the plan: {len(plan)} footsteps, step 0 a half stride", fontsize=10); ax0.grid(alpha=0.3)
 
 s = np.linspace(0, 1, 200)
 ds = params.double_support
@@ -402,52 +726,106 @@ ax1.plot(s, [_swing_xy(0.0, params.step_length, v) for v in s_sw], lw=2, label="
 ax1.plot(s, [_swing_z(params.step_height, params.foot_height, v) for v in s_sw], lw=2, label="height $z$ (m)")
 ax1.axvspan(0, ds, color="0.85"); ax1.axvspan(1 - ds, 1, color="0.85")
 ax1.text(ds / 2, 0.105, "double\nsupport", ha="center", fontsize=8, color="0.4")
-ax1.set_xlabel("fraction of the step"); ax1.legend(fontsize=8); ax1.grid(alpha=0.3)
-ax1.set_title("the swing foot: at rest at both ends", fontsize=10)
+ax1.set_xlabel("fraction of the step $s$"); ax1.legend(fontsize=8); ax1.grid(alpha=0.3)
+ax1.set_title("the swing: at rest at both ends", fontsize=10)
 fig.tight_layout(); plt.show()
 ```
 
-Feet alternate, each landing one stride ahead of where the same foot last
-stood. The swing curves have **zero slope at both ends** — the foot leaves and
-lands without a jolt — and go nowhere at all in the grey double-support bands.
+**The plan** says *where* each foot lands (left); **the swing** says *how* it
+gets there (right). Walking needs both: a plan without a swing teleports the
+feet, a swing without a plan moves them nicely to the wrong place.
 
 ---
 
-## Assembling the controller
+## Double support: why the weight needs both feet {.smaller}
+
+```{python}
+#| fig-align: center
+fig, ax = plt.subplots(figsize=(9.5, 2.4))
+phases = [(0, ds, "both\nfeet", "0.8"), (ds, 1 - ds, "right foot only (left swings)", "#e8743b"),
+          (1 - ds, 1 + ds, "both\nfeet", "0.8"), (1 + ds, 2 - ds, "left foot only (right swings)", "#3b7dd8"),
+          (2 - ds, 2, "both\nfeet", "0.8")]
+for a, b, lab, col in phases:
+    ax.add_patch(plt.Rectangle((a * T, 0), (b - a) * T, 1, color=col, alpha=0.35))
+    ax.text((a + b) / 2 * T, 0.5, lab, ha="center", va="center", fontsize=8)
+ax.set_xlim(0, 2 * T); ax.set_ylim(0, 1); ax.set_yticks([])
+ax.set_xlabel("time over two steps (s)")
+fig.tight_layout(); plt.show()
+```
+
+The ZMP must be **under the stance foot** while the other foot swings — and
+**under the other foot** for the next step. It cannot jump from one foot to the
+other: it is a force-weighted average of contact points, and it can only be
+between the feet while **both** feet are touching. The grey bands are when
+the weight transfers.
+
+Remove them and the ZMP must switch feet in an instant; at the very same
+instant the new foot has just landed and the old one is already lifting. The
+LIPM step then starts with an error — and errors grow ×7 per step (two slides
+ago). Measured: with `double_support = 0` the robot falls at **2.0 s**.
+
+---
+
+## Assembling the controller {.smaller}
+
+```{python}
+#| fig-align: center
+fig, ax = plt.subplots(figsize=(10, 2.6)); ax.axis("off"); ax.set_xlim(0, 10); ax.set_ylim(0, 2.6)
+blocks = [(0.1, "time $t$", "0.6"), (1.7, "which step?\nhow far in?", "#7f8c8d"),
+          (3.5, "CoM target\n(LIPM, BVP)", "#3b7dd8"), (5.3, "foot targets\n(plan + swing)", "#e8743b"),
+          (7.1, "IK: 12 leg\nangles", "#8e44ad"), (8.7, "29 servos\n→ physics", "#2a9d5c")]
+for x, label, c in blocks:
+    ax.add_patch(plt.Rectangle((x, 0.8), 1.25, 1.0, color=c, alpha=0.85))
+    ax.text(x + 0.62, 1.3, label, ha="center", va="center", color="w", fontsize=9, weight="bold")
+for x0_, x1_ in ((1.35, 1.7), (2.95, 3.5), (4.75, 5.3), (6.55, 7.1), (8.35, 8.7)):
+    ax.annotate("", xy=(x1_, 1.3), xytext=(x0_, 1.3), arrowprops=dict(arrowstyle="->", lw=1.5))
+ax.text(5.0, 0.3, "open loop: nothing comes back from the physics", ha="center", fontsize=9, color="#c0392b")
+fig.tight_layout(); plt.show()
+```
 
 Every control cycle, at 500 Hz:
 
-1. Which step are we in, and how far through it?
-2. **Where should the body be?** → the LIPM boundary value problem
-3. **Where should each foot be?** → planted, or on its swing path
-4. **What joint angles achieve that?** → inverse kinematics, both legs
-5. Send those angles to the position servos
-
-Steps 2–3 are this week. Step 4 is Week 3's work, reused unchanged. That is the
-payoff of building the layers separately.
+1. **Which step** are we in, and how far through it ($s$)?
+2. **Where should the body be?** The step's LIPM solution at time $sT$ gives the CoM (= pelvis) target.
+3. **Where should each foot be?** The stance foot stays planted; the swing foot follows $x_{\text{foot}}(\sigma), z_{\text{foot}}(\sigma)$.
+4. **What joint angles?** Week 3's damped-least-squares IK, both legs.
+5. **Send** those angles to the position servos (week 5 opens this box).
 
 ---
 
 ## One trap: the singularity {.smaller}
 
-The G1's `stand` keyframe has **every leg joint at exactly zero** — a perfectly
-straight leg. That is a kinematic singularity: the Jacobian has no direction that
-shortens the leg, so IK cannot lower the body from it, at all.
-
 ```{python}
+#| fig-align: center
 from soc4180 import kinematics as kin
-
-data = soc4180.keyframe_data(model, "stand")
-mujoco.mj_forward(model, data)
-print("'stand' left-leg joint angles:", np.round(data.qpos[kin.leg_qpos_indices(model, "left")], 3))
-
-controller = soc4180.WalkingController(model)
-print("nominal crouch used instead   :",
-      np.round(controller.nominal[kin.leg_qpos_indices(model, "left")], 3))
+site, dof, qi = kin.foot_site_id(model, "left"), kin.leg_dof_indices(model, "left"), kin.leg_qpos_indices(model, "left")
+scratch = mujoco.MjData(model)
+knees = np.linspace(0, 1.2, 41); smin = []
+for k in knees:
+    scratch.qpos[:] = model.key_qpos[0]
+    scratch.qpos[qi[0]], scratch.qpos[qi[3]], scratch.qpos[qi[4]] = -k / 2, k, -k / 2     # a crouch, foot level
+    mujoco.mj_forward(model, scratch)
+    jp, jr = np.zeros((3, model.nv)), np.zeros((3, model.nv))
+    mujoco.mj_jacSite(model, scratch, jp, jr, site)
+    smin.append(np.linalg.svd(np.vstack([jp, jr])[:, dof], compute_uv=False).min())
+fig, ax = plt.subplots(figsize=(8.5, 2.7))
+ax.semilogy(knees, smin, color="#8e44ad", lw=2)
+ax.axvline(0.70, color="0.5", ls=":"); ax.text(0.71, 1.5e-4, "the walking crouch\n(knee 0.70 rad)", fontsize=8, color="0.4")
+ax.set_xlabel("knee angle (rad); hip and ankle each −knee/2"); ax.set_ylabel(r"smallest singular value $\sigma_{\min}$")
+ax.grid(alpha=0.3, which="both"); fig.tight_layout(); plt.show()
+print(f"sigma_min at a straight leg (knee 0): {smin[0]:.1e}     at the crouch: {np.interp(0.70, knees, smin):.3f}")
 ```
 
-Every gait therefore starts from a **crouch**. Humans do this too: you do not
-walk with locked knees.
+Week 3: IK solves $J\,\Delta q = \mathbf{e}$, and each direction is divided by
+its singular value $\sigma_i$. With the leg **straight**, nothing can shorten
+it — turning hip, knee or ankle a little only swings the foot along an arc,
+never toward the hip — so the "shorten" direction has
+$\sigma_{\min} \approx 10^{-6}$. Week 3 measured the cost: lowering the foot
+5 cm from a straight leg asks for tens of thousands of radians, and damping
+refuses to move at all. The G1's
+`stand` keyframe has every leg joint at exactly zero. **So every gait starts
+from a crouch**, where $\sigma_{\min}$ is 100,000 times larger. Humans do not
+walk with locked knees either.
 
 ---
 
@@ -474,10 +852,10 @@ soc4180.show_video(frames, fps=30)
 
 A 29-degree-of-freedom humanoid walking, driven by:
 
-- one second-order linear ODE
-- a closed-form solution to a boundary value problem, once per step
-- a cycloid
-- inverse kinematics
+- one second-order linear ODE, ${\color{#3b7dd8}{\ddot x}} = {\color{#c0392b}{\omega^2}}({\color{#3b7dd8}{x}} - {\color{#e8743b}{p}})$
+- its closed-form solution, and one boundary value problem per step
+- a periodic sideways sway with $y_0 = 0$
+- a cycloid, and inverse kinematics
 
 **No training. No data. No reward function.** Roughly two hundred lines.
 
@@ -488,7 +866,9 @@ the same thing. Learning buys robustness, not the gait itself.
 
 ## Now measure it {.smaller}
 
-Belief is not evidence. Where did the ZMP actually go?
+Belief is not evidence. Where did the ZMP actually go? `controller.zmp(data)`
+computes the CoP from MuJoCo's contact forces — the formula from the CoP slide:
+$\sum f_i x_i / \sum f_i$ over every contact.
 
 ```{python}
 controller = soc4180.WalkingController(model, soc4180.GaitParams(n_steps=12))
@@ -516,19 +896,17 @@ print(f"stance feet at +-{controller.params.stance_width:.3f} m")
 ## The model is wrong, usefully {.smaller}
 
 ```{python}
-import matplotlib.pyplot as plt
-
-w = controller.params.stance_width
+w_st = controller.params.stance_width
 fig, ax = plt.subplots(2, 1, figsize=(9, 5), sharex=True)
 
-ax[0].plot(grounded[:, 0], grounded[:, 5], lw=1.2, label="measured ZMP $y$")
-ax[0].plot(walking[:, 0], walking[:, 2], lw=1.2, label="pelvis $y$")
-for s in (+w, -w):
-    ax[0].axhline(s, ls="--", lw=0.8, color="0.4")
+ax[0].plot(grounded[:, 0], grounded[:, 5], lw=1.2, color="#e8743b", label="measured ZMP $y$")
+ax[0].plot(walking[:, 0], walking[:, 2], lw=1.2, color="#3b7dd8", label="pelvis $y$")
+for s_ in (+w_st, -w_st):
+    ax[0].axhline(s_, ls="--", lw=0.8, color="0.4")
 ax[0].set_ylabel("lateral (m)"); ax[0].legend(loc="upper right", fontsize=8)
 ax[0].set_title("dashed = stance foot centres")
 
-ax[1].plot(walking[:, 0], walking[:, 1], lw=1.2)
+ax[1].plot(walking[:, 0], walking[:, 1], lw=1.2, color="#3b7dd8")
 ax[1].set_ylabel("forward $x$ (m)"); ax[1].set_xlabel("time (s)")
 fig.tight_layout()
 plt.show()
@@ -563,7 +941,7 @@ the list on the next slide.
 ## Where the LIPM breaks {.smaller}
 
 The measured ZMP swings **wider than the feet**. The theory says that cannot
-happen — and the theory is right; the assumptions are what failed:
+happen with flat feet — and the theory is right; the assumptions are what failed:
 
 | LIPM assumes | The G1 actually |
 | --- | --- |
@@ -574,14 +952,15 @@ happen — and the theory is right; the assumptions are what failed:
 | Perfectly rigid position control | Uses servos of finite stiffness that sag |
 
 It walks anyway. **A model does not have to be true to be useful — it has to be
-wrong in ways that do not matter yet.** Week 13 is where they start to matter.
+wrong in ways that do not matter yet.** Weeks 11 and 12 are where they start to matter.
 
 ---
 
 ## The honest limitations {.smaller}
 
 This controller is **open loop**. It never looks at the IMU, never measures where
-the body actually is, and never corrects.
+the body actually is, and never corrects. In capture-point terms: it never
+checks where ${\color{#8e44ad}{\xi}}$ is, so it cannot move a foot to catch it.
 
 Consequences you can see in the data:
 
@@ -591,9 +970,11 @@ Consequences you can see in the data:
 - the gait is fixed at design time; asking for a different speed means
   re-deriving
 
-Every one of these is a reason the field moved to learned policies. **Not because
-the mathematics is wrong** — you just watched it work — but because hand-derived
-control is brittle outside the conditions it was derived for.
+Every one of these is a reason the field moved to feedback — capture-point
+stepping, model-predictive control (week 11) and learned policies (weeks
+8–13). **Not because the mathematics is wrong** — you just watched it work —
+but because a plan made in advance is brittle outside the conditions it was
+made for.
 
 ---
 
@@ -655,19 +1036,18 @@ measured ZMP y swung over [-0.233, +0.105] m against stance feet at +-0.119 m: O
 
 Break it deliberately, and record what fails and why.
 
-1. **Remove double support.** Set `double_support=0.0`. How many steps before it
+1. **Derive it yourself.** Starting from $\ddot u = \omega^2 u$, $u(0) = x_0 - p$,
+   $\dot u(0) = v_0$, find $A$ and $B$ and check the cosh/sinh form.
+2. **The capture point.** Show that $\eta = x - \dot x/\omega$ obeys
+   $\dot\eta = -\omega(\eta - p)$. What happens to $\eta$ if $p$ is held fixed?
+3. **Remove double support.** Set `double_support=0.0`. How many steps before it
    falls? Which direction, and why that direction?
-2. **Rush it.** Reduce `step_time` toward 0.35 s. Find the value where it fails.
+4. **Rush it.** Reduce `step_time` toward 0.35 s. Find the value where it fails.
    Compare it to $1/\omega$ — is the failure point near the model's own timescale?
-3. **Overstride.** Increase `step_length`. Where does it break, and is it the
-   swing leg reaching its limit or the balance failing?
-4. **Ice.** Set the floor friction to 0.2 (`model.geom_friction[0, 0] = 0.2`).
-   The ZMP argument assumes no slipping — what actually happens?
 5. **Moon.** Set gravity to $-1.62\ \mathrm{m/s^2}$ **without** changing the
    controller. Predict the failure from $\omega = \sqrt{g/z_c}$ before running it.
-6. **Instrument it.** Plot the ZMP against the *support polygon of the current
-   stance foot* rather than a fixed line, and measure what fraction of the walk
-   is genuinely inside.
+6. **Instrument it.** Log $\xi = x + \dot x/\omega$ from the pelvis during the walk
+   and plot it against the stance foot. When is it outside the foot?
 
 ---
 

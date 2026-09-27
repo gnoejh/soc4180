@@ -28,9 +28,9 @@
 | MPPI, 4 / 16 samples | stands at 150, falls at 300 | |
 | MPPI, 16 samples, σ = 0.25 | stands at 300 | fewer samples need wider ones |
 
-One decision is 12,800 physics steps: **86 ms** on 16 threads here with the machine
-quiet (115 ms with training running beside it), so the planner runs at about
-**0.46× real time**. A single `rollout` of 64 × 200 steps took 69 ms (185,000 steps/s).
+One decision is 12,800 physics steps: **74–86 ms** on 16 threads here with the machine
+quiet (115–148 ms with other work running), so the planner runs at about
+**0.5× real time** when idle and 0.3× when busy. A single `rollout` of 64 × 200 steps took 69 ms (185,000 steps/s).
 
 Model error (`--model-mass`, the planner's torso only; the world's is 7.82 kg):
 exact model stands at 150 and 300 N; −10 kg falls at both; +10 and +20 kg stand at
@@ -42,6 +42,10 @@ with height weight 20 never moves (lowest pelvis 0.745 m); with 100 it reaches
 0.503 m and stands up. CRANE lifts the foot only by **hopping** (2 m of travel);
 a `plant_right` term stops that at exactly one weight tried (1000) and fails at 500 and
 2000, so hopping is allowed in the graded problem.
+
+At the default temperature λ = 0.05 the weights put effectively **one** sample in
+charge (effective sample size 1.0 before and after a 300 N shove): in practice MPPI
+here keeps the best of 64 futures. λ = 5 lets 3–5 vote.
 
 ## Lab class: on your laptop
 

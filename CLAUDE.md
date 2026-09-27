@@ -58,8 +58,18 @@ training; an LLM planner appears only as a non-executed code block).
 Capstone presentations occupy the final-exam slot. Weeks 0 and 1 share the first
 session — the stack lecture is short, the MuJoCo lab is hands-on. **That session
 is now the longest of the course**: week 1 grew from 14 slides to 38 when MJCF
-was taught properly, so plan to split it or set part of the MJCF read as
+was taught properly, and to **64** with the 2026-09-27 maths pass (integrator
+stability derived and measured), so split it or set part of the MJCF read as
 preparation.
+
+**Maths pass (2026-09-27/28).** Every deck 0–15 was rewritten to week 3's
+standard at the instructor's request ("weak in math, drawings, and
+explanations"): a colour-code slide, numbered derivations, a symbol list
+under each equation, a drawing per concept, printed numbers read aloud.
+Decks grew by roughly 1.5–2× (week 1 to 64 slides). Every new number was
+printed by a cell; the pass corrected several old claims (listed in the
+measured-facts bullets below and in *Weeks 11–15*). All 16 decks render
+locally; 8–11 were rendered one at a time on a quiet machine.
 
 **Current state (2026-09-27).** Weeks 11–15 added (below): rendered locally,
 `check_labs.py --only 11 12 13 14 15` 15 of 15, pushed 2026-09-27, not yet
@@ -310,16 +320,23 @@ Facts these scripts and the new figures established, each measured:
   fine at 1 kHz.** Zeroing the G1's gains and applying $k_p(\text{ctrl}-q) -
   k_v\dot q$ by hand blew up (`BADQACC`) after 14 steps at `dt = 0.002`; at
   `dt = 0.001`, `0.0005` and `0.00025` it walks 0.65 m against 0.66 m with the
-  model's own servos. MuJoCo's position actuator survives 500 Hz only because
-  `implicitfast` integrates its affine bias implicitly. `lab_servo.py`'s `H`
+  model's own servos. MuJoCo's own position actuator also stands at 500 Hz
+  under plain `Euler` (MuJoCo's Euler is semi-implicit; the G1 falls under it
+  only at 0.004 s), so `implicitfast` is margin, not the sole reason (measured
+  for the week 1 deck, 2026-09-27). `lab_servo.py`'s `H`
   therefore runs the student's loop at 1 kHz and says so; `SERVO_HZ = 500` is
   a lab step, and it is week 1's exercise 14 from the other side.
 - **Every G1 leg joint is critically damped**: $\zeta = k_v / 2\sqrt{k_p M_{ii}}
   = 1.00$ on all twelve against the mass-matrix diagonal at `stand`
   (`mj_fullM(model, data, M)` in mujoco 3.12 — it takes the data object). Arms
   0.7–1.9. That is *why* `kv` varies tenfold while `kp` does not.
-- Knee step response, gravity off: `kp x4` reaches 1% in 0.034 s vs 0.116 s
-  with 2% overshoot and 4x the torque; `kv / 4` overshoots 9%; `kv x4` is 1%
+- Knee step response, gravity off: **the old numbers (0.116 s; `kv / 4`
+  overshoots 9%) had a foot touching the floor** and depended on settle time
+  (4.6% after 100 settle steps as in `servo.py`, 8.9% after 200). With the robot
+  lifted 0.5 m clear (week 5 deck, 2026-09-27): nominal 1% at 0.110 s, 0.1%
+  overshoot; `kp x4` 0.032 s, 4.0%; `kv / 4` 0.026 s, 16.9%. The one-joint
+  formula predicts 44% for `kv / 4` using M_ii; the rest of the body reacting
+  explains the gap (1/(M⁻¹)_ii gives 21.8%). `kv x4` is 1%
   short after 0.5 s. Sag vs `kp`: 11.0 mm at 500, 9.4 at 600, 6.0 at 750 (the
   $1/k_p$ law), falls at 400 and at 1000. The knee exceeds 50 N·m for only
   **4.0%** of the walk and that limit still drops the robot.
@@ -328,8 +345,23 @@ Facts these scripts and the new figures established, each measured:
   Both bottom out near 0.998 — an earlier draft claimed they pulled opposite
   ways, and the sweep disproved it. The filter's low-pass time constant is
   $\tau = -\Delta t / \ln\alpha$.
-- Week 7's grid, re-measured for the figure: only $\kappa = 1.0$ at 100/200 Hz
-  walks (1.05 m); $\kappa = 1.0$ at 50 Hz goes 1.56 m and falls.
+- Week 7's grid, re-measured for the figure: only $\kappa = 1.0$ at 100/"200" Hz
+  walks (1.05 m); $\kappa = 1.0$ at 50 Hz goes 1.56 m and falls. **"200 Hz" is
+  really 250 Hz**: decimation is `round(500/200) = round(2.5) = 2` (banker's
+  rounding). The week 7 deck prints the actual rate; `lab_env.py` still says 200.
+- `G1WalkEnv` terminates when `norm(gravity_body[:2]) > 0.7`, i.e. sin(tilt) >
+  0.7: **44.4°**, not 0.7 rad (40.1°). Its gravity comes from the true pelvis
+  orientation, not an IMU filter (the code comment says "from the IMU").
+- Week 6 truth must be the **torso IMU's** own orientation (`site_xmat`), not
+  the pelvis: they differ by up to 0.70° while walking — the size of the filter
+  errors. The deck was fixed 2026-09-27 (filter α 0.995: mean 1.43°, final 1.02°);
+  the α sweep optimum is unchanged.
+- Week 10: "150 M steps" budgets count **decisions** (10 physics steps each),
+  so the single-process estimate is ~25 h, not 2.5 h; `many.py`/`lab_many.py`
+  now multiply by 10.
+- Week 11: at the default λ = 0.05 the MPPI weights put effectively **one**
+  sample in charge (effective sample size 1.0 before and after a 300 N shove) —
+  in practice "keep the best of 64". λ = 5 gives 3–5.
 - Week 9's "valley": an open-loop stepping family in `G1WalkEnv` (hip pitch
   and knee sinusoids, amplitude 0 → 1) scores *less* than standing at every
   amplitude — first effort, then falling. The reward's optimum is real and no
@@ -1317,6 +1349,18 @@ this for any future week that adds package code. (`%pip` inside an `if` is fine 
 IPython transforms magics at any indentation.)
 
 ## Walking (week 4)
+
+**The deck was rewritten on 2026-09-27 for maths, drawings and explanation**
+(29 → 39 slides, week 3's colour code: CoM blue, ZMP orange, force green, ω red,
+capture point purple). It derives the LIPM from the force along a massless leg
+(and as the moment balance), solves it from e^{±ωt} with v0 named as the
+initial condition, reads the numbers as time constants (a step is 2.6 of them,
+errors ×cosh 2.6 ≈ 7), draws the phase portrait, introduces the **capture
+point** ξ = x + ẋ/ω with ξ̇ = ω(ξ − p), derives the sideways y0 = 0,
+v0 = ω w tanh(ωT/2) (sway max 5.9 cm), gives the swing formulas, and plots
+σ_min against knee angle. Student notes on the old deck described a capture
+point it did not contain; "run it backwards" means the boundary value
+problem, not integrating backwards in time — the deck now says so.
 
 `kinematics.py` (damped least-squares leg IK) and `walking.py` (LIPM + footstep
 gait) make the G1 walk **~1.0 m in 9 s, open loop, with no learning**. Two bugs

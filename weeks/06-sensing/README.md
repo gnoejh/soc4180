@@ -26,15 +26,18 @@
   `sensordata`. The MJCF declares noise (0.0005, 0.01) but this MuJoCo build
   applies none, so noise and bias must be injected by hand.
 - During the Week 4 walk, `|accel|` swings **3.36 – 19.34 m/s²**. Tilt-from-gravity
-  therefore fails: **6.09° mean error, 20.59° worst**.
-- Gyroscope integration is near-exact with a perfect sensor (0.13° final) and
-  drifts to **2.85°** with a 0.01 rad/s bias.
-- Complementary filter at $\alpha = 0.995$: **1.46° mean, 1.37° final**.
+  therefore fails: **5.96° mean error, 20.70° worst** (scored against the torso
+  IMU site's own orientation, `site_xmat`).
+- Gyroscope integration is near-exact with a perfect sensor (−0.48° final) and
+  drifts to **2.50°** with a 0.01 rad/s bias: the perfect-gyro error plus exactly
+  $b\,t$ = 2.98°.
+- Complementary filter at $\alpha = 0.995$: **1.43° mean, 1.02° final**. Standing still with
+  the same bias its error settles at **0.228°**, exactly $\tau b$ (τ = 0.399 s).
 
 ## The metric that matters
 
 $\alpha = 1.0$ (pure gyroscope) has a marginally *lower mean* error than the
-filter, and twice the final error. That gap is drift, and drift only grows —
+filter, and 2.5 times the final error. That gap is drift, and drift only grows —
 which is why **mean error is the wrong way to judge an estimator you intend to
 run for an hour.** Students should be pushed to notice this in the table before
 being told.

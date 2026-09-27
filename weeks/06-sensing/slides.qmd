@@ -34,6 +34,47 @@ Today the robot finds out about itself. This is the week that makes feedback
 possible — and the observation vector we build here is exactly what a learned
 policy will consume from Week 8 onward.
 
+In Week 0's loop $y_k = h(x_k)$, this is the week about $h$: the sensors that
+**Layer 2** (the robot model) declares, and the first thing a **Layer 4**
+controller must do with them — estimate the state it cannot see.
+
+---
+
+## Today, in order {.smaller}
+
+1. **What the simulator knows vs what the robot knows.** The G1 has 12 sensor numbers.
+2. **The accelerometer.** It does not measure acceleration. We derive what it
+   does measure, and turn it into a tilt angle with `atan2`.
+3. **The gyroscope.** It measures a turning rate; adding it up gives an angle
+   that drifts, and we derive how fast.
+4. **Why not position?** Integrating the accelerometer twice: the error grows
+   with *time squared*.
+5. **The complementary filter.** One line of code; derived as a low-pass plus a
+   high-pass, with a time constant $\tau$ you can read off $\alpha$.
+6. **Observable vs privileged.** What a policy may be given, and what only its
+   trainer may see.
+
+---
+
+## Colour code for the week {.smaller}
+
+The same colours mean the same things in every equation and every drawing:
+
+| symbol | meaning | colour |
+| --- | --- | --- |
+| ${\color{#3b7dd8}{\mathbf{g}}}$ | **gravity**: $(0, 0, -9.81)\ \mathrm{m/s^2}$ in the world, pointing down | <span style="color:#3b7dd8">blue</span> |
+| ${\color{#8e44ad}{\mathbf{a}}}$ | the body's **own acceleration** (what it is actually doing) | <span style="color:#8e44ad">purple</span> |
+| ${\color{#e8743b}{\mathbf{f}},\ \theta_{\text{acc}}}$ | the **accelerometer**'s reading, and the angle computed from it | <span style="color:#e8743b">orange</span> |
+| ${\color{#1a9fb5}{\omega}}$ | the **gyroscope**'s reading: a turning rate in rad/s | <span style="color:#1a9fb5">cyan</span> |
+| ${\color{#2a9d5c}{\hat\theta}}$ | the **filter's estimate** of an angle (the hat means "estimate") | <span style="color:#2a9d5c">green</span> |
+| ${\color{#c0392b}{b,\ e}}$ | a sensor **bias** and the **error** it causes | <span style="color:#c0392b">red</span> |
+
+Uncoloured $\phi, \theta, \psi$ are the **true** roll, pitch and yaw (rotations
+about $x$, $y$, $z$ — Week 1). In plots the truth is **dark grey**. The lab's
+arrows use the same colours: orange accelerometer, cyan gyro, green filter.
+
+$\Delta t = 0.002$ s is one physics step (500 Hz); $k$ counts steps, so $t = k\,\Delta t$.
+
 ---
 
 ## The cheating we have been doing {.smaller}
@@ -49,6 +90,7 @@ except ImportError:
 
 import numpy as np
 import mujoco
+import matplotlib.pyplot as plt
 
 model = soc4180.load_g1()
 data = soc4180.keyframe_data(model, "stand")
@@ -76,8 +118,9 @@ for i in range(model.nsensor):
 print(f"\n  total sensordata: {model.nsensordata} numbers")
 ```
 
-**Two IMUs** — torso and pelvis — each a gyroscope plus an accelerometer.
-Twelve numbers per timestep, and that is the entire sensory world of this robot.
+**Two IMUs** (Inertial Measurement Units) — torso and pelvis — each a gyroscope
+plus an accelerometer, three axes each. Twelve numbers per timestep, and that is
+the entire sensory world of this robot.
 
 No cameras. No joint torque sensors. No foot contact switches. Joint *encoders*
 are implicit: a real robot reads its own joint angles, which is why using
@@ -85,35 +128,205 @@ are implicit: a real robot reads its own joint angles, which is why using
 
 ---
 
-## What an accelerometer really measures {.smaller}
+## Inside an accelerometer {.smaller}
 
-Not acceleration. **Specific force** — the non-gravitational force per unit mass.
-A device sitting still on a table is being pushed *up* by the table:
+```{python}
+#| fig-align: center
+def sensor_box(ax, x0, spring_len, title, reading):
+    ax.add_patch(plt.Rectangle((x0, 0), 1.0, 2.2, fill=False, lw=2, color="0.3"))
+    ax.plot([x0 + 0.5, x0 + 0.5], [0.0, 0.0], color="0.3")
+    ys = np.linspace(0.0, spring_len, 40)
+    ax.plot(x0 + 0.5 + 0.12 * np.sin(ys / spring_len * 8 * np.pi), ys, color="0.45", lw=1.2)
+    ax.add_patch(plt.Rectangle((x0 + 0.3, spring_len), 0.4, 0.35, color="0.55"))
+    ax.text(x0 + 0.5, spring_len + 0.175, "m", ha="center", va="center", color="w", fontsize=10)
+    ax.text(x0 + 0.5, -0.25, title, ha="center", va="top", fontsize=9)
+    ax.text(x0 + 0.5, 2.45, reading, ha="center", va="bottom", fontsize=9, color="#e8743b")
+
+fig, ax = plt.subplots(figsize=(10, 3.2))
+sensor_box(ax, 0.0, 0.6, "at rest on a table\nspring squashed", "reads $+9.81$ (up)")
+sensor_box(ax, 2.6, 0.95, "falling freely\nspring at its natural length", "reads $0$")
+sensor_box(ax, 5.2, 0.35, "in a lift accelerating up\nspring squashed more", "reads more than $9.81$")
+for x0 in (0.0, 5.2):
+    ax.annotate("", xy=(x0 + 1.25, 0.4), xytext=(x0 + 1.25, 1.2),
+                arrowprops=dict(arrowstyle="->", lw=2, color="#3b7dd8"))
+    ax.text(x0 + 1.32, 0.8, "$g$", color="#3b7dd8", fontsize=11)
+ax.annotate("", xy=(3.85, 0.4), xytext=(3.85, 1.2), arrowprops=dict(arrowstyle="->", lw=2, color="#3b7dd8"))
+ax.text(3.92, 0.8, "$g$", color="#3b7dd8", fontsize=11)
+ax.annotate("", xy=(6.75, 1.9), xytext=(6.75, 1.1), arrowprops=dict(arrowstyle="->", lw=2, color="#8e44ad"))
+ax.text(6.82, 1.5, "$a$", color="#8e44ad", fontsize=11)
+ax.set_xlim(-0.5, 7.2); ax.set_ylim(-0.9, 2.8); ax.set_aspect("equal"); ax.axis("off")
+ax.set_title("sketch, not to scale: a proof mass on a spring inside a case bolted to the robot", fontsize=9, color="0.35")
+fig.tight_layout(); plt.show()
+```
+
+An accelerometer is a tiny mass $m$ (the **proof mass**) on a spring, inside a
+case fixed to the body. The chip measures **how much the spring is squashed** —
+nothing else. The next slide turns that into an equation.
+
+---
+
+## What the accelerometer measures, derived {.smaller}
+
+**Step 1 — Newton on the proof mass.** Two forces act on it: the spring's push
+$\mathbf{f}_{\text{spring}}$ and gravity $m{\color{#3b7dd8}{\mathbf{g}}}$. The mass moves with the case, so
+its acceleration is the body's, ${\color{#8e44ad}{\mathbf{a}}}$:
+
+$$m\,{\color{#8e44ad}{\mathbf{a}}} = \mathbf{f}_{\text{spring}} + m\,{\color{#3b7dd8}{\mathbf{g}}}$$
+
+**Step 2 — the chip reads only the spring.** Divide the spring force by $m$ and
+solve Step 1 for it:
+
+$${\color{#e8743b}{\mathbf{f}}} \;=\; \frac{\mathbf{f}_{\text{spring}}}{m} \;=\; {\color{#8e44ad}{\mathbf{a}}} - {\color{#3b7dd8}{\mathbf{g}}}$$
+
+This is the **specific force**: every force except gravity, per kilogram.
+
+**Step 3 — in the body's own axes.** The chip is bolted to the body, so it
+reports the vector along *its* $x, y, z$. If $R$ is the body's orientation
+(body axes → world axes), a world vector is seen in the body as $R^{\mathsf T}$ times it:
+
+$${\color{#e8743b}{\mathbf{f}_b}} = R^{\mathsf T}\big({\color{#8e44ad}{\mathbf{a}}} - {\color{#3b7dd8}{\mathbf{g}}}\big)$$
+
+- at rest, ${\color{#8e44ad}{\mathbf{a}}} = 0$: ${\color{#e8743b}{\mathbf{f}}} = -{\color{#3b7dd8}{\mathbf{g}}}$ = 9.81 m/s² **upward**
+- in free fall, ${\color{#8e44ad}{\mathbf{a}}} = {\color{#3b7dd8}{\mathbf{g}}}$: ${\color{#e8743b}{\mathbf{f}}} = 0$ — nothing touches the mass
+
+---
+
+## Checking it: at rest and in free fall {.smaller}
 
 ```{python}
 for _ in range(300):
     mujoco.mj_step(model, data)
 gyro, accel = soc4180.read_imu(model, data, "torso")
-print(f"at rest  : accel = {np.round(accel, 3)}   |accel| = {np.linalg.norm(accel):.3f}")
+print(f"at rest     : accel = {np.round(accel, 3)}   |accel| = {np.linalg.norm(accel):.3f}")
 
 falling = soc4180.keyframe_data(model, "stand")
-falling.qpos[2] += 1.0                      # drop it
+falling.qpos[2] += 1.0                      # lift it 1 m off the floor and let go
 mujoco.mj_forward(model, falling)
 mujoco.mj_step(model, falling)
 _, accel_ff = soc4180.read_imu(model, falling, "torso")
 print(f"in free fall: accel = {np.round(accel_ff, 3)}")
 ```
 
-Standing still it reads **9.81 upward**. In free fall it reads **zero** — nothing
-is pushing it. That is the whole reason an accelerometer is a *tilt* sensor: at
-rest, the direction it reports is "down".
+Standing still it reads **9.81 along its own $+z$** — up. In free fall it reads
+**zero**. Both are exactly Step 2.
+
+That is the whole reason an accelerometer is a *tilt* sensor: at rest the
+reading is $-{\color{#3b7dd8}{\mathbf{g}}}$, so the direction it points **is
+"up"**, written in the body's axes. Tilt the body and "up" moves in those axes.
+
+---
+
+## Specific force on a tilted body {.smaller}
+
+A small box carrying one accelerometer, rolled 20° and held still (its
+acceleration set to zero and the sensor computed by `mj_inverse`):
+
+```{python}
+#| fig-align: center
+def held_still(roll_deg, pitch_deg, yaw_deg=0.0):
+    """Accelerometer reading of a box held still at the given roll, pitch, yaw."""
+    q = np.zeros(4)
+    mujoco.mju_euler2Quat(q, np.radians([roll_deg, pitch_deg, yaw_deg]), "XYZ")
+    m = mujoco.MjModel.from_xml_string("""<mujoco><worldbody><body><freejoint/>
+        <geom type="box" size=".05 .03 .02" mass="0.1"/><site name="imu"/></body></worldbody>
+        <sensor><accelerometer site="imu"/></sensor></mujoco>""")
+    d = mujoco.MjData(m)
+    d.qpos[3:7] = q
+    d.qacc[:] = 0.0                      # held still: a = 0
+    mujoco.mj_inverse(m, d)              # computes the sensors for that acceleration
+    return d.sensordata.copy()
+
+f20 = held_still(20, 0)
+phi = np.radians(20)
+fig, ax = plt.subplots(figsize=(6.4, 4.0))
+yb, zb = np.array([np.cos(phi), np.sin(phi)]), np.array([-np.sin(phi), np.cos(phi)])   # body axes in (y, z)
+corners = np.array([c1 * 0.3 * yb + c2 * 0.15 * zb for c1, c2 in ((-1, -1), (1, -1), (1, 1), (-1, 1))])
+ax.add_patch(plt.Polygon(corners, fill=True, fc="0.92", ec="0.3", lw=1.5, zorder=0))
+for v, lab in ((yb, "$y_b$"), (zb, "$z_b$")):
+    ax.annotate("", xy=1.3 * v, xytext=(0, 0), arrowprops=dict(arrowstyle="->", lw=1.2, color="0.3"))
+    ax.text(*(1.38 * v), lab, fontsize=11, color="0.3")
+s = 1.0 / 9.81                            # 1 unit of drawing = 9.81 m/s^2
+ax.annotate("", xy=(0, -1.0), xytext=(0, 0), arrowprops=dict(arrowstyle="->", lw=2.5, color="#3b7dd8"))
+ax.text(0.05, -0.95, r"$\mathbf{g}$ (world, down)", color="#3b7dd8", fontsize=10)
+ax.annotate("", xy=(0, 1.0), xytext=(0, 0), arrowprops=dict(arrowstyle="->", lw=2.5, color="#e8743b"))
+ax.text(0.06, 1.08, r"$\mathbf{f} = -\mathbf{g}$ (reading)", color="#e8743b", fontsize=10)
+py, pz = f20[1] * s * yb, f20[2] * s * zb          # the two components the chip reports
+ax.plot(*np.c_[pz, pz + py], ls="--", color="#e8743b", lw=1)
+ax.plot(*np.c_[py, py + pz], ls="--", color="#e8743b", lw=1)
+ax.plot(*np.c_[[0, 0], py], color="#e8743b", lw=3, alpha=0.5)
+ax.plot(*np.c_[[0, 0], pz], color="#e8743b", lw=3, alpha=0.5)
+ax.text(*(py + np.array([0.04, -0.12])), f"$f_y$ = {f20[1]:.2f}", color="#e8743b", fontsize=9)
+ax.text(*(pz + np.array([-0.55, -0.05])), f"$f_z$ = {f20[2]:.2f}", color="#e8743b", fontsize=9)
+ax.plot([0, 0], [0, 0.55], color="0.6", lw=0.8, ls=":")
+th = np.linspace(np.pi / 2, np.pi / 2 + phi, 20)
+ax.plot(0.5 * np.cos(th), 0.5 * np.sin(th), color="0.2", lw=1)
+ax.text(-0.66, 0.28, r"$\phi$ = 20°", fontsize=10)
+ax.set_xlim(-1.0, 1.6); ax.set_ylim(-1.15, 1.45); ax.set_aspect("equal"); ax.axis("off")
+ax.set_title("rolled 20° about $x$ ($x$ points out of the page: seen from the front)\n"
+             "arrow lengths to scale; the components are the sensor's own numbers", fontsize=9)
+fig.tight_layout(); plt.show()
+print(f"accelerometer reading (body axes): f = {np.round(f20, 4)} m/s^2")
+```
+
+The vector is the same in the world — 9.81 up. **Only its components in the body
+change**: the body's $z$ axis no longer points up, so part of "up" now lies along
+the body's $y$.
+
+---
+
+## Tilt from the accelerometer, derived {.smaller}
+
+**Step 1 — assume at rest.** Then ${\color{#e8743b}{\mathbf{f}_b}} = -R^{\mathsf T}{\color{#3b7dd8}{\mathbf{g}}} = g\,R^{\mathsf T}\mathbf{e}_z$, with $g = 9.81$ and $\mathbf{e}_z = (0,0,1)$ "up".
+
+**Step 2 — write the orientation as three turns**: yaw $\psi$ about $z$, pitch
+$\theta$ about $y$, roll $\phi$ about $x$: $\;R = R_z(\psi)\,R_y(\theta)\,R_x(\phi)$,
+so $R^{\mathsf T} = R_x(\phi)^{\mathsf T} R_y(\theta)^{\mathsf T} R_z(\psi)^{\mathsf T}$.
+
+**Step 3 — yaw drops out.** Turning about the vertical leaves "up" alone:
+$R_z(\psi)^{\mathsf T}\mathbf{e}_z = \mathbf{e}_z$. **No accelerometer reading can
+ever contain yaw.**
+
+**Step 4 — pitch, then roll.** $R_y(\theta)^{\mathsf T}\mathbf{e}_z = (-\sin\theta,\ 0,\ \cos\theta)$, and $R_x(\phi)^{\mathsf T}$ of that gives
+
+$${\color{#e8743b}{\mathbf{f}_b}} = g\,\big(\,-\sin\theta,\;\; \sin\phi\cos\theta,\;\; \cos\phi\cos\theta\,\big)$$
+
+**Step 5 — divide to cancel what you do not know.**
+
+$$\frac{{\color{#e8743b}{f_y}}}{{\color{#e8743b}{f_z}}} = \tan\phi
+\;\Rightarrow\; {\color{#e8743b}{\phi_{\text{acc}}}} = \operatorname{atan2}({\color{#e8743b}{f_y}}, {\color{#e8743b}{f_z}})$$
+
+$$\sqrt{{\color{#e8743b}{f_y}}^2 + {\color{#e8743b}{f_z}}^2} = g\cos\theta
+\;\Rightarrow\; {\color{#e8743b}{\theta_{\text{acc}}}} = \operatorname{atan2}\!\big(-{\color{#e8743b}{f_x}},\ \sqrt{{\color{#e8743b}{f_y}}^2 + {\color{#e8743b}{f_z}}^2}\big)$$
+
+- $g$ cancels: only the **direction** of the reading matters, not its size
+- `atan2(y, x)`, the angle of the point $(x, y)$, keeps both signs and never divides by zero
+
+---
+
+## Checking the formula {.smaller}
+
+The box from before, held still at known angles; `soc4180.tilt_from_accel` —
+Step 5 line for line — reads them back:
+
+```{python}
+print(" set: roll  pitch   yaw  |  reading f (m/s^2)            |  atan2 gives: roll   pitch")
+for r, p, y in ((20, 0, 0), (0, 30, 0), (20, 30, 0), (20, 30, 45), (20, 30, 170)):
+    f = held_still(r, p, y)
+    rr, pp = np.degrees(soc4180.tilt_from_accel(f))
+    print(f"      {r:4d} {p:6d} {y:5d}  |  {np.array2string(np.round(f, 3), precision=3):30s} |"
+          f"  {rr:10.3f} {pp:7.3f}")
+```
+
+- the recovered roll and pitch equal the ones set
+- the last three rows differ **only in yaw** — and the readings are the same.
+  Step 3, measured: gravity is blind to heading.
 
 ---
 
 ## Gravity is the only compass {.smaller}
 
-Rotate the body and gravity moves in the body's frame. That vector is the
-robot's attitude reference:
+On the standing G1, the true gravity direction in the body frame and the tilt
+read off the accelerometer:
 
 ```{python}
 print(f"gravity in the body frame (upright): {np.round(soc4180.gravity_body(data), 4)}")
@@ -123,9 +336,9 @@ print(f"roll, pitch from the accelerometer : "
 
 Two things this gives you, and one it does not:
 
-- **roll and pitch** — recoverable, because gravity is not aligned with either
-- **yaw** — *not* recoverable. Spin about the vertical axis and gravity does not
-  move. A gyroscope drifts; a magnetometer is unreliable indoors near motors
+- **roll and pitch** — recoverable (Step 5)
+- **yaw** — *not* recoverable (Step 3). A gyroscope can track it for a while,
+  but drifts (below); a compass (magnetometer) is unreliable indoors near motors
 
 Locomotion policies therefore observe **gravity in the body frame** rather than
 absolute pose. It is the largest piece of attitude a real robot can honestly know.
@@ -154,35 +367,44 @@ an estimator tested on perfect sensors teaches nothing.
 
 ## Watch the assumption break {.smaller}
 
-Tilt-from-gravity assumes the accelerometer sees *only* gravity. Walk, and it
-does not:
+Step 1 of the tilt formula assumed ${\color{#8e44ad}{\mathbf{a}}} = 0$. Walk, and it is not:
 
 ```{python}
 from soc4180.walking import WalkingController, GaitParams
 
 controller = WalkingController(model, GaitParams(n_steps=8))
 sim = controller.initial_data()
+imu_site = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_SITE, "imu_in_torso")
 
 log = []
 while sim.time < controller.total_time:
     sim.ctrl[:] = controller.control(sim.time)
     mujoco.mj_step(model, sim)
     g, a = soc4180.read_imu(model, sim, "torso")
-    truth = soc4180.gravity_body(sim)
+    # the truth: gravity's direction in the IMU's own frame (site_xmat is IMU -> world)
+    down = sim.site_xmat[imu_site].reshape(3, 3).T @ np.array([0.0, 0.0, -1.0])
     log.append([sim.time, *g, *a,
-                np.arctan2(-truth[1], -truth[2]),
-                np.arctan2(truth[0], np.hypot(truth[1], truth[2]))])
+                np.arctan2(-down[1], -down[2]),
+                np.arctan2(down[0], np.hypot(down[1], down[2]))])
 
 log = np.array(log)
 walk = log[log[:, 0] > controller.params.settle_time]
 mag = np.linalg.norm(walk[:, 4:7], axis=1)
-print(f"|accel| during the walk : {mag.min():.2f} .. {mag.max():.2f} m/s^2")
-print(f"                          (it would be 9.81 if only gravity acted)")
-print(f"true roll  : {np.degrees(walk[:,7]).min():+.2f} .. {np.degrees(walk[:,7]).max():+.2f} deg")
+print(f"walking for {walk[-1, 0] - walk[0, 0]:.1f} s after {controller.params.settle_time:.1f} s of standing")
+print(f"|accel| during the walk : {mag.min():.2f} .. {mag.max():.2f} m/s^2   (9.81 if only gravity acted)")
+print(f"true roll of the torso  : {np.degrees(walk[:,7]).min():+.2f} .. {np.degrees(walk[:,7]).max():+.2f} deg")
+print(f"1 m/s^2 of sideways acceleration reads as {np.degrees(np.arctan2(1, 9.81)):.2f} deg of roll")
 ```
 
-The accelerometer swings from **3.4 to 19.3 m/s²**. Half of that is the robot,
-not the planet.
+The truth is taken from the IMU site's own orientation (`site_xmat`) — something
+a real robot never has, and exactly what we need to score an estimator.
+
+The last line is Step 2 of the accelerometer derivation at work:
+${\color{#e8743b}{\mathbf{f}}} = {\color{#8e44ad}{\mathbf{a}}} - {\color{#3b7dd8}{\mathbf{g}}}$, so a sideways
+${\color{#8e44ad}{a_y}}$ adds straight into ${\color{#e8743b}{f_y}}$ and the
+`atan2` cannot tell it from gravity. Every 1 m/s² of real sideways acceleration
+is misread as $\operatorname{atan}(1/9.81)$ = 5.8° of roll — and the reading's
+size above strays up to 9.5 m/s² from 9.81.
 
 ---
 
@@ -190,35 +412,68 @@ not the planet.
 
 ```{python}
 #| fig-align: center
-import matplotlib.pyplot as plt
-
+step_times = controller.params.settle_time + controller.params.step_time * np.arange(len(controller.plan) + 1)
 fig, (ax0, ax1) = plt.subplots(2, 1, figsize=(9, 4.4), sharex=True)
 ax0.plot(walk[:, 0], mag, lw=0.8, color="#e8743b", label="|accelerometer|")
-ax0.axhline(9.81, color="k", ls="--", lw=1, label="g = 9.81: what a tilt sensor assumes")
+ax0.axhline(9.81, color="#3b7dd8", ls="--", lw=1, label="g = 9.81: what a tilt sensor assumes")
 ax0.set_ylabel("m/s$^2$"); ax0.legend(fontsize=8, loc="upper right"); ax0.grid(alpha=0.3)
 ax1.plot(walk[:, 0], np.degrees(walk[:, 7]), lw=1.5, color="0.2", label="true roll")
 ax1.plot(walk[:, 0], np.degrees(np.arctan2(walk[:, 5], walk[:, 6])), lw=0.7, color="#e8743b",
          alpha=0.8, label="roll read off the accelerometer")
 ax1.set_ylabel("deg"); ax1.set_xlabel("time (s)"); ax1.legend(fontsize=8, loc="upper right")
 ax1.grid(alpha=0.3)
+for ax in (ax0, ax1):
+    for ts in step_times:
+        ax.axvline(ts, color="0.6", lw=0.6, ls=":")
 fig.tight_layout(); plt.show()
 ```
 
-Every spike in the top plot is a footfall. Each one lands in the bottom plot
-as a tilt that never happened — the body did not roll twenty degrees, the
-sensor was kicked.
+The dotted lines are the planned step changes (every
+`step_time` = 0.65 s), where one foot lands and the other lifts. The spikes in
+the top plot bunch around them, and each lands in the bottom plot as a tilt
+that never happened — the body did not roll twenty degrees, the sensor was kicked.
 
 ---
 
-## Neither sensor is enough {.smaller}
+## The gyroscope, integrated {.smaller}
+
+A gyroscope reports the body's **turning rate** ${\color{#1a9fb5}{\omega}}$ in
+rad/s, about each of its own axes. To get an angle, add it up.
+
+**Step 1 — the model of a real gyro.** The reading is the true rate plus a
+**bias** ${\color{#c0392b}{b}}$ — a small constant offset, different on every chip
+and wandering with temperature: ${\color{#1a9fb5}{\omega_k}} = \dot\phi_k + {\color{#c0392b}{b}}$.
+
+**Step 2 — integrate, one step at a time** (rectangle rule, like `mj_step`):
+$\;{\color{#2a9d5c}{\hat\phi_k}} = {\color{#2a9d5c}{\hat\phi_{k-1}}} + {\color{#1a9fb5}{\omega_k}}\,\Delta t$.
+
+**Step 3 — follow the error** ${\color{#c0392b}{e_k}} = {\color{#2a9d5c}{\hat\phi_k}} - \phi_k$.
+Subtract the truth's own update $\phi_k = \phi_{k-1} + \dot\phi_k\Delta t$:
+
+$${\color{#c0392b}{e_k}} = {\color{#c0392b}{e_{k-1}}} + {\color{#c0392b}{b}}\,\Delta t
+\quad\Rightarrow\quad
+{\color{#c0392b}{e_k}} = {\color{#c0392b}{e_0}} + {\color{#c0392b}{b}}\,k\,\Delta t
+\quad\Rightarrow\quad
+{\color{#c0392b}{e(t)}} = {\color{#c0392b}{b}}\,t$$
+
+The error grows **in a straight line, for ever**. Nothing in the equation pulls
+it back: the gyro has no idea where "up" is, only how fast it is turning.
+
+Read aloud: a bias of 0.01 rad/s is 0.57° every second — **34° after a minute**.
+A gyro is right *now* and wrong *later*; the accelerometer was the opposite.
+
+(For roll, $\dot\phi = \omega_x$ exactly only while pitch is zero; on a nearly
+upright robot it is close. That approximation, plus the rectangle rule, is the
+only error a *perfect* gyro makes here.)
+
+---
+
+## Drift, measured {.smaller}
 
 ```{python}
+#| fig-align: center
 t = walk[:, 0]; gyro_w = walk[:, 1:4]; acc_w = walk[:, 4:7]; roll_true = walk[:, 7]
 dt = float(np.mean(np.diff(t)))
-
-acc_roll = np.arctan2(acc_w[:, 1], acc_w[:, 2])
-print(f"accelerometer only : mean err {np.degrees(np.abs(acc_roll-roll_true)).mean():5.2f} deg, "
-      f"worst {np.degrees(np.abs(acc_roll-roll_true)).max():5.2f} deg")
 
 def integrate(bias):
     r = np.empty(len(t)); r[0] = roll_true[0]
@@ -226,23 +481,155 @@ def integrate(bias):
         r[k] = r[k-1] + (gyro_w[k, 0] + bias) * dt
     return r
 
-for bias in (0.0, 0.01):
-    r = integrate(bias)
-    print(f"gyroscope only, bias {bias:.3f} rad/s : final err "
-          f"{np.degrees(abs(r[-1]-roll_true[-1])):5.2f} deg")
+print(f"a bias of 0.01 rad/s is {np.degrees(0.01):.3f} deg per second, {np.degrees(0.01 * 60):.1f} deg per minute")
+fig, ax = plt.subplots(figsize=(8.4, 3.2))
+for bias, col in ((0.0, "0.45"), (0.01, "#1a9fb5"), (0.02, "#0b5d6b")):
+    err = np.degrees(integrate(bias) - roll_true)
+    ax.plot(t - t[0], err, lw=1.4, color=col, label=f"gyro bias {bias} rad/s: measured error")
+    print(f"bias {bias:.2f} rad/s: final error {err[-1]:+.2f} deg   predicted b*t = {np.degrees(bias * (t[-1] - t[0])):.2f} deg")
+for bias in (0.01, 0.02):
+    ax.plot(t - t[0], np.degrees(bias * (t - t[0])), ls="--", color="#c0392b", lw=1)
+ax.text(t[-1] - t[0], np.degrees(0.02 * (t[-1] - t[0])), "  $e = b\\,t$", color="#c0392b", va="center", fontsize=9)
+ax.set_xlabel("time since the walk started (s)"); ax.set_ylabel("roll error (deg)")
+ax.set_xlim(0, (t[-1] - t[0]) * 1.12)
+ax.legend(fontsize=8, loc="upper left"); ax.grid(alpha=0.3)
+fig.tight_layout(); plt.show()
 ```
 
-**Complementary failure modes.** The accelerometer is wrong *now* but never gets
-worse. The gyroscope is right *now* but gets worse forever. A perfect gyro is
-near-exact — which is precisely why we injected a bias to see the real problem.
+The grey line is a *perfect* gyro: its wobble (−0.48° at the end) is the
+approximation named on the last slide, not the sensor. Each biased line is that
+grey line **plus exactly** ${\color{#c0392b}{b}}\,t$, the red dashed lines:
+at 0.01 rad/s, −0.48 + 2.98 = 2.50°. Drift *is* bias times time, and it only
+goes one way.
 
 ---
 
-## Blend them {.smaller}
+## Neither sensor is enough {.smaller}
 
-Trust the gyroscope over short intervals; let gravity correct it slowly.
+```{python}
+acc_roll = np.arctan2(acc_w[:, 1], acc_w[:, 2])
+acc_err = np.degrees(np.abs(acc_roll - roll_true))
+print(f"accelerometer only : mean err {acc_err.mean():5.2f} deg, "
+      f"worst {acc_err.max():5.2f} deg, final {acc_err[-1]:5.2f} deg")
+for bias in (0.0, 0.01):
+    r = integrate(bias)
+    print(f"gyroscope only, bias {bias:.3f} rad/s : mean err "
+          f"{np.degrees(np.abs(r-roll_true)).mean():5.2f} deg, final err {np.degrees(abs(r[-1]-roll_true[-1])):5.2f} deg")
+```
 
-$$\theta_k = \alpha\,(\theta_{k-1} + \omega_k \Delta t) \;+\; (1-\alpha)\,\theta_{\text{accel}}$$
+**Complementary failure modes:**
+
+| | error now | error later | why |
+| --- | --- | --- | --- |
+| accelerometer | large (every footfall) | never grows | it always sees gravity, plus ${\color{#8e44ad}{\mathbf{a}}}$ |
+| gyroscope | tiny | grows as ${\color{#c0392b}{b}}\,t$ | it only sees change, never "up" |
+
+A perfect gyro is near-exact — which is precisely why we inject a bias to see the
+real problem. The fix is to let each sensor cover the other's weakness.
+
+---
+
+## Why not integrate twice for position? {.smaller}
+
+The accelerometer gives ${\color{#8e44ad}{\mathbf{a}}} = R\,{\color{#e8743b}{\mathbf{f}_b}} + {\color{#3b7dd8}{\mathbf{g}}}$
+(Step 3 of the accelerometer derivation, solved for ${\color{#8e44ad}{\mathbf{a}}}$). Integrate once for velocity, twice for position — so why
+does no robot do that?
+
+**Step 1 — the error in acceleration.** Suppose the reading carries a bias
+${\color{#c0392b}{b}}$ (m/s²). The computed acceleration is ${\color{#8e44ad}{a}} + {\color{#c0392b}{b}}$.
+
+**Step 2 — integrate once:** velocity error ${\color{#c0392b}{e_v(t)}} = \int_0^t {\color{#c0392b}{b}}\,ds = {\color{#c0392b}{b}}\,t$ — the gyro's straight line.
+
+**Step 3 — integrate again:** position error ${\color{#c0392b}{e_p(t)}} = \int_0^t {\color{#c0392b}{b}}\,s\,ds = \tfrac12\,{\color{#c0392b}{b}}\,t^2$ — a **parabola**.
+
+**Step 4 — the worst bias is gravity.** To subtract ${\color{#3b7dd8}{\mathbf{g}}}$ you
+need $R$, i.e. the tilt. Get the tilt wrong by $\delta$ and a slice of gravity,
+${\color{#c0392b}{b}} = g\sin\delta$, is left over as a fake sideways
+acceleration.
+
+```{python}
+print("position error 1/2 b t^2:         after 1 s   after 10 s   after 60 s")
+for name, bias in (("bias 0.01 m/s^2", 0.01),
+                   (f"1 deg tilt: b = {9.81 * np.sin(np.radians(1)):.3f} m/s^2", 9.81 * np.sin(np.radians(1)))):
+    print(f"  {name:30s}" + "".join(f"{0.5 * bias * T**2:10.3f} m" for T in (1, 10, 60)))
+```
+
+The formula's prediction; the next slide measures it on the robot.
+
+---
+
+## Double integration, measured {.smaller}
+
+The G1 standing still for 20 s — its true position does not change — and the
+accelerometer integrated twice, three ways:
+
+```{python}
+#| fig-align: center
+still = soc4180.keyframe_data(model, "stand")
+q_err, tilt_err = np.zeros(4), np.zeros(9)
+mujoco.mju_euler2Quat(q_err, np.radians([0.0, 1.0, 0.0]), "XYZ")
+mujoco.mju_quat2Mat(tilt_err, q_err); tilt_err = tilt_err.reshape(3, 3)   # a 1-degree pitch mistake
+g_world = np.array([0.0, 0.0, -9.81])
+cases = {"exact tilt, no bias": (np.eye(3), 0.0),
+         "exact tilt, bias 0.01 m/s^2": (np.eye(3), 0.01),
+         "tilt wrong by 1 deg": (tilt_err, 0.0)}
+vel = {k: np.zeros(3) for k in cases}; pos = {k: np.zeros(3) for k in cases}
+trace = {k: [] for k in cases}; times = []
+mujoco.mj_forward(model, still); start = still.site_xpos[imu_site].copy()
+for _ in range(int(20.0 / model.opt.timestep)):
+    mujoco.mj_step(model, still)
+    _, f_b = soc4180.read_imu(model, still, "torso")
+    R = still.site_xmat[imu_site].reshape(3, 3)
+    for k, (err_R, bias) in cases.items():
+        a_world = err_R @ R @ (f_b + np.array([bias, 0.0, 0.0])) + g_world
+        vel[k] += a_world * model.opt.timestep
+        pos[k] += vel[k] * model.opt.timestep
+        trace[k].append(np.linalg.norm(pos[k][:2]))
+    times.append(still.time)
+times = np.array(times)
+
+fig, ax = plt.subplots(figsize=(8.4, 3.2))
+for (k, tr), col in zip(trace.items(), ("0.2", "#e8743b", "#c0392b")):
+    ax.loglog(times, np.maximum(tr, 1e-9), lw=1.6, color=col, label=f"measured: {k}")
+for bias in (0.01, 9.81 * np.sin(np.radians(1))):
+    ax.loglog(times, 0.5 * bias * times**2, ls="--", lw=1, color="#3b7dd8")
+ax.text(0.004, 20, r"blue dashed: the formula $\frac{1}{2}\,b\,t^2$", color="#3b7dd8", fontsize=9)
+ax.set_xlabel("time (s)"); ax.set_ylabel("integrated horizontal\nposition (m)")
+ax.set_ylim(1e-8, 1e3); ax.legend(fontsize=8, loc="lower right"); ax.grid(alpha=0.3, which="both")
+fig.tight_layout(); plt.show()
+for k, tr in trace.items():
+    print(f"{k:28s}: {tr[int(1/model.opt.timestep)-1]:9.4f} m at 1 s, "
+          f"{tr[int(10/model.opt.timestep)-1]:8.3f} m at 10 s, {tr[-1]:8.4f} m at 20 s")
+print(f"{'true horizontal sway of the IMU':28s}: {np.linalg.norm((still.site_xpos[imu_site] - start)[:2]):41.4f} m at 20 s")
+```
+
+Log–log axes: a straight line of **slope 2** is $t^2$. With a perfect sensor and
+the exact tilt (dark grey) the integral tracks the body's real sway — about half
+a millimetre, the last printed line. Add a 0.01 m/s² bias or a 1° tilt mistake
+and the result sits on the parabola, exactly as predicted: 2 m and 34 m after 20 s
+of standing still. **Position needs a sensor that sees the
+world** (cameras, GPS, contact with known ground) — the G1 has none, which is why
+position is privileged.
+
+---
+
+## Blend them: the complementary filter {.smaller}
+
+Trust the gyroscope over short intervals; let gravity correct it slowly. Three
+steps every tick:
+
+**Step 1 — predict** with the gyro: $\;{\color{#2a9d5c}{\hat\theta^{-}_k}} = {\color{#2a9d5c}{\hat\theta_{k-1}}} + {\color{#1a9fb5}{\omega_k}}\,\Delta t$
+
+**Step 2 — measure** with the accelerometer: $\;{\color{#e8743b}{\theta_{\text{acc},k}}} = \operatorname{atan2}(\dots)$ from the tilt slide
+
+**Step 3 — blend**, with one number $\alpha$ between 0 and 1:
+
+$${\color{#2a9d5c}{\hat\theta_k}} = \alpha\,\big({\color{#2a9d5c}{\hat\theta_{k-1}}} + {\color{#1a9fb5}{\omega_k}}\,\Delta t\big) \;+\; (1-\alpha)\,{\color{#e8743b}{\theta_{\text{acc},k}}}$$
+
+- $\alpha = 1$: pure gyro (drifts). $\alpha = 0$: pure accelerometer (kicked by every step)
+- $\alpha = 0.995$: each tick, move 0.5 % of the way from the gyro's prediction
+  toward the accelerometer's angle. A footfall spike lasting a few ticks barely
+  moves it; a bias that pushes the same way for seconds is pulled back
 
 ```{python}
 def run_filter(alpha, bias=0.01):
@@ -260,83 +647,299 @@ for alpha in (0.90, 0.98, 0.995, 1.0):
           f"  final err {np.degrees(abs(est[-1]-roll_true[-1])):5.2f} deg")
 ```
 
-At $\alpha = 0.995$ the **final** error is 1.37 deg, against 2.85 deg for the
-drifting gyroscope and far worse for the accelerometer.
+---
 
-Read the two columns carefully: $\alpha = 1.0$ has a marginally *lower mean*
-error but twice the final error. That gap is drift, and drift only grows --
-which is why mean error is the wrong way to judge an estimator you intend to
-run for an hour.
+## Reading the table {.smaller}
+
+```{python}
+est995 = run_filter(0.995); gyro_only = run_filter(1.0)
+print(f"alpha 0.995 : mean {np.degrees(np.abs(est995 - roll_true)).mean():.2f}  final {np.degrees(abs(est995[-1] - roll_true[-1])):.2f} deg")
+print(f"alpha 1.0   : mean {np.degrees(np.abs(gyro_only - roll_true)).mean():.2f}  final {np.degrees(abs(gyro_only[-1] - roll_true[-1])):.2f} deg")
+```
+
+- $\alpha = 0.90$ and $0.98$ trust the accelerometer too much: the footfalls leak
+  straight through, and the error is several degrees.
+- $\alpha = 0.995$ beats the gyro alone on the **final** error.
+- Compare the *mean* and *final* columns for $\alpha = 1$: the pure gyro starts
+  exact and walks away as $b\,t$, so over a 5-second walk its **mean** hides a
+  **final** error that keeps growing. Drift only grows — which is why mean error
+  is the wrong way to judge an estimator you intend to run for an hour.
+
+Why does $\alpha = 0.995$ stop the drift? The next three slides answer it.
+
+---
+
+## The filter as two filters, derived {.smaller}
+
+Write $z^{-1}$ for "one step ago": $z^{-1}\Theta$ means $\theta_{k-1}$. (This
+is the **$z$-transform**; here it is just shorthand for a delay.)
+
+**Step 1 — the update, rearranged:** ${\color{#2a9d5c}{\hat\theta_k}} - \alpha\,{\color{#2a9d5c}{\hat\theta_{k-1}}} = \alpha\,\Delta t\,{\color{#1a9fb5}{\omega_k}} + (1-\alpha)\,{\color{#e8743b}{\theta_{\text{acc},k}}}$
+
+**Step 2 — in shorthand, and solve for the estimate:**
+
+$${\color{#2a9d5c}{\hat\Theta}} = \underbrace{\frac{1-\alpha}{1-\alpha z^{-1}}}_{L(z)}\;{\color{#e8743b}{\Theta_{\text{acc}}}}
+\;+\; \frac{\alpha\,\Delta t}{1-\alpha z^{-1}}\;{\color{#1a9fb5}{\Omega}}$$
+
+**Step 3 — say what the gyro is measuring.** A perfect gyro reads the change in
+the true angle: ${\color{#1a9fb5}{\omega_k}}\,\Delta t = \theta_k - \theta_{k-1}$, i.e. ${\color{#1a9fb5}{\Omega}}\,\Delta t = (1 - z^{-1})\,\Theta$. Substitute:
+
+$${\color{#2a9d5c}{\hat\Theta}} = L(z)\,{\color{#e8743b}{\Theta_{\text{acc}}}} \;+\; \underbrace{\frac{\alpha\,(1-z^{-1})}{1-\alpha z^{-1}}}_{H(z)}\;\Theta$$
+
+---
+
+## A low-pass plus a high-pass {.smaller}
+
+From the last slide: ${\color{#2a9d5c}{\hat\Theta}} = L(z)\,{\color{#e8743b}{\Theta_{\text{acc}}}} + H(z)\,\Theta$, with
+$L = \dfrac{1-\alpha}{1-\alpha z^{-1}}$ and $H = \dfrac{\alpha\,(1-z^{-1})}{1-\alpha z^{-1}}$.
+
+**Step 4 — add the two filters:** $L + H = \dfrac{1-\alpha + \alpha - \alpha z^{-1}}{1-\alpha z^{-1}} = 1$. **They sum to one.**
+
+- $L$ at a constant signal ($z = 1$): gain $1$. At a fast one: gain near $0$. A **low-pass**.
+- $H = 1 - L$: passes fast changes, blocks constants. A **high-pass**.
+- So the estimate is the **slow part of the accelerometer's angle plus the fast
+  part of the gyro's**. If both sensors were perfect you would get $\theta$ back exactly.
+
+---
+
+## The time constant $\tau$, derived {.smaller}
+
+**Step 1 — kick the filter once.** Feed $L$ a single accelerometer reading of 1
+at $k = 0$ and zeros after. The update gives $1-\alpha$, then $(1-\alpha)\alpha$,
+then $(1-\alpha)\alpha^2$ … — the memory decays as $\alpha^k$.
+
+**Step 2 — write it as an exponential in time.** $\alpha^k = e^{k\ln\alpha}$, and $k = t/\Delta t$:
+
+$$\alpha^k = e^{\,t\,\ln\alpha/\Delta t} = e^{-t/\tau}
+\qquad\Rightarrow\qquad
+\boxed{\;\tau = -\frac{\Delta t}{\ln\alpha}\;} \;\approx\; \frac{\Delta t}{1-\alpha}\ \text{ for } \alpha \text{ near } 1$$
+
+($\ln\alpha < 0$, so $\tau > 0$; the approximation is $\ln\alpha \approx \alpha - 1$.)
+
+**Step 3 — the crossover frequency** is $f_c = 1/(2\pi\tau)$: slower than $f_c$ the
+accelerometer wins, faster the gyro wins.
+
+**Step 4 — what happens to the bias.** Standing still, the accelerometer is
+right and the gyro reads ${\color{#c0392b}{b}}$. The error settles where the
+update stops changing it: ${\color{#c0392b}{e}} = \alpha({\color{#c0392b}{e}} + {\color{#c0392b}{b}}\Delta t)$, so
+
+$${\color{#c0392b}{e_\infty}} = \frac{\alpha\,\Delta t}{1-\alpha}\,{\color{#c0392b}{b}} \;\approx\; \tau\,{\color{#c0392b}{b}}$$
+
+**Bounded**, instead of ${\color{#c0392b}{b}}\,t$. Trust the gyro for $\tau$
+seconds and you inherit $\tau$ seconds' worth of its bias — never more.
+
+---
+
+## $\tau$ in numbers {.smaller}
+
+```{python}
+print(f"dt = {dt:.4f} s")
+print(" alpha    tau (s)   f_c (Hz)   bias error tau*b at b = 0.01 rad/s")
+for alpha in (0.98, 0.995, 0.998, 0.999):
+    tau = -dt / np.log(alpha)
+    print(f" {alpha:<7} {tau:8.3f}  {1 / (2 * np.pi * tau):9.3f}   "
+          f"{np.degrees(alpha * dt / (1 - alpha) * 0.01):6.3f} deg")
+
+# Step 4 measured: the robot stands still for 10 s with a biased gyro
+still = soc4180.keyframe_data(model, "stand")
+cf = soc4180.ComplementaryFilter(dt=model.opt.timestep, alpha=0.995)
+for _ in range(int(10.0 / model.opt.timestep)):
+    mujoco.mj_step(model, still)
+    g, a = soc4180.read_imu(model, still, "torso")
+    cf.update(g + np.array([0.01, 0.0, 0.0]), a)
+down = still.site_xmat[imu_site].reshape(3, 3).T @ np.array([0.0, 0.0, -1.0])
+print(f"\nstanding 10 s, bias 0.01 rad/s, alpha 0.995: filter error "
+      f"{np.degrees(cf.roll - np.arctan2(-down[1], -down[2])):.3f} deg "
+      f"(gyro alone would be {np.degrees(0.01 * 10):.1f} deg)")
+```
+
+Read the second row aloud: at $\alpha = 0.995$ the filter remembers the gyro for
+about 0.4 s, hands over to the accelerometer below about 0.4 Hz, and a
+0.01 rad/s bias costs a fixed quarter of a degree instead of a growing error.
+
+---
+
+## A picture of the filter {.smaller}
+
+```{python}
+#| fig-align: center
+fig, ax = plt.subplots(figsize=(10, 3.0))
+def box(x, y, w, h, text, col):
+    ax.add_patch(plt.Rectangle((x, y), w, h, fc="white", ec=col, lw=2))
+    ax.text(x + w / 2, y + h / 2, text, ha="center", va="center", fontsize=9, color=col)
+def arrow(x0, y0, x1, y1, col="0.3"):
+    ax.annotate("", xy=(x1, y1), xytext=(x0, y0), arrowprops=dict(arrowstyle="->", lw=1.5, color=col))
+ax.text(0.0, 2.35, "accelerometer\n$\\mathbf{f}$", ha="center", va="center", fontsize=9, color="#e8743b")
+ax.text(0.0, 0.35, "gyroscope\n$\\omega$", ha="center", va="center", fontsize=9, color="#1a9fb5")
+box(1.0, 2.0, 1.6, 0.7, "atan2\n(tilt slide)", "#e8743b"); arrow(0.55, 2.35, 1.0, 2.35, "#e8743b")
+box(3.2, 2.0, 2.0, 0.7, "low-pass $L$\n$(1-\\alpha)/(1-\\alpha z^{-1})$", "#e8743b"); arrow(2.6, 2.35, 3.2, 2.35, "#e8743b")
+box(1.0, 0.0, 1.6, 0.7, "integrate\n$\\sum \\omega\\,\\Delta t$", "#1a9fb5"); arrow(0.55, 0.35, 1.0, 0.35, "#1a9fb5")
+box(3.2, 0.0, 2.0, 0.7, "high-pass $H = 1 - L$", "#1a9fb5"); arrow(2.6, 0.35, 3.2, 0.35, "#1a9fb5")
+ax.add_patch(plt.Circle((6.3, 1.35), 0.28, fc="white", ec="0.3", lw=1.5)); ax.text(6.3, 1.35, "+", ha="center", va="center", fontsize=13)
+arrow(5.2, 2.35, 6.12, 1.55, "#e8743b"); arrow(5.2, 0.35, 6.12, 1.15, "#1a9fb5")
+arrow(6.58, 1.35, 7.4, 1.35, "#2a9d5c"); ax.text(7.5, 1.35, "estimate $\\hat\\theta$", va="center", fontsize=10, color="#2a9d5c")
+ax.text(2.8, 2.85, "$\\theta_{acc}$: right on average, kicked at every footfall", ha="center", fontsize=8, color="0.35")
+ax.text(2.8, -0.35, "$\\theta_{gyro}$: smooth, drifts as $b\\,t$", ha="center", fontsize=8, color="0.35")
+ax.text(4.2, 1.35, "keeps the slow part of one,\nthe fast part of the other", ha="center", va="center", fontsize=8, color="0.35")
+ax.set_xlim(-0.8, 9.0); ax.set_ylim(-0.6, 3.1); ax.axis("off")
+fig.tight_layout(); plt.show()
+```
+
+The one-line update and this diagram are the same thing: Step 4 of the
+derivation showed that $L$ and $H$ fall out of it by algebra. The code never
+builds the two filters separately.
+
+---
+
+## The filter in frequency {.smaller}
+
+```{python}
+#| fig-align: center
+freqs = np.logspace(-2, 2, 400)
+fig, (ax0, ax1) = plt.subplots(2, 1, figsize=(9, 4.6), sharex=True)
+for alpha, ls in ((0.98, ":"), (0.995, "-"), (0.999, "--")):
+    zinv = np.exp(-2j * np.pi * freqs * dt)
+    L = (1 - alpha) / (1 - alpha * zinv)
+    tau = -dt / np.log(alpha)
+    ax0.semilogx(freqs, np.abs(L), lw=2, ls=ls, color="#e8743b", label=fr"$|L|$, $\alpha$ = {alpha} ($\tau$ = {tau:.2f} s)")
+    ax0.semilogx(freqs, np.abs(1 - L), lw=1.2, ls=ls, color="#1a9fb5")
+fc = 1 / (2 * np.pi * (-dt / np.log(0.995)))
+ax0.axvline(fc, color="0.5", lw=0.8)
+ax0.text(fc * 1.1, 0.03, f"$f_c$ = {fc:.2f} Hz\n($\\alpha$ = 0.995)", fontsize=8, color="0.3")
+ax0.text(0.012, 0.88, "orange: accelerometer path $|L|$", fontsize=8, color="#e8743b")
+ax0.text(12, 0.88, "cyan: gyro path $|H|$", fontsize=8, color="#1a9fb5")
+ax0.set_ylabel("gain"); ax0.set_ylim(0, 1.05); ax0.legend(fontsize=7.5, loc="center right"); ax0.grid(alpha=0.3)
+
+err = acc_roll - roll_true                       # what the accelerometer gets wrong while walking
+spec_f = np.fft.rfftfreq(len(err), dt)
+spec = np.abs(np.fft.rfft(err - err.mean())); spec /= spec.max()
+ax1.semilogx(spec_f[1:], spec[1:], color="#e8743b", lw=1)
+stride_hz = 1 / (2 * controller.params.step_time)
+ax1.axvline(stride_hz, color="0.4", lw=0.8, ls=":")
+ax1.text(stride_hz * 1.08, 0.85, f"stride {stride_hz:.2f} Hz", fontsize=8, color="0.3")
+ax1.axvline(fc, color="0.5", lw=0.8)
+ax1.text(0.012, 0.55, "gyro bias $b$: a constant,\nsits at 0 Hz, off the left edge", fontsize=8, color="#c0392b")
+ax1.set_ylabel("accelerometer's\nerror (relative)"); ax1.set_xlabel("frequency (Hz)"); ax1.grid(alpha=0.3)
+ax1.set_xlim(0.01, 100)
+fig.tight_layout(); plt.show()
+peak = spec_f[1:][np.argmax(spec[1:])]
+print(f"accelerometer error: largest component at {peak:.2f} Hz; stride frequency {stride_hz:.2f} Hz")
+for alpha in (0.995, 0.998):
+    gain = lambda fr: abs((1 - alpha) / (1 - alpha * np.exp(-2j * np.pi * fr * dt)))
+    print(f"alpha {alpha}: |L| = {gain(stride_hz):.3f} at the stride, {gain(peak):.3f} at {peak:.2f} Hz")
+```
+
+**Top:** what each path lets through. **Bottom:** where the accelerometer's
+walking error lives, measured by Fourier transform of the error two plots back.
+One stride is two steps (left, right), so the stride frequency is
+$1/(2 \times 0.65\ \text{s})$; the error has peaks there and at its odd
+multiples, the tallest at three times it (2.31 Hz).
+
+---
+
+## Reading the frequency picture {.smaller}
+
+The filter works because the two sensors' errors sit in **different frequency
+bands**: the gyro's bias at 0 Hz (removed by the high-pass), the footfalls from
+0.77 Hz up (cut by the low-pass). But read the printout: at $\alpha = 0.995$
+almost half of the stride component still gets through — the crossover at
+0.40 Hz is too close to 0.77 Hz. Moving to $\alpha = 0.998$ ($f_c$ = 0.16 Hz)
+cuts it harder, at the price of a larger $\tau b$:
+
+| $\alpha$ | $f_c$ | stride (0.77 Hz) let through | 2.31 Hz let through | bias error $\tau b$ at 0.01 rad/s |
+| --- | --- | --- | --- | --- |
+| 0.995 | 0.40 Hz | 46 % | 17 % | 0.23° |
+| 0.998 | 0.16 Hz | 20 % | 7 % | 0.57° |
+
+Every number is printed two or three slides back. Lowering $f_c$ buys less footfall
+and pays more bias: that is the whole trade, and the next slide finds its balance.
 
 ---
 
 ## What $\alpha$ really sets {.smaller}
 
-Write the update in the $z$-domain and it splits into two filters that sum to
-one:
-
-$$\Theta = \underbrace{\frac{1-\alpha}{1-\alpha z^{-1}}}_{\text{low-pass on the accelerometer}}\;\Theta_{\text{accel}}
-\;+\;
-\underbrace{\frac{\alpha\,\Delta t}{1-\alpha z^{-1}}}_{\text{integrates the gyro, high-pass}}\;\Omega$$
-
-The pole at $z = \alpha$ gives a time constant $\tau = -\Delta t / \ln\alpha
-\approx \alpha\,\Delta t / (1-\alpha)$: **how long the gyroscope is trusted
-before gravity has the last word**.
-
 ```{python}
 #| fig-align: center
-fig, (ax0, ax1) = plt.subplots(1, 2, figsize=(9.6, 3.6))
-f = np.logspace(-2, 2, 300)
-for alpha, col in ((0.98, "#e8743b"), (0.995, "#3b7dd8"), (0.999, "#2a9d5c")):
-    z = np.exp(2j * np.pi * f * dt)
-    low = np.abs((1 - alpha) / (1 - alpha / z))
-    tau = -dt / np.log(alpha)
-    ax0.semilogx(f, low, lw=2, color=col, label=fr"$\alpha$ = {alpha}, $\tau$ = {tau:.2f} s")
-    ax0.semilogx(f, 1 - low, lw=1, ls="--", color=col)
-ax0.set_xlabel("frequency (Hz)"); ax0.set_ylabel("gain"); ax0.legend(fontsize=8)
-ax0.set_title("solid: accelerometer path; dashed: gyroscope path", fontsize=10); ax0.grid(alpha=0.3)
-
 alphas = 1 - np.logspace(-3.3, -1, 25)
 mean_err, final_err = [], []
 for alpha in alphas:
     est = run_filter(alpha)
     mean_err.append(np.degrees(np.abs(est - roll_true)).mean())
     final_err.append(np.degrees(abs(est[-1] - roll_true[-1])))
-ax1.semilogx(1 - alphas, mean_err, "o-", ms=4, lw=1.5, color="#3b7dd8", label="mean error")
-ax1.semilogx(1 - alphas, final_err, "s-", ms=4, lw=1.5, color="#e8743b", label="final error (drift)")
-ax1.set_xlabel(r"$1 - \alpha$"); ax1.set_ylabel("roll error (deg)"); ax1.legend(fontsize=8)
-ax1.set_title("biased gyro, walking: both errors against alpha", fontsize=10); ax1.grid(alpha=0.3)
+fig, ax1 = plt.subplots(figsize=(8, 3.3))
+ax1.semilogx(1 - alphas, mean_err, "o-", ms=4, lw=1.5, color="#2a9d5c", label="mean error")
+ax1.semilogx(1 - alphas, final_err, "s-", ms=4, lw=1.5, color="#c0392b", label="final error (drift)")
+ax1.set_xlabel(r"$1 - \alpha$   (left: trust the gyro longer;  right: trust gravity sooner)")
+ax1.set_ylabel("roll error (deg)"); ax1.legend(fontsize=8)
+ax1.set_title("biased gyro (0.01 rad/s), walking: both errors against alpha", fontsize=10); ax1.grid(alpha=0.3)
 fig.tight_layout(); plt.show()
 best_mean, best_final = alphas[np.argmin(mean_err)], alphas[np.argmin(final_err)]
 print(f"mean error is smallest at alpha = {best_mean:.4f} (tau = {-dt / np.log(best_mean):.2f} s), "
-      f"final error at alpha = {best_final:.4f}")
+      f"final error at alpha = {best_final:.4f} (tau = {-dt / np.log(best_final):.2f} s)")
 ```
 
-Both errors bottom out near $\alpha \approx 0.998$ — trust the gyroscope for
-about a second. Go **left** (trust it longer) and the bias leaks back in; go
-**right** (trust gravity sooner) and every footfall leaks in instead. Where the
-minimum sits depends on how bad the gyroscope is: a worse bias pushes it to the
-right, a rougher gait to the left. $\alpha$ is not a constant, it is a claim
-about your sensors.
+Go **left** (larger $\tau$) and the bias error $\tau{\color{#c0392b}{b}}$ grows;
+go **right** (smaller $\tau$) and more of the footfall band passes $L$. The minimum
+is where those two costs balance, so where it sits depends on how bad each
+sensor is: by the same two costs, a worse bias should push it right and a
+rougher gait left (exercise 2 lets you test that). **$\alpha$ is not
+a constant, it is a claim about your sensors.**
 
 ---
 
 ## Seeing it {.smaller}
 
 ```{python}
-import matplotlib.pyplot as plt
-
+#| fig-align: center
 fig, ax = plt.subplots(figsize=(9, 3.4))
 ax.plot(t, np.degrees(roll_true), lw=2, color="0.2", label="true roll")
-ax.plot(t, np.degrees(acc_roll), lw=0.8, alpha=0.7, label="accelerometer only")
-ax.plot(t, np.degrees(integrate(0.01)), lw=1.0, ls="--", label="gyro only (biased)")
-ax.plot(t, np.degrees(run_filter(0.995)), lw=1.4, label="complementary, $\\alpha$=0.995")
+ax.plot(t, np.degrees(acc_roll), lw=0.8, alpha=0.7, color="#e8743b", label="accelerometer only")
+ax.plot(t, np.degrees(integrate(0.01)), lw=1.2, ls="--", color="#1a9fb5", label="gyro only (bias 0.01 rad/s)")
+ax.plot(t, np.degrees(run_filter(0.995)), lw=1.4, color="#2a9d5c", label="complementary, $\\alpha$=0.995")
 ax.set_xlabel("time (s)"); ax.set_ylabel("roll (deg)")
 ax.legend(fontsize=8, ncol=2); ax.grid(alpha=0.3)
 fig.tight_layout(); plt.show()
 ```
 
-The dashed line walks away. The thin line is jagged. The filter is neither.
+The cyan dashed line walks away ($b\,t$). The orange line is jagged (the footfall
+band). The green line follows the grey truth: the slow part of the orange plus
+the fast part of the cyan.
+
+---
+
+## Observable and privileged, defined {.smaller}
+
+The simulator holds the **full state** $s$: every `qpos`, every `qvel`, every
+contact force, the friction, the terrain. A robot's sensors see a function of it:
+
+$$o = h(s) + \text{noise}$$
+
+- $o$ — the **observation**: what the sensors report (here, IMU numbers and
+  encoders). Week 0 wrote the same thing as $y_k = h(x_k)$; from Week 7 on it is $o$ and $s$
+- $h$ — the **sensor model**: which parts of $s$ reach a sensor, and in which frame
+- **observable**: anything you can compute from $o$ (possibly through a filter,
+  like today's tilt)
+- **privileged**: anything in $s$ that no function of $o$ recovers — world
+  position, heading, height above the floor, contact forces on this robot
+
+```{python}
+#| fig-align: center
+fig, ax = plt.subplots(figsize=(10, 2.3))
+ax.add_patch(plt.Rectangle((0, 0), 3.2, 2, fc="0.95", ec="0.3"))
+ax.text(1.6, 1.75, "simulator state $s$", ha="center", fontsize=9)
+ax.text(1.6, 0.9, "qpos (36), qvel (35),\ncontacts, friction,\nterrain, masses …", ha="center", va="center", fontsize=8)
+ax.add_patch(plt.Rectangle((4.4, 0.5), 1.8, 1.0, fc="white", ec="#e8743b", lw=2))
+ax.text(5.3, 1.0, "sensors $h$\n2 IMUs + 29 encoders", ha="center", va="center", fontsize=8)
+ax.annotate("", xy=(4.4, 1.0), xytext=(3.2, 1.0), arrowprops=dict(arrowstyle="->", lw=1.5))
+ax.add_patch(plt.Rectangle((7.2, 1.1), 2.2, 0.8, fc="white", ec="#2a9d5c", lw=2))
+ax.text(8.3, 1.5, "policy (actor)\nsees $o$ only", ha="center", va="center", fontsize=8)
+ax.annotate("", xy=(7.2, 1.5), xytext=(6.2, 1.0), arrowprops=dict(arrowstyle="->", lw=1.5, color="#2a9d5c"))
+ax.add_patch(plt.Rectangle((7.2, 0.0), 2.2, 0.8, fc="white", ec="#c0392b", lw=2, ls="--"))
+ax.text(8.3, 0.4, "critic (training only)\nmay see $s$", ha="center", va="center", fontsize=8)
+ax.annotate("", xy=(7.2, 0.4), xytext=(3.2, 0.3), arrowprops=dict(arrowstyle="->", lw=1.2, color="#c0392b", ls="--"))
+ax.set_xlim(-0.1, 9.6); ax.set_ylim(-0.1, 2.1); ax.axis("off")
+fig.tight_layout(); plt.show()
+```
 
 ---
 
@@ -348,11 +951,12 @@ This is the week's real product. What may a policy be given?
 | --- | --- | --- |
 | Joint angles `qpos[7:]` | encoders | **yes** |
 | Joint velocities `qvel[6:]` | differentiated encoders | **yes** |
-| Gravity in body frame | IMU + filter | **yes** |
+| Gravity in body frame | IMU + filter (today) | **yes** |
 | Angular velocity | gyroscope | **yes** |
 | Previous action | it commanded it | **yes** |
 | Body height `qpos[2]` | no sensor | no |
-| World position `qpos[:2]` | no sensor | no |
+| World position `qpos[:2]` | no sensor; double integration diverges | no |
+| Yaw (heading) | gravity is blind to it; the gyro drifts | no |
 | Foot contact forces | not on this robot | no |
 
 ```{python}
@@ -365,6 +969,11 @@ obs = np.concatenate([
 print(f"observation vector: {obs.shape[0]} numbers, every one measurable on hardware")
 ```
 
+One honest caveat: this cell takes gravity from `gravity_body`, the simulator's
+exact answer, standing in for what today's filter would estimate. Week 7's
+environment does the same. On hardware that entry comes from a filter, with
+the errors we just measured.
+
 ---
 
 ## The observation, drawn to scale {.smaller}
@@ -372,7 +981,7 @@ print(f"observation vector: {obs.shape[0]} numbers, every one measurable on hard
 ```{python}
 #| fig-align: center
 blocks = [("gravity in body frame", 3, "IMU + filter", "#3b7dd8"),
-          ("angular velocity", 3, "gyroscope", "#3b7dd8"),
+          ("angular velocity", 3, "gyroscope", "#1a9fb5"),
           ("joint angles", 29, "encoders", "#2a9d5c"),
           ("joint velocities", 29, "encoders, differentiated", "#2a9d5c")]
 denied = [("body height", 1), ("world x, y", 2), ("yaw", 1), ("foot forces", 6)]
@@ -390,17 +999,18 @@ for k, (name, n, src, col) in enumerate(blocks):
 xd = x + 3
 for name, n in denied:
     ax.add_patch(plt.Rectangle((xd, 0), n, 1, fill=False, ls="--", color="#c0392b"))
-    ax.text(xd + n / 2, 1.15, name, ha="center", va="bottom", fontsize=7, rotation=30, color="#c0392b")
+    ax.text(xd + n / 2, 1.15, name, ha="left", va="bottom", fontsize=7, rotation=60, color="#c0392b")
     xd += n
 ax.text(x + 1.5 + 5, -0.25, "no sensor on this robot: privileged", ha="center", va="top", fontsize=7, color="#c0392b")
-ax.set_xlim(-0.5, xd + 0.5); ax.set_ylim(-0.8, 2.6); ax.axis("off")
+ax.set_xlim(-0.5, xd + 2.5); ax.set_ylim(-0.8, 3.2); ax.axis("off")
 ax.set_title(f"the policy's input: {x} numbers, every one measurable", fontsize=10)
 fig.tight_layout(); plt.show()
 ```
 
-Sixty-four numbers in, twelve joint targets out. The dashed boxes are things
-the simulator knows and a real robot never will — which is exactly where the
-next slide's trick comes in.
+Sixty-four numbers for the whole body. The dashed boxes are things the simulator
+knows and a real robot never will. (Week 7's walking environment uses a
+leg-only version: gravity 3 + angular velocity 3 + 12 leg angles + 12 leg
+velocities + the previous 12-number action = 42 in, 12 leg targets out.)
 
 ---
 
@@ -409,14 +1019,19 @@ next slide's trick comes in.
 Some quantities are unavailable at deployment but *known* during training — body
 height, contact forces, the terrain, the friction coefficient.
 
-Throwing them away entirely is wasteful. The standard trick, which you will meet
-again in Week 10:
+Throwing them away entirely is wasteful. Reinforcement learning (Week 8) trains
+two networks, and only one of them goes onto the robot:
 
-- the **policy** sees only what a real robot can measure
-- the **value function** may see everything, since it is discarded after training
+- the **actor** (the policy) chooses actions, and runs on the robot — so it sees
+  only $o$, what a real robot can measure
+- the **critic** (the value function) only scores states *during training* and
+  is discarded afterwards — so it may see all of $s$
 
-This is **asymmetric actor-critic**. The critic gets a clearer view of how good a
-state was; the actor stays deployable.
+This is **asymmetric actor-critic**: asymmetric because the two networks get
+different inputs (the drawing two slides back). The critic's better view makes
+its scores more accurate, which makes the actor learn faster; the actor stays
+deployable. You will meet it again in Week 10, where production G1 training
+does exactly this.
 
 The discipline starts today: *what does the robot know, and how does it know it?*
 
@@ -491,6 +1106,9 @@ sweep:   alpha  tau (s)    mean   final
    what hardware would fix it.
 6. **Close the loop.** Feed the estimated roll back into the Week 4 walker as a
    small lateral correction. Does it reduce the sideways drift?
+7. **Check $\tau b$.** Stand the robot still with gyro biases of 0.005, 0.01 and
+   0.02 rad/s and $\alpha$ = 0.99, 0.995, 0.998. Does the settled error match
+   $\alpha\Delta t\,b/(1-\alpha)$ in every case?
 
 ---
 

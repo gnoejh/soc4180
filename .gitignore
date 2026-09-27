@@ -240,3 +240,6 @@ weeks/**/lab_*work*.ipynb
 # Instructor answers, any week: never published in the clear. They are pushed
 # only as instructor.tar.gz.gpg, via scripts/instructor.py seal.
 weeks/*/instructor/
+
+# MuJoCo writes this on warnings (week 1 triggers BADQACC on purpose)
+MUJOCO_LOG.TXT

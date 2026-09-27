@@ -36,25 +36,105 @@ it. Today we find out what that costs and how it is bought.
 
 ---
 
-## The arithmetic of a run {.smaller}
+## Colour code for the week {.smaller}
 
-A training run is $N$ environment steps. With $n$ environments each stepping at
-$r$ steps per second, and a learner that needs $\ell$ seconds per update of $B$
-steps:
+The same colours mean the same things in every equation and every drawing:
 
-$$T_{\text{wall}} \;=\; \frac{N}{n\,r} \;+\; \frac{N}{B}\,\ell
-\qquad\text{(collect)} \qquad\;\; \text{(learn)}$$
+| symbol | meaning | colour |
+| --- | --- | --- |
+| ${\color{#3b7dd8}{N}}$ | the **budget**: environment steps in one training run | <span style="color:#3b7dd8">blue</span> |
+| ${\color{#e8743b}{n}}$ | how many environments (robots, processes, GPU lanes) step **together** | <span style="color:#e8743b">orange</span> |
+| ${\color{#2a9d5c}{r}}$ | the **rate** of *one* environment on its own, steps per second | <span style="color:#2a9d5c">green</span> |
+| ${\color{#c0392b}{\ell}}$, ${\color{#c0392b}{s}}$ | the **serial** part: seconds per learner update; the fraction of time it takes | <span style="color:#c0392b">red</span> |
+| ${\color{#8e44ad}{p}}$ | the **cost exponent**: one step of $n$ robots costs $n^{p}$ single steps | <span style="color:#8e44ad">purple</span> |
 
-The first term is what parallelism attacks. The second does not shrink with
-$n$ — it is the serial part, and it caps the speed-up the way Amdahl's law
-says: with a fraction $s$ of the time spent learning, no number of
-environments beats $1/s$.
+$B$ (black) is the number of environment steps collected between two learner
+updates. $T$ is wall-clock time — what you wait for.
 
-Two things follow, and today measures both:
+---
 
-- $n$ only helps if the $n$ environments **really run at once**
-- once collection is cheap, the learner's $\ell$ is the wall, and that is why
-  the network is small, the batch is large, and everything is compiled
+## The arithmetic of a run, step by step {.smaller}
+
+**Step 1 — one environment.** It makes ${\color{#2a9d5c}{r}}$ steps per
+second, so the budget takes
+
+$$T_1 = \frac{{\color{#3b7dd8}{N}}}{{\color{#2a9d5c}{r}}}.$$
+
+**Step 2 — ${\color{#e8743b}{n}}$ environments that *really* run at once.**
+Together they make ${\color{#e8743b}{n}}{\color{#2a9d5c}{r}}$ steps per second:
+collecting takes ${\color{#3b7dd8}{N}} / ({\color{#e8743b}{n}}{\color{#2a9d5c}{r}})$.
+
+**Step 3 — the learner.** Every $B$ collected steps PPO stops and updates the
+network, which takes ${\color{#c0392b}{\ell}}$ seconds. There are
+${\color{#3b7dd8}{N}}/B$ updates, and they do not get faster with more
+environments.
+
+**Step 4 — add them:**
+
+$$T \;=\; \underbrace{\frac{{\color{#3b7dd8}{N}}}{{\color{#e8743b}{n}}\,{\color{#2a9d5c}{r}}}}_{\text{collect}}
+\;+\; \underbrace{\frac{{\color{#3b7dd8}{N}}}{B}\,{\color{#c0392b}{\ell}}}_{\text{learn}}$$
+
+Two bills: the first **shrinks** as ${\color{#e8743b}{n}}$ grows, the second
+**does not**. So ${\color{#e8743b}{n}}$ only helps if the environments **really
+run at the same time**, and once collecting is cheap the learner's
+${\color{#c0392b}{\ell}}$ is the wall — which is why the network is small, $B$
+is large, and everything is compiled.
+
+**Two kinds of step.** ${\color{#3b7dd8}{N}}$ counts *environment* steps — one
+decision of the policy. `G1WalkEnv` and Berkeley Humanoid both decide every
+20 ms and simulate every 2 ms, so one environment step is **10 physics steps**.
+
+---
+
+## Amdahl's law, derived {.smaller}
+
+**Step 1 — name the serial fraction.** With one environment, let
+${\color{#c0392b}{s}}$ be the fraction of $T$ spent learning:
+${\color{#c0392b}{s}} = \text{learn} / (\text{collect} + \text{learn})$, so the
+collect bill is $(1-{\color{#c0392b}{s}})\,T_1$ and the learn bill is ${\color{#c0392b}{s}}\,T_1$.
+
+**Step 2 — add environments.** Only the collect bill is divided by ${\color{#e8743b}{n}}$:
+
+$$T({\color{#e8743b}{n}}) = {\color{#c0392b}{s}}\,T_1 + \frac{(1-{\color{#c0392b}{s}})\,T_1}{{\color{#e8743b}{n}}}.$$
+
+**Step 3 — the speed-up** $S = T_1 / T({\color{#e8743b}{n}})$; divide top and bottom by $T_1$:
+
+$$S({\color{#e8743b}{n}}) \;=\; \frac{1}{{\color{#c0392b}{s}} + (1-{\color{#c0392b}{s}})/{\color{#e8743b}{n}}}
+\;\xrightarrow{\;{\color{#e8743b}{n}}\to\infty\;}\; \frac{1}{{\color{#c0392b}{s}}}.$$
+
+- ${\color{#c0392b}{s}} = 0.01$ (1 % of the time learning): never more than **100×**, however many environments
+- ${\color{#c0392b}{s}} = 0.1$: never more than **10×** — 8192 environments buy the same as about 10
+
+This is **Amdahl's law** (1967). It was written about processors, and it
+applies to anything with a part that cannot be shared out.
+
+---
+
+## Amdahl's law, drawn {.smaller}
+
+```{python}
+#| fig-align: center
+import numpy as np
+import matplotlib.pyplot as plt
+
+n_ = np.logspace(0, 4, 200)
+fig, ax = plt.subplots(figsize=(8.6, 3.0))
+ax.loglog(n_, n_, ":", color="0.5", label="s = 0: perfect, S = n")
+for s_, c_ in ((0.001, "#3b7dd8"), (0.01, "#2a9d5c"), (0.1, "#c0392b")):
+    ax.loglog(n_, 1 / (s_ + (1 - s_) / n_), color=c_, lw=2, label=f"s = {s_}: ceiling 1/s = {1/s_:.0f}x")
+    ax.axhline(1 / s_, color=c_, ls="--", lw=0.8)
+ax.axvline(8192, color="0.3", lw=1); ax.text(8192 * 0.93, 1.3, "8192 envs", ha="right", fontsize=8)
+ax.set_xlabel("environments stepping together, n"); ax.set_ylabel("speed-up S(n)")
+ax.set_xlim(1, 1e4); ax.set_ylim(1, 1.5e4); ax.grid(alpha=0.3, which="both"); ax.legend(fontsize=8, loc="upper left")
+fig.tight_layout(); plt.show()
+```
+
+Every curve starts on the dotted line — at first, doubling ${\color{#e8743b}{n}}$
+nearly doubles the speed — and then bends flat at its ceiling
+$1/{\color{#c0392b}{s}}$ (dashed). The bend comes at about
+${\color{#e8743b}{n}} \approx 1/{\color{#c0392b}{s}}$, where the two bills are
+equal. The curves are the formula, not measurements; our own measured points
+are drawn on them later today.
 
 ---
 
@@ -113,6 +193,40 @@ print(f"150M steps at this rate: {150e6/single/3600:6.1f} hours "
 
 ---
 
+## The arithmetic, with your number {.smaller}
+
+"Not in the neural network" is a claim; measure it. The policy the tuned
+configuration uses is a (512, 256, 128) network; time one decision with it on
+this machine, against one environment step:
+
+```{python}
+net = torch.nn.Sequential(torch.nn.Linear(42, 512), torch.nn.ELU(), torch.nn.Linear(512, 256), torch.nn.ELU(),
+                          torch.nn.Linear(256, 128), torch.nn.ELU(), torch.nn.Linear(128, 12))
+obs = torch.zeros(1, 42)
+with torch.no_grad():
+    for _ in range(50):
+        net(obs)                                            # warm up
+    t0 = time.time()
+    for _ in range(2000):
+        net(obs)
+policy_ms = (time.time() - t0) / 2000 * 1e3
+env_ms = 1e3 / single
+print(f"one environment step : {env_ms:6.3f} ms   (10 physics steps + our Python)")
+print(f"one policy decision  : {policy_ms:6.3f} ms   (the tuned network, CPU, batch of 1)")
+print(f"the physics is {env_ms / policy_ms:.0f}x the network\n")
+N_budget = 150e6
+print(f"T_1 = N / r = {N_budget:,.0f} / {single:,.0f} steps/s = {N_budget / single:,.0f} s = {N_budget / single / 3600:.1f} h")
+print(f"to finish in one 90-minute lecture you need n*r = N / 5400 s = {N_budget / 5400:,.0f} steps/s,")
+print(f"which is n = {N_budget / 5400 / single:,.0f} copies of this environment running truly at once")
+```
+
+Read the last two lines as the whole week's problem. One environment makes
+${\color{#2a9d5c}{r}}$ steps per second; to finish inside a lecture you need
+${\color{#e8743b}{n}}$ of them running **at the same time**, and a laptop has a
+handful of cores.
+
+---
+
 ## The obvious idea, and why it fails {.smaller}
 
 Run many environments at once. Stable-Baselines3 offers `DummyVecEnv`:
@@ -168,8 +282,14 @@ for k in (2, 4, 8):
 
 This scales — until you run out of cores. **A Colab CPU runtime has two.**
 
-Even at a perfect 8× we would still need four hours per run, and the tuned config
-asks for **8192** environments. There are not enough cores in the building.
+Read the numbers against perfect scaling, ${\color{#e8743b}{n}}{\color{#2a9d5c}{r}}$:
+$k$ processes should give $k$ times the one-environment rate printed earlier.
+They give less — each step's action has to be sent to a worker process and
+its observation sent back, and that traffic is a small serial part of its own.
+
+Even at a perfect 8× the one-environment hours above only divide by 8, and the
+tuned config asks for **8192** environments. There are not enough cores in the
+building.
 
 ---
 
@@ -200,7 +320,47 @@ fig.tight_layout(); plt.show()
 
 The orange line is flat: sixteen environments, one core. The blue one climbs
 until the cores run out. The green dot is where the tuned configurations live,
-and no amount of blue reaches it.
+and no amount of blue reaches it. (The green dot assumes ~100 steps/s per GPU
+lane — an order of magnitude to aim at, not a measurement.)
+
+---
+
+## Vectorised against parallel, as timelines {.smaller}
+
+Four environments, one batch of steps, drawn **to scale from the rates measured
+above**: each bar is one environment step, time runs left to right.
+
+```{python}
+#| fig-align: center
+k = 4
+t_env = 1e3 / single                      # ms per environment step, one process alone
+t_dummy = 1e3 * k / dummy[k]              # ms for one batch of 4, DummyVecEnv
+t_sub = 1e3 * k / subproc[k]              # ms for one batch of 4, SubprocVecEnv
+fig, (a0, a1) = plt.subplots(2, 1, figsize=(10, 3.9), sharex=True)
+for ax, title, total in ((a0, f"DummyVecEnv: one core, {k} steps in a row  ->  {t_dummy:.2f} ms per batch", t_dummy),
+                         (a1, f"SubprocVecEnv: {k} processes at once  ->  {t_sub:.2f} ms per batch", t_sub)):
+    ax.set_title(title, fontsize=9, loc="left"); ax.set_yticks(range(k)); ax.set_ylim(-0.6, k - 0.4)
+    ax.invert_yaxis(); ax.grid(alpha=0.3, axis="x")
+per = t_dummy / k
+for i in range(k):
+    a0.barh(0, per, left=i * per, color="#e8743b", edgecolor="w"); a0.text((i + 0.5) * per, 0, f"env {i}", ha="center", va="center", fontsize=8, color="w")
+a0.set_yticklabels(["core 0"] + [f"core {c} (idle)" for c in range(1, k)], fontsize=8)
+for i in range(k):
+    a1.barh(i, t_env, color="#3b7dd8", edgecolor="w"); a1.text(t_env / 2, i, f"env {i}", ha="center", va="center", fontsize=8, color="w")
+    a1.barh(i, t_sub - t_env, left=t_env, color="#c0392b", alpha=0.35)
+a1.text(t_env + (t_sub - t_env) / 2, k - 1, "everything else", ha="center", va="center", fontsize=8, color="#c0392b")
+a1.set_yticklabels([f"core {c}" for c in range(k)], fontsize=8)
+a1.set_xlabel("wall-clock time (ms)"); a1.set_xlim(0, t_dummy * 1.02)
+fig.tight_layout(); plt.show()
+print(f"one environment step alone: {t_env:.2f} ms;  DummyVecEnv batch of {k}: {t_dummy:.2f} ms "
+      f"({t_dummy / t_env:.1f} steps' worth);  SubprocVecEnv batch: {t_sub:.2f} ms ({t_sub / t_env:.1f} steps' worth)")
+```
+
+Top: the four steps are **queued** on one core; the other cores watch. Bottom:
+the four steps **overlap**, and the batch costs one step plus the red strip —
+everything else, mostly shipping actions out and observations back between
+processes. Parallelism cannot remove it: a serial part, like the learner in
+Step 3.
 
 ---
 
@@ -222,6 +382,39 @@ Two ideas make it work:
 The price is real: everything must be expressible as fixed-shape array
 operations. **No Python branching, no variable-length loops, no early exit** —
 which is why an MJX environment reads so differently from the one we wrote.
+
+---
+
+## What `jit` does, drawn {.smaller}
+
+```{python}
+#| fig-align: center
+fig, ax = plt.subplots(figsize=(10, 3.1)); ax.axis("off"); ax.set_xlim(0, 10); ax.set_ylim(0, 3.1)
+boxes = [(0.1, "your Python\nfunction step(x, u)", "0.85"),
+         (2.5, "trace: run it once\nwith placeholder arrays;\nrecord every operation", "#e8743b"),
+         (4.9, "a graph of array\noperations (no Python\nleft: loops unrolled)", "#8e44ad"),
+         (7.3, "XLA compiles it to\nmachine code for this\nCPU / GPU, and caches it", "#3b7dd8")]
+for x0, label, col in boxes:
+    ax.add_patch(plt.Rectangle((x0, 1.55), 2.0, 1.3, color=col, alpha=0.25 if col != "0.85" else 1))
+    ax.text(x0 + 1.0, 2.2, label, ha="center", va="center", fontsize=8.5)
+for x0 in (2.5, 4.9, 7.3):
+    ax.annotate("", xy=(x0, 2.2), xytext=(x0 - 0.4, 2.2), arrowprops=dict(arrowstyle="->", lw=1.5))
+ax.annotate("", xy=(8.3, 0.95), xytext=(8.3, 1.5), arrowprops=dict(arrowstyle="->", lw=1.5, color="#3b7dd8"))
+ax.text(8.3, 0.5, "every later call:\nrun the cached code", ha="center", fontsize=8.5, color="#3b7dd8")
+ax.text(4.6, 1.05, "paid ONCE, on the first call  (the minute of silence before brax's first progress line)",
+        ha="center", fontsize=8.5, color="#e8743b")
+ax.text(4.6, 0.25, "the rules follow from 'trace once': an `if` on an array value cannot be recorded, "
+        "and the array shapes are fixed into the code", ha="center", fontsize=8, color="0.35")
+fig.tight_layout(); plt.show()
+```
+
+- **`jit`** ("just in time") turns a Python function into compiled code the
+  first time it is called with arrays of a given shape; later calls skip Python.
+- **`vmap`** ("vectorising map") rewrites a function written for **one** robot,
+  state shape $(d,)$, into one for a batch, shape $({\color{#e8743b}{n}}, d)$ —
+  the loop over robots moves *inside* the compiled code.
+
+The two are used together: `jax.jit(jax.vmap(step))`.
 
 ---
 
@@ -253,6 +446,92 @@ early exit, no variable-length anything. The batch is one array.
 
 ---
 
+## `jit` and `vmap`, measured on a toy {.smaller}
+
+A pendulum written for **one** pendulum, stepped for 4096 of them, four ways. Not
+the G1 — MJX is too large to compile in a lecture — but the same shape of
+problem: 10 physics steps per control step.
+
+```{python}
+import math
+import jax, jax.numpy as jnp
+
+G, DT, SUB = 9.81, 0.002, 10
+
+def step(x, u):
+    """One control step of ONE pendulum: x = (angle, rate), u = torque."""
+    th, om = x[0], x[1]
+    for _ in range(SUB):                       # a Python loop: jit unrolls it into the graph
+        om = om + DT * (-G * jnp.sin(th) + u)
+        th = th + DT * om
+    return jnp.stack([th, om])
+
+def step_py(x, u):                             # the same maths, plain Python floats
+    th, om = x
+    for _ in range(SUB):
+        om = om + DT * (-G * math.sin(th) + u)
+        th = th + DT * om
+    return (th, om)
+
+n_pend = 4096
+xs = np.stack([np.linspace(-1, 1, n_pend), np.zeros(n_pend)], axis=1); us = np.zeros(n_pend)
+
+t0 = time.perf_counter(); ref = [step_py(tuple(x), u) for x, u in zip(xs, us)]
+t_python = time.perf_counter() - t0
+
+step_jit = jax.jit(step); step_jit(jnp.asarray(xs[0]), 0.0).block_until_ready()      # compile for one
+t0 = time.perf_counter()
+for x, u in zip(xs[:512], us[:512]):
+    step_jit(x, u).block_until_ready()
+t_jit_loop = (time.perf_counter() - t0) * n_pend / 512                               # 512 timed, scaled
+
+batched = jax.jit(jax.vmap(step)); X, Uj = jnp.asarray(xs), jnp.asarray(us)
+t0 = time.perf_counter(); batched(X, Uj).block_until_ready(); t_first = time.perf_counter() - t0
+t0 = time.perf_counter()
+for _ in range(100):
+    batched(X, Uj).block_until_ready()
+t_after = (time.perf_counter() - t0) / 100
+
+jit_times = {"Python loop": t_python, "Python loop over jit(step)": t_jit_loop,
+             "jit(vmap(step)), first call": t_first, "jit(vmap(step)), later calls": t_after}
+for k_, v_ in jit_times.items():
+    print(f"  {k_:30s} {1e3 * v_:9.3f} ms")
+print(f"  largest difference from the Python answer: {np.max(np.abs(np.array(batched(X, Uj)) - np.array(ref))):.1e} rad")
+```
+
+---
+
+## Reading the four numbers {.smaller}
+
+```{python}
+#| fig-align: center
+fig, ax = plt.subplots(figsize=(9.5, 2.6))
+cols = ["#e8743b", "#c0392b", "#8e44ad", "#3b7dd8"]
+names = list(jit_times)
+ax.barh(range(4), [1e3 * jit_times[k_] for k_ in names], color=cols)
+for i, k_ in enumerate(names):
+    ax.text(1e3 * jit_times[k_] * 1.15, i, f"{1e3 * jit_times[k_]:.3g} ms", va="center", fontsize=8)
+ax.set_yticks(range(4)); ax.set_yticklabels(names, fontsize=8.5); ax.invert_yaxis()
+ax.set_xscale("log"); ax.set_xlabel(f"milliseconds for one control step of {n_pend} pendulums (log scale)")
+ax.set_xlim(1e-2, 5e3); ax.grid(alpha=0.3, axis="x", which="both")
+fig.tight_layout(); plt.show()
+print(f"later jit(vmap) calls are {t_python / t_after:.0f}x the Python loop; "
+      f"the compile pays for itself after {t_first / (t_python - t_after):.0f} calls")
+```
+
+- **`jit` alone made it slower.** Each call still crosses from Python into
+  compiled code, and that crossing costs more than ten sines. Compiling one
+  small step is not the win.
+- **`vmap` is the win.** One crossing now carries all 4096 pendulums, and the
+  compiled loop over them has no Python in it.
+- **The first call is expensive** — that is the trace and the compile. A training
+  run makes millions of calls, so it is paid once.
+
+MJX is this, for a whole humanoid; on a GPU the 4096 lanes also run in parallel.
+Numbers are from this machine's CPU and will differ on yours.
+
+---
+
 ## What the professionals actually run {.smaller}
 
 `mujoco_playground` ships tuned configurations. These are read from the library,
@@ -272,6 +551,29 @@ for name in ("BerkeleyHumanoidJoystickFlatTerrain", "Op3Joystick"):
 
 8192 environments in parallel, 150 million steps. Our entire Week 9 experiment
 was **0.027%** of one of these.
+
+---
+
+## The config, read as the equation {.smaller}
+
+```{python}
+from mujoco_playground import registry
+name = "BerkeleyHumanoidJoystickFlatTerrain"
+cfg, env_cfg = locomotion_params.brax_ppo_config(name), registry.get_default_config(name)
+B = cfg["num_envs"] * cfg["unroll_length"]
+print(f"N  = num_timesteps                  = {cfg['num_timesteps']:>13,} environment steps")
+print(f"n  = num_envs                       = {cfg['num_envs']:>13,}")
+print(f"B  = num_envs x unroll_length       = {cfg['num_envs']:,} x {cfg['unroll_length']} = {B:,} steps per update")
+print(f"N / B                               = {cfg['num_timesteps'] / B:>13,.0f} learner updates")
+print(f"each update: {cfg['num_updates_per_batch']} passes x {cfg['num_minibatches']} minibatches "
+      f"= {cfg['num_updates_per_batch'] * cfg['num_minibatches']} gradient steps")
+print(f"ctrl_dt / sim_dt = {env_cfg.ctrl_dt} / {env_cfg.sim_dt} = {round(env_cfg.ctrl_dt / env_cfg.sim_dt)} physics steps per environment step")
+print(f"so the run simulates {cfg['num_timesteps'] * round(env_cfg.ctrl_dt / env_cfg.sim_dt):,} physics steps")
+```
+
+- Every symbol of $T = {\color{#3b7dd8}{N}}/({\color{#e8743b}{n}}{\color{#2a9d5c}{r}}) + ({\color{#3b7dd8}{N}}/B)\,{\color{#c0392b}{\ell}}$ is a line of the config, except ${\color{#2a9d5c}{r}}$ and ${\color{#c0392b}{\ell}}$, which are the hardware's.
+- `unroll_length` = 20: each environment runs 20 steps (0.4 s of robot time) between updates, so one update sees $B$ = 163,840 steps. **A huge $B$ makes the red bill small**: only ~900 updates in the whole run.
+- `batch_size` = 256 in the previous printout is **not** $B$: it is how many of the collected trajectories go into one gradient step.
 
 ---
 
@@ -443,7 +745,7 @@ seconds, separate from the copy `soc4180` uses.
 
 ---
 
-## Track A and Track B {.smaller}
+## Before you press run {.smaller}
 
 **The first line takes the longest.** Brax compiles the entire training loop
 through XLA before a single step runs, so expect a minute or two of silence
@@ -514,19 +816,91 @@ each, always.
 
 ## What the budget actually buys {.smaller}
 
-| Budget | What we saw |
-| --- | --- |
-| 30k steps (Week 8) | learns not to fall; scores the standing baseline |
-| 40k steps (Week 9) | leaves the standing optimum, falls over backwards |
-| 15M steps (today, Track A) | a recognisable gait attempt |
-| 150M steps (tuned) | robust joystick-controlled walking |
+| Budget | Source | Result |
+| --- | --- | --- |
+| 30k steps (Week 8) | measured | learns not to fall; scores the standing baseline |
+| 40k steps (Week 9) | measured | leaves the standing optimum, falls over backwards |
+| 5M steps (today, Track A) | **not yet measured** | the target: reward and episode length rising |
+| 150M steps (tuned) | the library's configuration | what the configuration was tuned to reach: joystick-controlled walking |
 
-Three orders of magnitude separate the top row from the bottom, and nothing else
-about the algorithm changes. **PPO was never the limitation.**
+150M / 30k = **5,000×** — three and a half orders of magnitude — separate the
+top row from the bottom, and the algorithm is PPO in every row. Only the last
+row has a walking robot, and we have not run it; the claim to test is that the
+budget, not the algorithm, is what was missing.
 
 Our conclusions from Weeks 8 and 9 were not wrong — but they were conclusions
 about *underfunded* runs, and it is worth being honest about which findings
 survive a real budget.
+
+---
+
+## One process, many robots: the cost exponent {.smaller}
+
+The lab puts ${\color{#e8743b}{n}}$ robots in **one** scene and steps them with
+one `mj_step`. Does that buy anything? A model with one number in it:
+
+**Step 1.** One robot alone costs $c_1$ seconds per physics step, so it runs at ${\color{#2a9d5c}{r}} = 1/c_1$.
+
+**Step 2.** Assume a step of the ${\color{#e8743b}{n}}$-robot scene costs
+$c_{\color{#e8743b}{n}} = {\color{#e8743b}{n}}^{\color{#8e44ad}{p}}\,c_1$.
+${\color{#8e44ad}{p}} = 1$: cost grows with the body count. ${\color{#8e44ad}{p}} > 1$:
+faster — more bodies means more contact pairs to check and a bigger mass matrix.
+
+**Step 3.** Each scene step is ${\color{#e8743b}{n}}$ robot-steps, so the throughput is
+
+$$R({\color{#e8743b}{n}}) = \frac{{\color{#e8743b}{n}}}{c_{\color{#e8743b}{n}}} = {\color{#2a9d5c}{r}}\,{\color{#e8743b}{n}}^{\,1-{\color{#8e44ad}{p}}}.$$
+
+**Step 4 — read it.** Take logs: $\log R = \log {\color{#2a9d5c}{r}} + (1-{\color{#8e44ad}{p}})\log {\color{#e8743b}{n}}$,
+a straight line on log–log axes with slope $1 - {\color{#8e44ad}{p}}$.
+${\color{#8e44ad}{p}} = 1$ is **flat**: more robots in one process, no more
+robot-steps per second. ${\color{#8e44ad}{p}} > 1$ **slopes down**.
+
+A separate process per robot is Amdahl's model instead, with ${\color{#c0392b}{s}}$
+the part that cannot be shared.
+
+---
+
+## Our points on the curves {.smaller}
+
+```{python}
+#| fig-align: center
+# Measured with `uv run weeks/10-scaling/many.py --robots 1 2 4 8 16 --procs 1 2 4 8 16`
+# on the 36-core machine these slides were written on, with nothing else running
+# (2026-09-20). Physics only: the robots hold the crouch, no controller.
+n_pts = np.array([1, 2, 4, 8, 16])
+one_process = np.array([16164, 14835, 14686, 12544, 13064])      # robot-steps/s, n robots in ONE scene
+processes = np.array([16822, 33382, 62410, 130429, 199062])      # robot-steps/s, n processes, one robot each
+
+slope, icpt = np.polyfit(np.log(n_pts), np.log(one_process), 1)
+p_fit = 1 - slope
+S_meas = processes / processes[0]
+x_ = 1 - 1 / n_pts
+s_fit = np.sum((1 / S_meas - 1 / n_pts) * x_) / np.sum(x_ ** 2)    # least squares on 1/S = s + (1 - s)/n
+
+nn = np.logspace(0, np.log10(16), 100)
+fig, (a0, a1) = plt.subplots(1, 2, figsize=(10.4, 3.4))
+a0.loglog(n_pts, one_process, "o", color="#8e44ad", ms=7, label="measured")
+a0.loglog(nn, np.exp(icpt) * nn ** (1 - p_fit), color="#8e44ad", lw=2, label=f"fit: p = {p_fit:.2f}")
+a0.loglog(nn, one_process[0] * nn ** 0, ":", color="0.4", label="p = 1 (flat)")
+a0.set_ylim(5e3, 5e4); a0.set_title("n robots in ONE process", fontsize=10)
+a1.loglog(n_pts, processes, "o", color="#c0392b", ms=7, label="measured")
+a1.loglog(nn, processes[0] / (s_fit + (1 - s_fit) / nn), color="#c0392b", lw=2, label=f"Amdahl fit: s = {s_fit:.3f}")
+a1.loglog(nn, processes[0] * nn, ":", color="0.4", label="perfect: n x one")
+a1.set_title("n processes, one robot each", fontsize=10)
+for ax in (a0, a1):
+    ax.set_xlabel("n"); ax.set_ylabel("robot-steps / s (physics)"); ax.grid(alpha=0.3, which="both"); ax.legend(fontsize=8)
+    ax.set_xticks(n_pts); ax.set_xticklabels(n_pts)
+fig.tight_layout(); plt.show()
+print(f"one process : p = {p_fit:.2f}  ->  16 robots give {one_process[-1] / one_process[0]:.2f}x the robot-steps/s of one")
+print(f"processes   : 16 give {S_meas[-1]:.1f}x;  Amdahl fit s = {s_fit:.3f}, ceiling 1/s = {1 / s_fit:.0f}x")
+```
+
+Left: the points fall a little as ${\color{#e8743b}{n}}$ grows — ${\color{#8e44ad}{p}}$
+just above 1 — so **one process gets no more physics out of more robots**. Right:
+separate processes nearly follow the dotted line to 8 and bend by 16 —
+Amdahl's shape, with a small ${\color{#c0392b}{s}}$. (The fit is rough — 8
+processes sit closer to perfect than the curve — so read ${\color{#c0392b}{s}}$
+as a summary, not a constant of nature.)
 
 ---
 
@@ -545,7 +919,7 @@ against `predict_rate` (complete; `COST_EXPONENT` is what you correct).
 | --- | --- | --- |
 | 1 | `ENTER`, `+` `+` `+`, correct `COST_EXPONENT` | physics-only throughput nearly flat (p ≈ 1.09); walking climbs because one IK call is shared |
 | 2 | `P` | 16,822 / 33,382 / 62,410 / 130,429 robot-steps/s for 1/2/4/8 processes here |
-| 3 | hours for 150 M | 2.5 h in one process, 0.2 h at 16 processes, on 36 cores |
+| 3 | hours for 150 M | 2.5 h / 0.2 h (1 / 16 procs) of *physics* steps; ×10 for training |
 | 4 | `F` | robots that diverge; what a policy trained on all of them would have to learn |
 | 5 | `+` until 0.25× real time | ~62 µs of physics per robot-step; 0.5 ms for the controller |
 
@@ -568,6 +942,9 @@ budget, and the largest scene walking.
 | 16 | 481 | 13,064 | 8,656 |
 
 Processes: 16,822 → 33,382 → 62,410 → 130,429 → 199,062 for 1, 2, 4, 8, 16.
+A robot-step here is one **physics** step, so the printed hours are for 150 M
+physics steps; a 150 M training budget is 1.5 billion physics steps — about
+25 h in one process, 2.1 h at 16.
 One process gets no more physics out of more robots; processes scale until
 the cores run out; a GPU is the same idea with thousands of lanes. Calls:
 `MjSpec.from_file`, `add_frame`, `attach_body`, `compile`, `np.tile(ctrl, n)`;
@@ -595,9 +972,11 @@ the cores run out; a GPU is the same idea with thousands of lanes. Calls:
 
 ## Next week
 
-**Week 11 — domain randomization.** With a real budget available, the question
-changes from *can it learn* to *will it survive anything other than the exact
-simulator it learned in*.
+**Week 11 — planning at run time.** Everything since week 7 thinks *before* the
+robot moves, for hours. Next week the robot thinks *while* it moves: at every
+decision it runs the simulator forward 64 times from the present and picks
+the best future — model-predictive control, with MuJoCo as the model. Today's
+lesson comes straight back: those 64 futures are a batch, and they are
+stepped in parallel.
 
-We randomise mass, friction, and actuation during training, and measure what
-robustness costs.
+Randomising the world during training (domain randomisation) is week 12.

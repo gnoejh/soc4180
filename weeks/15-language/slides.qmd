@@ -66,6 +66,24 @@ print(f"{model.nmocap} balls: {', '.join(NAMES)}; one camera in the head")
 
 ---
 
+## Colour code for the week {.smaller}
+
+The same colours mean the same things in every equation on these slides:
+
+| symbol | meaning | colour |
+| --- | --- | --- |
+| ${\color{#e8743b}{x,\ q}}$ | from the **words**: the bag of words $x$, and the query $q$ made from it | <span style="color:#e8743b">orange</span> |
+| ${\color{#3b7dd8}{k_n}}$ | from the **pixels**: the key of picture cell $n$ | <span style="color:#3b7dd8">blue</span> |
+| ${\color{#c0392b}{s_n}}$ | a **score**: how well cell $n$ answers the words | <span style="color:#c0392b">red</span> |
+| ${\color{#2a9d5c}{p_n}}$ | a **probability**: the share of the heat on cell $n$ (they add to 1) | <span style="color:#2a9d5c">green</span> |
+| ${\color{#8e44ad}{u_n,\ \hat u}}$ | a **position** in the picture: cell $n$'s centre, and the answer | <span style="color:#8e44ad">purple</span> |
+
+$C = 32$ is the length of every key and of the query; there are $N = 256$
+cells (a 16 × 16 grid). Week 14's picture coordinates $u, v \in [-1, 1]$ and
+its formula `uv_of` are used again unchanged.
+
+---
+
 ## What a VLA is {.smaller}
 
 **Vision-language-action** models — RT-2 (Google DeepMind, 2023), OpenVLA
@@ -127,6 +145,60 @@ piece of one) becomes a vector learned from billions of sentences, so
 
 ---
 
+## A bag of words, worked {.smaller}
+
+```{python}
+#| fig-align: center
+said = ["look at the green one", "the crimson ball", "the ball, the green ball"]
+bags_demo = np.stack([vocab.bag(s).numpy() for s in said])
+fig, ax = plt.subplots(figsize=(11, 2.2))
+ax.imshow(bags_demo, cmap="Oranges", vmin=0, vmax=2.5, aspect="auto")
+for (i, j), v in np.ndenumerate(bags_demo):
+    ax.text(j, i, f"{v:.0f}", ha="center", va="center", fontsize=9, color="k" if v < 2 else "w")
+ax.set_xticks(range(len(vocab))); ax.set_xticklabels(list(vocab.index), rotation=50, fontsize=8, ha="right")
+ax.set_yticks(range(len(said))); ax.set_yticklabels([f'"{s}"' for s in said], fontsize=8)
+fig.tight_layout(); plt.show()
+```
+
+**Step 1 — number the words.** `Vocab` reads the 28 training sentences and
+gives every new word the next slot: `<unk>` 0, "point" 1, "at" 2, "the" 3,
+"red" 4, … — 19 slots.
+
+**Step 2 — count.** A sentence becomes ${\color{#e8743b}{x}} \in \mathbb{R}^{19}$ with
+${\color{#e8743b}{x}}_w$ = how many times word $w$ appears. "look at the green one"
+puts a 1 in each of its five slots. "the ball, the green ball" has **2** under
+"the" and 2 under "ball" (punctuation is dropped). "the crimson ball" has a 1
+under `<unk>`: every unknown word goes there, so "crimson", "azure" and
+"please" all look the same.
+
+**Step 3 — notice what is lost.** The bag has no order and no grammar. "The
+red ball left of the blue one" and "the blue ball left of the red one" give
+the same 19 numbers.
+
+---
+
+## From a bag to a query {.smaller}
+
+The network turns the bag into its **query** with one linear layer
+(`nn.Linear(19, 32)`): a $32 \times 19$ matrix $W$ and a bias $b$.
+
+$${\color{#e8743b}{q}} = W\,{\color{#e8743b}{x}} + b
+ = \sum_{w=0}^{18} {\color{#e8743b}{x}}_w\, W_{:,w} \;+\; b .$$
+
+**Why the second form is the same thing:** multiplying a matrix by a vector
+adds up the matrix's columns, each weighted by the vector's entry. So
+
+- each word $w$ owns one learned column $W_{:,w}$: 32 numbers, its **embedding**;
+- a sentence's query is the **sum of its words' columns** (a word said twice
+  counts twice), plus $b$;
+- "look at the green one" $\to$ ${\color{#e8743b}{q}} = W_{:,\text{look}} + W_{:,\text{at}} + W_{:,\text{the}} + W_{:,\text{green}} + W_{:,\text{one}} + b$.
+
+That is what a real language model's first layer does too — look up a
+vector per word — except that there the vectors come pretrained, and many
+more layers mix them so that order and grammar count.
+
+---
+
 ## Pixels as keys, words as a query {.smaller}
 
 ```python
@@ -142,14 +214,186 @@ class HeatNet(nn.Module):                                   # soc4180.vision.Hea
         return torch.einsum("bcn,bc->bn", k, q) / sqrt(C)    # a score per cell
 ```
 
-$$\text{score}_{\text{cell}} = \frac{k_{\text{cell}}\cdot q}{\sqrt{C}}, \qquad
-\text{heat} = \operatorname{softmax}(\text{score})$$
+$${\color{#c0392b}{s_n}} = \frac{{\color{#3b7dd8}{k_n}}\cdot {\color{#e8743b}{q}}}{\sqrt{C}}, \qquad
+{\color{#2a9d5c}{p}} = \operatorname{softmax}({\color{#c0392b}{s}})$$
 
 This is **attention** — the operation a transformer repeats billions of
 times — with one query. The picture offers 256 keys ("here is something
 greenish and round"), the sentence asks one question ("green?"), and the
-dot product says which cells answer it. The $\sqrt C$ keeps the scores near
-1 at the start, so the softmax is not already one-hot before training.
+dot product says which cells answer it.
+
+The keys come from three convolutions (week 14): $64 \to 64 \to 32 \to 16$
+cells across, by the same output-size formula, with $C = 32$ channels — so
+one 32-number key per cell of a 16 × 16 grid.
+
+---
+
+## Attention, step by step {.smaller}
+
+**Step 1 — score every cell.** For each of the $N = 256$ cells,
+$${\color{#c0392b}{s_n}} = \frac{1}{\sqrt C}\sum_{c=1}^{C} {\color{#3b7dd8}{k_{n,c}}}\,{\color{#e8743b}{q_c}} .$$
+A dot product is large when the two vectors point the same way: when the
+cell has what the words ask for.
+
+**Step 2 — turn scores into shares (softmax).**
+$${\color{#2a9d5c}{p_n}} = \frac{e^{{\color{#c0392b}{s_n}}}}{\sum_{m=1}^{N} e^{{\color{#c0392b}{s_m}}}} .$$
+The exponential makes every share positive; dividing by the total makes them
+add to 1. Adding the same number to every score changes nothing (it cancels
+top and bottom); only **differences** between scores matter, and a score
+larger by 1 gets $e \approx 2.7$ times the share.
+
+---
+
+## Attention: from shares to an answer {.smaller}
+
+**Step 3 — the answer is the average position, weighted by the shares.**
+With ${\color{#8e44ad}{u_n}}, {\color{#8e44ad}{v_n}}$ the centre of cell $n$ in picture coordinates,
+$${\color{#8e44ad}{\hat u}} = \sum_n {\color{#2a9d5c}{p_n}}\,{\color{#8e44ad}{u_n}}, \qquad
+{\color{#8e44ad}{\hat v}} = \sum_n {\color{#2a9d5c}{p_n}}\,{\color{#8e44ad}{v_n}} .$$
+This is the heat map's **centre of mass** (`heat_to_uv`); it can land
+between cell centres, so the answer is finer than the 16 × 16 grid.
+
+**Step 4 — back to angles.** Week 14's $u = -\tan a$,
+$v = -\tan e/\cos a$ solved for $a$ and $e$ (`angles_of_uv`) turns
+$({\color{#8e44ad}{\hat u}}, {\color{#8e44ad}{\hat v}})$ into the azimuth the waist needs.
+
+---
+
+## Attention with five cells, by hand {.smaller}
+
+```{python}
+#| fig-align: center
+k5 = np.array([[0.1, 0.9], [0.3, 0.2], [2.0, 0.1], [1.0, 0.0], [0.0, 0.5]])   # C = 2: (redness, roundness)
+q5 = np.array([2.0, 0.0])                                                      # the words ask: "red?"
+u5 = np.array([-0.8, -0.4, 0.0, 0.4, 0.8])                                     # where each cell is
+s5 = k5 @ q5 / np.sqrt(2)                                                      # Step 1
+p5 = np.exp(s5) / np.exp(s5).sum()                                             # Step 2
+uhat = (p5 * u5).sum()                                                         # Step 3
+for n in range(5):
+    print(f"cell {n}: key {k5[n]}  score {s5[n]:5.2f}  e^s {np.exp(s5[n]):6.2f}  share {p5[n]:.3f}  at u = {u5[n]:+.1f}")
+print(f"sum of e^s = {np.exp(s5).sum():.2f};  answer u = sum of share x position = {uhat:+.3f}")
+
+fig, axes = plt.subplots(1, 3, figsize=(11, 2.5))
+axes[0].bar(range(5), s5, color="#c0392b"); axes[0].set_title("scores  s = k·q / √2", fontsize=9)
+axes[1].bar(range(5), p5, color="#2a9d5c"); axes[1].set_title("shares  p = softmax(s)", fontsize=9); axes[1].set_ylim(0, 1)
+for ax in axes[:2]:
+    ax.set_xticks(range(5)); ax.set_xlabel("cell n", fontsize=8)
+axes[2].scatter(u5, np.zeros(5), s=2000 * p5 + 10, color="#2a9d5c", alpha=0.6)
+axes[2].axvline(uhat, color="#8e44ad", lw=2); axes[2].text(uhat + 0.03, 0.6, f"û = {uhat:+.2f}", color="#8e44ad", fontsize=9)
+axes[2].set_xlim(-1, 1); axes[2].set_ylim(-1, 1); axes[2].set_yticks([]); axes[2].set_xlabel("position u", fontsize=8)
+axes[2].set_title("centre of mass of the shares", fontsize=9)
+fig.tight_layout(); plt.show()
+```
+
+Cell 2 has the reddest key, the biggest score (2.83), and — after the
+exponential — about two-thirds of the heat. Cell 3, half as red, has a
+score only 1.4 lower, but that is a factor $e^{1.4} \approx 4$ in share: it
+gets about a sixth, and pulls the answer a little from 0 toward itself. The softmax
+does not pick one cell; it **weights** them, which is why the answer can
+land between cells.
+
+---
+
+## Why divide by √C? {.smaller}
+
+**The textbook argument.** Suppose the $C$ numbers in a key and in the query
+are independent, with mean 0 and variance 1 (a transformer normalises its
+features to roughly this).
+
+**Step 1 — one product.** $E[k_c q_c] = E[k_c]\,E[q_c] = 0$, and
+$\operatorname{Var}(k_c q_c) = E[k_c^2]\,E[q_c^2] = 1 \cdot 1 = 1$.
+
+**Step 2 — a sum of $C$ of them.** Variances of independent terms add:
+$\operatorname{Var}\big(\sum_c k_c q_c\big) = C$, so the raw dot product has
+standard deviation $\sqrt C$ — **5.7 for $C = 32$**.
+
+**Step 3 — divide by $\sqrt C$.** $\operatorname{Var}\big(\tfrac{1}{\sqrt C}\sum_c k_c q_c\big) = C / C = 1$,
+whatever $C$ is.
+
+**Why the size of the scores matters:** a score larger by 1 gets 2.7 times
+the share; larger by 10, 22,000 times. Scores spread by 5.7 make the softmax
+nearly **one-hot** before anything has been learned: the network starts out
+confidently pointing at one arbitrary cell, and (*The slope of cross-entropy*, below) the gradient
+then reaches only that cell and the right one.
+
+```{python}
+r = np.random.default_rng(0)
+for C in (2, 32, 128):
+    dots = (r.standard_normal((100000, C)) * r.standard_normal((100000, C))).sum(1)
+    print(f"C = {C:3d}: std of k·q {dots.std():6.2f} (√C = {math.sqrt(C):5.2f});   std of k·q/√C {(dots / math.sqrt(C)).std():.3f}")
+for spread in (1.0, math.sqrt(32)):
+    s = r.standard_normal((2000, 256)) * spread
+    p = np.exp(s - s.max(1, keepdims=True)); p /= p.sum(1, keepdims=True)
+    print(f"256 scores spread {spread:4.2f}: biggest share on average {p.max(1).mean():.3f}   (all equal would be {1/256:.4f})")
+```
+
+---
+
+## …and what HeatNet's scores actually are {.smaller}
+
+The argument assumes unit-variance keys. Measure HeatNet's, untrained
+(the random-number state is saved and restored, so the network trained on
+the next slides starts from exactly the same weights):
+
+```{python}
+rng_state = torch.get_rng_state()
+untrained = vision.HeatNet(len(vocab))
+torch.set_rng_state(rng_state)
+r = np.random.default_rng(9)
+which = r.integers(len(NAMES), size=256)
+bags0 = torch.stack([vocab.bag(f"look at the {NAMES[w]} ball") for w in which])
+cells0 = torch.as_tensor(vision.cell_of(vision.uv_of(Y[np.arange(256), which, 0], Y[np.arange(256), which, 1]), 16))
+with torch.no_grad():
+    k0 = untrained.keys(vision.as_tensor(X[:256])).flatten(2); q0 = untrained.query(bags0)
+    raw = torch.einsum("bcn,bc->bn", k0, q0)
+    p0 = torch.softmax(raw / math.sqrt(32), -1)
+    ce0 = torch.nn.functional.cross_entropy(raw / math.sqrt(32), cells0)
+print(f"untrained: key std {k0.std():.3f}, query std {q0.std():.3f};  score std raw {raw.std():.3f}, divided by √C {(raw / math.sqrt(32)).std():.4f}")
+print(f"biggest share on average {p0.max(1).values.mean():.4f} (1/256 = {1/256:.4f});   loss {ce0:.3f}  (ln 256 = {math.log(256):.3f})")
+```
+
+**Reading it.** HeatNet's untrained keys are small (standard deviation far
+below 1), so its scores are tiny **with or without** the $\sqrt C$: every
+cell starts with the same share, $1/256$. The textbook reason does not bite
+at the start here — and the unscaled version of this network was found to
+train as well. The division is kept because it is what a transformer does,
+and it keeps the scores' size independent of $C$ if you change it.
+
+---
+
+## Softmax and cross-entropy, written out {.smaller}
+
+*Where* is treated as **classification**: which of the 256 cells holds the
+named ball? The label is one cell, $n^\ast$, from week 14's `uv_of`:
+column $= \lfloor 16\,(u+1)/2 \rfloor$, row $= \lfloor 16\,(v+1)/2 \rfloor$,
+$n^\ast = 16\cdot\text{row} + \text{column}$ (`cell_of`).
+
+**Step 1 — the loss is minus the log of the right cell's share:**
+$$\text{CE} = -\log {\color{#2a9d5c}{p_{n^\ast}}} = -{\color{#c0392b}{s_{n^\ast}}} + \log\sum_{m} e^{{\color{#c0392b}{s_m}}} .$$
+(Substitute Step 2's softmax and use $\log(a/b) = \log a - \log b$.) It is 0
+if the right cell gets all the heat, and grows without limit as its share
+goes to 0.
+
+**Step 2 — read the numbers.** Untrained, every share is $1/256$ and
+$\text{CE} = \ln 256 = 5.55$ — exactly what the last slide printed. A loss of
+0.53 means $e^{-0.53} = 0.59$: averaged (geometrically) over the batch, the
+right cell holds 59% of the heat.
+
+---
+
+## The slope of cross-entropy {.smaller}
+
+$$\text{CE} = -{\color{#c0392b}{s_{n^\ast}}} + \log\sum_{m} e^{{\color{#c0392b}{s_m}}}$$
+
+**Step 3 — the slope.** Differentiate Step 1 with respect to one score. The
+first term gives $-1$ for the right cell only; the second gives
+$e^{{\color{#c0392b}{s_n}}}/\sum_m e^{{\color{#c0392b}{s_m}}} = {\color{#2a9d5c}{p_n}}$:
+$$\frac{\partial\,\text{CE}}{\partial {\color{#c0392b}{s_n}}} = {\color{#2a9d5c}{p_n}} - [\,n = n^\ast\,] .$$
+Gradient descent therefore **raises the right cell's score** by
+$1 - {\color{#2a9d5c}{p_{n^\ast}}}$ and **lowers every other cell's** by its share. When
+the softmax is nearly one-hot on a wrong cell, only two cells get a real
+push — the right one up, the favoured one down — and the other 254 learn
+nothing from that example. That is why a softmax should not start one-hot.
 
 ---
 
@@ -182,6 +426,71 @@ print(f"{sum(p.numel() for p in net.parameters()):,} parameters, 10 epochs in {t
 *Where* is a classification over 256 cells — the label is the cell the
 named ball is in. The answer read out afterwards is the heat map's centre of
 mass, which can land between cells.
+
+---
+
+## The four steps on one real picture {.smaller}
+
+```{python}
+#| fig-align: center
+img = Xtest[3]
+with torch.no_grad():
+    k1 = net.keys(vision.as_tensor(img[None])).flatten(2)[0]           # C x 256: Step 1's keys
+    q1 = net.query(vocab.bag("look at the green ball")[None])[0]        # C: the query
+    s1 = (q1 @ k1) / math.sqrt(k1.shape[0])                             # Step 1: 256 scores
+    p1 = torch.softmax(s1, -1)                                          # Step 2: 256 shares
+uv1 = vision.heat_to_uv(s1[None], net.grid)[0]                          # Step 3: centre of mass
+ang1, true1 = np.degrees(vision.angles_of_uv(uv1)), np.degrees(Ytest[3, NAMES.index("green")])
+print(f"scores from {s1.min():.1f} to {s1.max():.1f};  biggest share {p1.max():.3f};  "
+      f"shares on the top 5 cells {p1.sort(descending=True).values[:5].sum():.3f}")
+print(f"answer (u, v) = ({uv1[0]:+.3f}, {uv1[1]:+.3f})  ->  azimuth {ang1[0]:+.1f}°, elevation {ang1[1]:+.1f}°   "
+      f"(truth {true1[0]:+.1f}°, {true1[1]:+.1f}°)")
+fig, axes = plt.subplots(1, 3, figsize=(10, 3.1))
+im0 = axes[0].imshow(s1.reshape(16, 16).numpy(), cmap="Reds"); axes[0].set_title("Step 1: scores s", fontsize=9)
+fig.colorbar(im0, ax=axes[0], fraction=0.046)
+im1 = axes[1].imshow(p1.reshape(16, 16).numpy(), cmap="Greens"); axes[1].set_title("Step 2: shares p", fontsize=9)
+fig.colorbar(im1, ax=axes[1], fraction=0.046)
+axes[2].imshow(img.transpose(1, 2, 0))
+tu, tv = vision.uv_of(*np.radians(true1))
+axes[2].plot((tu + 1) * 32 - 0.5, (tv + 1) * 32 - 0.5, "+", color="w", ms=14, mew=2)
+axes[2].plot((uv1[0] + 1) * 32 - 0.5, (uv1[1] + 1) * 32 - 0.5, "x", color="#8e44ad", ms=10, mew=2.5)
+axes[2].set_title("Step 3: white + truth, purple × answer", fontsize=9)
+for ax in axes:
+    ax.set_xticks([]); ax.set_yticks([])
+fig.tight_layout(); plt.show()
+```
+
+The scores are no longer tiny: training has spread them over about 54
+units (−49 to +5), so two neighbouring cells on the green ball stand far
+above the rest and share almost all the heat — the top five cells hold
+100% of it to three decimals. The centre of mass, pushed through week 14's
+formula backwards, lands within a degree of the true direction.
+
+---
+
+## What the words weigh {.smaller}
+
+```{python}
+#| fig-align: center
+W = net.query.weight.detach().numpy()                   # 32 x 19: one column per word
+norms = np.linalg.norm(W, axis=0)
+words = list(vocab.index)
+fig, ax = plt.subplots(figsize=(10, 2.6))
+ax.bar(range(len(words)), norms, color=["#e8743b" if w in NAMES else "0.6" for w in words])
+ax.set_xticks(range(len(words))); ax.set_xticklabels(words, rotation=50, ha="right", fontsize=8)
+ax.set_ylabel("length of the word's column"); ax.grid(alpha=0.3, axis="y")
+fig.tight_layout(); plt.show()
+print("colour words:", ", ".join(f"{w} {norms[vocab.index[w]]:.2f}" for w in NAMES),
+      f"   every other word: {min(norms[i] for w, i in vocab.index.items() if w not in NAMES):.2f}"
+      f" to {max(norms[i] for w, i in vocab.index.items() if w not in NAMES):.2f}")
+```
+
+The query is the sum of the words' columns (two slides back), so a word's
+column length says how hard it can pull the query. After training the four
+colour words are about **twice** as long as every other word. The other
+words are not switched off — they appear with every colour equally, so they
+cannot say *which* ball, and the network learned to lean on the words that
+can.
 
 ---
 
@@ -227,7 +536,9 @@ test(["point at the ball"], "no colour word at all")
 New sentences work *perfectly* — "can you face the green ball please" was
 never in the data. That looks like understanding, and it is not: in a bag
 of words the only informative words are the four colours, so any sentence
-that contains one works and every other word is ignored.
+that contains one works; the unknown words ("can", "please") all land in
+`<unk>`, and the known non-colour words pull the query about half as hard
+as a colour (*What the words weigh*).
 
 A colour word it never saw is **chance** — about 31°, the same as no colour
 at all. There is no road from "crimson" to "red" in 3,000 pictures and 19
@@ -301,6 +612,36 @@ Path("heatnet_lecture.pt").unlink()
 the robot on its face — week 3 found this with its hands. The check catches
 it. The same goal as *left, then right* succeeds. **Knowing what to do is
 not the same as knowing how**; the order is the skill.
+
+---
+
+## The agent loop, as pseudocode {.smaller}
+
+What `agent.run` and the `look` skill do, with nothing left out but the
+bookkeeping (pseudocode: it reads like Python but is not meant to run):
+
+```text
+plan = parse(instruction)                   # words -> [("look", "the green ball"), ("raise", "left"), ...]
+for skill, argument in plan:                # one step at a time, in order
+    result = SKILLS[skill](body, eyes, argument)     # ACT: run the physics, then CHECK
+    print(skill, "ok" if result.ok else "FAILED", result.message)
+    if not result.ok:
+        stop                                # a failed check ends the plan (a planner could re-plan here)
+
+def look(body, eyes, words, gain=0.8):      # one skill, opened up
+    colour = the colour word in `words`     # none?  -> FAILED "no colour I know"
+    repeat for 2 s, every 0.1 s:            # PERCEIVE + ACT: week 14's servo loop
+        a_hat = azimuth of HeatNet(picture, words)
+        waist command += gain * a_hat
+    CHECK, with senses other than HeatNet's own confidence:
+        still standing?                     # pelvis above 0.6 m, tilt under 20 degrees
+        pixels where HeatNet points have that colour?
+        |a_hat| < 5 degrees?                # centred
+    return ok / FAILED, with a message saying which check failed
+```
+
+Every skill ends by **measuring** whether it worked, and the loop reads
+that measurement before going on. The next slide draws the same loop.
 
 ---
 

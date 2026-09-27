@@ -169,7 +169,7 @@ loop names the tiled `ctrl` and the single `mj_step`.
 | --- | --- | --- |
 | 1 | `ENTER`; `+` three times with `ENTER` each; correct `COST_EXPONENT` | physics-only throughput is nearly flat (16,164 → 13,064 robot-steps/s from 1 to 16 robots, p ≈ 1.09); the walking number climbs because the one IK call is shared |
 | 2 | `P` | 16,822 / 33,382 / 62,410 / 130,429 robot-steps/s for 1/2/4/8 processes here; 199,062 at 16 on 36 cores |
-| 3 | arithmetic | 150 M steps: 2.5 h in one process, 0.2 h at 16 processes on this machine |
+| 3 | arithmetic | 150 M **physics** steps: 2.5 h in one process, 0.2 h at 16 processes on this machine. A training budget of 150 M counts environment steps of 10 physics steps each, so ×10: ~25 h and ~2 h |
 | 4 | `F` | robots that drift apart within a few steps; what a policy trained on all of them at once would have to learn |
 | 5 | `+` until the window drops below 0.25× real time | the cost of one environment: ~62 µs of physics per robot-step here, 0.5 ms for the controller |
 

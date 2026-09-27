@@ -35,14 +35,39 @@ Three questions:
 2. Why does the robot sag below its commanded height?
 3. What happens when the motors are not strong enough?
 
+The actuator is **declared in the model file** (Layer 2, the robot model), but
+what it declares is a **controller** (Layer 4). This week sits on that seam.
+
+---
+
+## Colour code for the week {.smaller}
+
+The same colours mean the same things in every equation and every drawing:
+
+| symbol | meaning | unit | colour |
+| --- | --- | --- | --- |
+| ${\color{#3b7dd8}{q,\ \dot q,\ \ddot q}}$ | the **joint angle**, its velocity, its acceleration | rad, rad/s, rad/s² | <span style="color:#3b7dd8">blue</span> |
+| ${\color{#e8743b}{q_{\text{ref}}}}$ | the **command** — MuJoCo calls it `ctrl` | rad | <span style="color:#e8743b">orange</span> |
+| ${\color{#2a9d5c}{\tau}}$ | a **torque** on the joint | N·m | <span style="color:#2a9d5c">green</span> |
+| ${\color{#c0392b}{k_p}}$ | **stiffness**: torque per radian of error | N·m/rad | <span style="color:#c0392b">red</span> |
+| ${\color{#8e44ad}{k_v}}$ | **damping**: torque per rad/s of velocity | N·m·s/rad | <span style="color:#8e44ad">purple</span> |
+| ${\color{#8c564b}{M}}$ | the **inertia** the joint has to swing | kg·m² | <span style="color:#8c564b">brown</span> |
+
+Two derived numbers appear all week and are named when they arrive:
+$\omega_n$ (how fast the joint responds) and $\zeta$ (whether it overshoots).
+
 ---
 
 ## The actuator is a controller in disguise {.smaller}
 
 MuJoCo's "position actuator" is not a servo that magically achieves an angle. It
-is a **PD controller** written into the model file:
+is a **PD controller** — proportional plus derivative — written into the model file:
 
-$$\tau = k_p\,(\text{ctrl} - q) \;-\; k_v\,\dot{q}$$
+$${\color{#2a9d5c}{\tau}} = {\color{#c0392b}{k_p}}\,({\color{#e8743b}{q_{\text{ref}}}} - {\color{#3b7dd8}{q}}) \;-\; {\color{#8e44ad}{k_v}}\,{\color{#3b7dd8}{\dot{q}}}$$
+
+- ${\color{#e8743b}{q_{\text{ref}}}} - {\color{#3b7dd8}{q}}$ — the **error**: how far the joint is from where it was told to be
+- ${\color{#c0392b}{k_p}}\times$ error — the **P** term, a torque that pulls toward the command
+- $-{\color{#8e44ad}{k_v}}\,{\color{#3b7dd8}{\dot q}}$ — the **D** term, a torque that opposes motion, whichever way it goes
 
 ```{python}
 try:
@@ -62,29 +87,262 @@ print(f"kv : {kv.min():.2f} .. {kv.max():.2f}   ({len(np.unique(kv))} distinct v
 ```
 
 **Stiffness is uniform; damping is not.** Heavier joints nearer the trunk carry
-more damping, because the same stiffness driving a larger inertia would ring.
+more damping. Why exactly that pattern is derived four slides from now.
+
+---
+
+## Where the gains live in the model {.smaller}
+
+MuJoCo has one general formula for every actuator, and a `<position>` actuator
+is just one choice of its numbers:
+
+$${\color{#2a9d5c}{\tau}} = \underbrace{g_0}_{\texttt{gainprm[0]}}\,{\color{#e8743b}{\text{ctrl}}}
+\;+\; \underbrace{b_0}_{\texttt{biasprm[0]}}
+\;+\; \underbrace{b_1}_{\texttt{biasprm[1]}}\,{\color{#3b7dd8}{q}}
+\;+\; \underbrace{b_2}_{\texttt{biasprm[2]}}\,{\color{#3b7dd8}{\dot q}}$$
+
+Choose $g_0 = {\color{#c0392b}{k_p}}$, $b_0 = 0$, $b_1 = -{\color{#c0392b}{k_p}}$,
+$b_2 = -{\color{#8e44ad}{k_v}}$, collect terms, and it is the PD law of the last slide.
+
+```{python}
+a = 3                                    # actuator 3 is the left knee
+print("actuator 3 :", mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_ACTUATOR, a))
+print(f"gainprm[0]      = {model.actuator_gainprm[a, 0]:+.3f}     (= +kp)")
+print(f"biasprm[0:3]    = {np.round(model.actuator_biasprm[a, :3], 3)}   (= 0, -kp, -kv)")
+```
+
+That is why `soc4180.scale_gains` has to write **three** numbers per actuator:
+$k_p$ appears twice. Change only the gain and the servo no longer pulls toward
+`ctrl` — it pulls toward some other angle.
+
+---
+
+## The servo, drawn: a spring and a damper {.smaller}
+
+```{python}
+#| fig-align: center
+import matplotlib.pyplot as plt
+
+def zigzag(x0, x1, y, n=8, h=0.06):
+    xs = np.linspace(x0, x1, 2 * n + 1); ys = np.full_like(xs, y)
+    ys[1:-1:2] += h; ys[2:-1:2] -= h
+    return xs, ys
+
+fig, (ax, bx, cx) = plt.subplots(1, 3, figsize=(11, 3.2), gridspec_kw={"width_ratios": [1.7, 1, 1]})
+ax.axhline(0, color="0.3", lw=2); ax.fill_between([-0.2, 2.2], -0.08, 0, color="0.9")
+ax.add_patch(plt.Rectangle((1.3, 0.02), 0.4, 0.36, color="#8c564b", alpha=0.85))
+ax.text(1.5, 0.2, "$M$", color="w", ha="center", va="center", fontsize=13)
+ax.plot([0.35, 0.35], [0.0, 0.5], color="#e8743b", lw=3)                   # the command slider
+ax.text(0.35, 0.56, r"$q_{\mathrm{ref}}$ (ctrl)", color="#e8743b", ha="center", fontsize=10)
+xs, ys = zigzag(0.35, 1.3, 0.32, h=0.05); ax.plot(xs, ys, color="#c0392b", lw=2)
+ax.text(0.82, 0.41, "$k_p$  spring", color="#c0392b", ha="center", fontsize=10)
+ax.plot([-0.1, -0.1], [0, 0.2], color="0.3", lw=4)                          # a fixed wall
+ax.plot([-0.1, 0.9], [0.08, 0.08], color="#8e44ad", lw=2)
+ax.add_patch(plt.Rectangle((0.9, 0.04), 0.2, 0.08, fill=False, ec="#8e44ad", lw=2))
+ax.plot([1.0, 1.3], [0.08, 0.08], color="#8e44ad", lw=2)
+ax.text(0.45, 0.17, "$k_v$  damper (to the ground)", color="#8e44ad", ha="center", fontsize=9)
+ax.annotate("", xy=(1.5, -0.03), xytext=(0.35, -0.03), arrowprops=dict(arrowstyle="<->", lw=1.2))
+ax.text(0.92, -0.075, r"error $q_{\mathrm{ref}} - q$", ha="center", fontsize=9)
+ax.set_xlim(-0.25, 2.25); ax.set_ylim(-0.12, 0.65); ax.axis("off")
+ax.set_title("a sketch: the linear analogue of one joint", fontsize=9)
+e = np.linspace(-0.2, 0.2, 50)
+bx.plot(e, kp[3] * e, color="#c0392b", lw=2); bx.axhline(0, color="0.6", lw=0.8); bx.axvline(0, color="0.6", lw=0.8)
+bx.plot([0.1, 0.1], [0, 50], ":", color="0.4"); bx.plot([0, 0.1], [50, 50], ":", color="0.4")
+bx.text(0.105, 20, "0.1 rad\n-> 50 N m", fontsize=8)
+bx.set_xlabel(r"error $q_{\mathrm{ref}} - q$ (rad)"); bx.set_ylabel("spring torque (N m)")
+bx.set_title(f"P: slope $k_p$ = {kp[3]:.0f} N m/rad", fontsize=9); bx.grid(alpha=0.3)
+v = np.linspace(-3, 3, 50)
+cx.plot(v, -kv[3] * v, color="#8e44ad", lw=2); cx.axhline(0, color="0.6", lw=0.8); cx.axvline(0, color="0.6", lw=0.8)
+cx.set_xlabel(r"joint velocity $\dot q$ (rad/s)"); cx.set_ylabel("damper torque (N m)")
+cx.set_title(f"D (knee): slope $-k_v$ = {-kv[3]:.2f}", fontsize=9); cx.grid(alpha=0.3)
+fig.tight_layout(); plt.show()
+```
+
+The left picture is a **sketch** (a sliding block standing in for a rotating
+link: position ↔ angle, force ↔ torque, mass ↔ inertia). The spring is attached
+to the *command*, so moving `ctrl` drags the spring's end; the damper is attached
+to the *ground*, so it brakes any motion, even motion toward the target. The two
+plots are the real knee's numbers: every 0.1 rad of error buys 50 N·m, and every
+1 rad/s of speed costs 15.85 N·m of brake.
 
 ---
 
 ## One joint is a second-order system {.smaller}
 
-Put the servo law into Newton's law for one joint with effective inertia $M$
-(the other joints held still):
+Take one joint, gravity off, every other joint held still.
 
-$$M\ddot{q} + k_v\,\dot{q} + k_p\,q = k_p\,\text{ctrl}
-\qquad\qquad
-\omega_n = \sqrt{\frac{k_p}{M}},\qquad
-\zeta = \frac{k_v}{2\sqrt{k_p M}}$$
+**Step 1 — Newton for rotation.** Inertia × angular acceleration = the torque on the joint:
+$${\color{#8c564b}{M}}\,{\color{#3b7dd8}{\ddot q}} = {\color{#2a9d5c}{\tau}}.$$
 
-$\omega_n$ says how fast the joint responds; $\zeta$ says whether it overshoots
-($\zeta < 1$), creeps ($\zeta > 1$), or arrives as fast as possible without
-overshooting ($\zeta = 1$). Read $M$ off the mass matrix and ask what the G1's
-designers chose:
+**Step 2 — the only torque is the servo's.** Substitute the PD law:
+$${\color{#8c564b}{M}}\,{\color{#3b7dd8}{\ddot q}} = {\color{#c0392b}{k_p}}({\color{#e8743b}{q_{\text{ref}}}} - {\color{#3b7dd8}{q}}) - {\color{#8e44ad}{k_v}}\,{\color{#3b7dd8}{\dot q}}.$$
+
+**Step 3 — collect the unknown on the left:**
+$${\color{#8c564b}{M}}\,{\color{#3b7dd8}{\ddot q}} + {\color{#8e44ad}{k_v}}\,{\color{#3b7dd8}{\dot q}} + {\color{#c0392b}{k_p}}\,{\color{#3b7dd8}{q}} = {\color{#c0392b}{k_p}}\,{\color{#e8743b}{q_{\text{ref}}}}.$$
+
+This is the **mass–spring–damper equation** — the most-studied equation in
+engineering. It is *second order* because the highest derivative is $\ddot q$,
+so we need two starting facts (angle and velocity) to know the future.
+
+- ${\color{#8c564b}{M}}$ — the inertia of **everything beyond the joint** about its axis (the knee swings the shin and foot). MuJoCo computes it as the diagonal entry of the **mass matrix** `mj_fullM`, and adds the motor's own rotor inertia (`armature`, 0.01 kg·m² on every leg joint of the G1).
+- The right-hand side is the **input**; the left-hand side is how the joint **responds**.
+
+---
+
+## Solving it: the characteristic equation {.smaller}
+
+Command a **step**: ${\color{#e8743b}{q_{\text{ref}}}}$ jumps and then stays fixed. Write the error $e = {\color{#3b7dd8}{q}} - {\color{#e8743b}{q_{\text{ref}}}}$; since ${\color{#e8743b}{q_{\text{ref}}}}$ is constant, $\dot e = {\color{#3b7dd8}{\dot q}}$ and $\ddot e = {\color{#3b7dd8}{\ddot q}}$, and the equation loses its right side:
+$${\color{#8c564b}{M}}\,\ddot e + {\color{#8e44ad}{k_v}}\,\dot e + {\color{#c0392b}{k_p}}\,e = 0 .$$
+
+**Step 1 — try $e = e^{rt}$** (the same guess as Week 4's LIPM). Every term carries $e^{rt}$; cancel it:
+$${\color{#8c564b}{M}}\,r^2 + {\color{#8e44ad}{k_v}}\,r + {\color{#c0392b}{k_p}} = 0 .$$
+
+**Step 2 — divide by ${\color{#8c564b}{M}}$ and name the two ratios:**
+$$r^2 + 2\zeta\omega_n\,r + \omega_n^2 = 0,
+\qquad \omega_n = \sqrt{\frac{{\color{#c0392b}{k_p}}}{{\color{#8c564b}{M}}}},
+\qquad \zeta = \frac{{\color{#8e44ad}{k_v}}}{2\sqrt{{\color{#c0392b}{k_p}}\,{\color{#8c564b}{M}}}} .$$
+(Check: $\omega_n^2 = {\color{#c0392b}{k_p}}/{\color{#8c564b}{M}}$ and $2\zeta\omega_n = {\color{#8e44ad}{k_v}}/{\color{#8c564b}{M}}$ — exactly the two coefficients.)
+
+---
+
+## The roots decide everything {.smaller}
+
+**Step 3 — the quadratic formula** on $r^2 + 2\zeta\omega_n\,r + \omega_n^2 = 0$:
+$$r = \omega_n\left(-\zeta \pm \sqrt{\zeta^2 - 1}\right).$$
+
+- $\omega_n$ — the **natural frequency** (rad/s): how fast the joint would ring with no damping. Units: $\sqrt{(\text{N·m/rad})/(\text{kg·m}^2)} = 1/\text{s}$.
+- $\zeta$ — the **damping ratio** (no unit). The square root decides everything: $\zeta < 1$ makes it imaginary, $\zeta = 1$ makes it zero, $\zeta > 1$ keeps it real.
+
+**Step 4 — the solution is a sum of the two exponentials,** $e(t) = A\,e^{r_1 t} + B\,e^{r_2 t}$
+(or $(A + Bt)\,e^{-\omega_n t}$ when the two roots coincide), with $A$ and $B$ fixed by the two starting facts: the step's size $e(0) = e_0$
+(the error just after the jump) and $\dot e(0) = 0$ (the joint was at rest).
+Both roots have negative real part whenever ${\color{#8e44ad}{k_v}} > 0$, so both
+terms decay and **the joint always arrives** — the only question is *how*. The
+next slide writes out $A e^{r_1 t} + B e^{r_2 t}$ for each case.
+
+---
+
+## Three regimes, three kinds of root {.smaller}
+
+| | roots $r$ | error $e(t)$, starting at $e_0$ with zero velocity | what you see |
+| --- | --- | --- | --- |
+| $\zeta < 1$ **under-damped** | complex: $-\zeta\omega_n \pm i\,\omega_d$, $\ \omega_d = \omega_n\sqrt{1-\zeta^2}$ | $e_0\,e^{-\zeta\omega_n t}\left(\cos\omega_d t + \dfrac{\zeta}{\sqrt{1-\zeta^2}}\sin\omega_d t\right)$ | rings: overshoots, swings back, decays |
+| $\zeta = 1$ **critical** | one double root $-\omega_n$ | $e_0\,(1 + \omega_n t)\,e^{-\omega_n t}$ | fastest arrival **without** overshoot |
+| $\zeta > 1$ **over-damped** | two real: $r_1, r_2 < 0$ | $e_0\,\dfrac{r_2 e^{r_1 t} - r_1 e^{r_2 t}}{r_2 - r_1}$ | creeps in; the slower root $r_1$ dominates |
+
+A complex root $-a \pm i b$ means $e^{-at}$ (decay) times $\cos bt$ (oscillation):
+that is where ringing comes from. Each formula was fitted to the two starting
+facts, $e(0) = e_0$ and $\dot e(0) = 0$ — put $t = 0$ in and check.
+
+---
+
+## How much overshoot? {.smaller}
+
+**Step 1 — find the peak.** For $\zeta < 1$, differentiate the error formula;
+the cosine and sine terms combine and leave
+$\dot e(t) = -e_0\,\dfrac{\omega_n}{\sqrt{1-\zeta^2}}\,e^{-\zeta\omega_n t}\sin\omega_d t$.
+It is zero when $\sin\omega_d t = 0$, first at $t_p = \pi/\omega_d$.
+
+**Step 2 — evaluate the error there.** Put $t_p$ into
+$e_0\,e^{-\zeta\omega_n t}(\cos\omega_d t + \ldots\sin\omega_d t)$: $\cos\pi = -1$
+and $\sin\pi = 0$, so $e(t_p) = -e_0\,e^{-\zeta\omega_n\pi/\omega_d}$. The minus
+sign says the error has changed side: the joint is *past* the target.
+
+**Step 3 — divide by the step and simplify** $\omega_n/\omega_d = 1/\sqrt{1-\zeta^2}$:
+
+$$\text{overshoot} = \frac{|e(t_p)|}{|e_0|} = e^{-\zeta\omega_n \pi/\omega_d} = \exp\!\left(-\frac{\pi\zeta}{\sqrt{1-\zeta^2}}\right).$$
+
+It depends on $\zeta$ **only**: $\zeta = 0.25$ gives 44 %, $\zeta = 0.5$ gives
+16 %, and at $\zeta = 1$ the peak time $t_p = \pi/\omega_d$ becomes infinite —
+no peak. **Stiffness sets the speed; the damping *ratio* sets the shape.**
+
+---
+
+## The three regimes, drawn for the knee {.smaller}
+
+The left knee's numbers, with the damping scaled $\times\frac14$, $\times 1$, $\times 4$ — a 0.5 rad step:
 
 ```{python}
+#| fig-align: center
 d = soc4180.keyframe_data(model, "stand"); mujoco.mj_forward(model, d)
 M = np.zeros((model.nv, model.nv)); mujoco.mj_fullM(model, d, M)
 dofs = model.jnt_dofadr[model.actuator_trnid[:, 0]]
+M_knee = M[dofs[3], dofs[3]]
+
+def second_order(t, zeta, wn, step=0.5):
+    """The exact solution of M q'' + kv q' + kp q = kp q_ref, from rest, for a step."""
+    if zeta < 1:
+        wd = wn * np.sqrt(1 - zeta**2)
+        e = np.exp(-zeta * wn * t) * (np.cos(wd * t) + zeta / np.sqrt(1 - zeta**2) * np.sin(wd * t))
+    elif zeta == 1:
+        e = (1 + wn * t) * np.exp(-wn * t)
+    else:
+        r1, r2 = wn * (-zeta + np.sqrt(zeta**2 - 1)), wn * (-zeta - np.sqrt(zeta**2 - 1))
+        e = (r2 * np.exp(r1 * t) - r1 * np.exp(r2 * t)) / (r2 - r1)
+    return step * (1 - e)
+
+def first_within(t, q, target=0.5, tol=0.01):
+    ok = np.abs(target - q) < tol * abs(target)
+    return t[np.argmax(ok)] if ok.any() else float("nan")
+
+wn = np.sqrt(kp[3] / M_knee)
+t = np.linspace(0, 3.0, 30001)
+fig, (ax0, ax1) = plt.subplots(1, 2, figsize=(10.4, 3.6), gridspec_kw={"width_ratios": [1.6, 1]})
+th = np.linspace(0, 2 * np.pi, 200); ax1.plot(wn * np.cos(th), wn * np.sin(th), ":", color="0.6")
+print(f"knee: M = {M_knee:.4f} kg m^2, kp = {kp[3]:.0f}  ->  omega_n = {wn:.1f} rad/s = {wn / 2 / np.pi:.1f} Hz,"
+      f" 1/omega_n = {1000 / wn:.1f} ms")
+for kv_scale, col in ((0.25, "#e8743b"), (1.0, "k"), (4.0, "#3b7dd8")):
+    zeta = kv[3] * kv_scale / (2 * np.sqrt(kp[3] * M_knee))
+    zeta = round(zeta, 12)                     # 0.9999999999 is critical, not under-damped
+    q = second_order(t, zeta, wn)
+    lab = {0.25: "under", 1.0: "critical", 4.0: "over"}[kv_scale]
+    ax0.plot(t, q, lw=2, color=col, label=fr"$\zeta$ = {zeta:.2f} ({lab}-damped)")
+    roots = np.roots([1, 2 * zeta * wn, wn**2])
+    ax1.plot(roots.real, roots.imag, "x", ms=10, mew=2.5, color=col)
+    print(f"  kv x{kv_scale:<4}: zeta = {zeta:.2f}, roots = {np.round(roots, 1)}, "
+          f"overshoot {max(q.max() - 0.5, 0) / 0.5:5.1%}, within 1 % after {first_within(t, q):.3f} s")
+ax0.axhline(0.5, color="0.5", ls=":"); ax0.set_xlim(0, 0.5); ax0.set_xlabel("time after the step (s)")
+ax0.set_ylabel("knee angle (rad)"); ax0.legend(fontsize=8, loc="lower right"); ax0.grid(alpha=0.3)
+ax0.set_title("the exact solution, one-joint model", fontsize=10)
+ax1.axhline(0, color="0.5", lw=0.8); ax1.axvline(0, color="0.5", lw=0.8)
+ax1.set_xlim(-150, 30); ax1.set_ylim(-80, 80); ax1.set_aspect("equal")
+ax1.annotate("other root\nat -497", xy=(-150, 0), xytext=(-140, 30), fontsize=8, color="#3b7dd8",
+             arrowprops=dict(arrowstyle="->", color="#3b7dd8"))
+ax1.set_xlabel("real part of $r$ (decay, 1/s)"); ax1.set_ylabel("imaginary part (ringing, rad/s)")
+ax1.set_title(r"the roots; dotted: radius $\omega_n$", fontsize=10); ax1.grid(alpha=0.3)
+fig.tight_layout(); plt.show()
+```
+
+---
+
+## Reading the numbers {.smaller}
+
+- $\omega_n \approx 63$ rad/s, i.e. **10 Hz**: an undamped knee would ring ten
+  times a second. $1/\omega_n \approx 16$ ms is the joint's basic time unit.
+- **Critical ($\zeta = 1$, black):** both roots sit at $-\omega_n$, on the real
+  axis — no ringing. It arrives within 1 % after 0.105 s. That is $6.64/\omega_n$,
+  because $(1 + x)e^{-x} = 0.01$ at $x = 6.64$: about **seven time units**.
+- **Under ($\zeta = 0.25$, orange):** the roots leave the axis, and the
+  imaginary part (61 rad/s) is the ringing. Overshoot $\exp(-\pi\cdot0.25/\sqrt{1-0.0625}) = 44\%$.
+  It gets *near* the target first (0.030 s) and then spends time swinging through it.
+- **Over ($\zeta = 4$, blue):** two real roots, $-8$ and $-497$. The fast one
+  dies in milliseconds; the slow one, $e^{-8t}$, is what you wait for: 0.577 s
+  to reach 1 %, five times slower than critical.
+
+**The circle.** A complex pair always has size exactly $\omega_n$:
+$|r|^2 = (\zeta\omega_n)^2 + \omega_d^2 = \omega_n^2$. So below $\zeta = 1$ the damping
+slides the pair *around* the circle towards the real axis; at $\zeta = 1$ they
+meet on it at $-\omega_n$; above, they split along the axis, one inside and one
+outside, with product $\omega_n^2$ ($8.0 \times 496.8 \approx 63.1^2$).
+Stiffness sets the circle's size, damping sets where on it you are.
+
+---
+
+## What the G1's designers chose {.smaller}
+
+Read ${\color{#8c564b}{M}}$ off the mass matrix for every actuated joint and compute $\zeta$:
+
+```{python}
 zeta = kv / (2 * np.sqrt(kp * M[dofs, dofs]))
 for a in (0, 3, 4, 12, 16):
     name = mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_ACTUATOR, a)
@@ -92,58 +350,114 @@ for a in (0, 3, 4, 12, 16):
 print(f"\nall twelve leg joints: zeta = {zeta[:12].min():.2f} .. {zeta[:12].max():.2f}")
 ```
 
-**Every leg joint is critically damped, $\zeta = 1.00$.** That is why $k_v$
-varies by a factor of ten while $k_p$ does not: the damping was set to
-$2\sqrt{k_p M}$ joint by joint, so the heavy hip and the light ankle respond
-the same way. The arms are looser, 0.7 to 1.9.
+**Every leg joint is critically damped, $\zeta = 1.00$.** That is why ${\color{#8e44ad}{k_v}}$
+varies by a factor of ten while ${\color{#c0392b}{k_p}}$ does not: solve $\zeta = 1$ for the damping,
+
+$${\color{#8e44ad}{k_v}} = 2\sqrt{{\color{#c0392b}{k_p}}\,{\color{#8c564b}{M}}},$$
+
+and a joint that swings more inertia needs more damping. The heavy hip and the
+light ankle therefore respond with the *same shape*. The arms are looser, 0.7 to 1.9.
 
 ---
 
 ## The step response, measured {.smaller}
 
-Gravity off, robot floating, and the left knee is asked to go from 0 to 0.5 rad:
+Gravity off, the robot lifted 0.5 m so nothing touches the floor, and the left
+knee is asked to go from 0 to 0.5 rad. Solid: MuJoCo. Dashed: the one-joint formula.
 
 ```{python}
 #| fig-align: center
-import matplotlib.pyplot as plt
-
 def step_response(kp_scale=1.0, kv_scale=1.0, seconds=0.5):
     m = soc4180.load_g1(); soc4180.scale_gains(m, kp_scale, kv_scale)
     m.opt.gravity[:] = 0
     d = soc4180.keyframe_data(m, "stand")
+    d.qpos[2] += 0.5                                      # float clear of the floor
+    mujoco.mj_forward(m, d)
     qi = m.jnt_qposadr[m.actuator_trnid[3, 0]]          # the left knee
-    for _ in range(200):
-        mujoco.mj_step(m, d)                              # settle first
     d.ctrl[3] = 0.5
     t0, t, q = d.time, [], []
-    while d.time < t0 + seconds:
+    while d.time < t0 + seconds - 1e-9:
         mujoco.mj_step(m, d); t.append(d.time - t0); q.append(d.qpos[qi])
     return np.array(t), np.array(q)
 
-fig, (ax0, ax1) = plt.subplots(1, 2, figsize=(9.6, 3.6), sharey=True)
-for scale, col in ((0.25, "#e8743b"), (1.0, "k"), (4.0, "#3b7dd8")):
-    t, q = step_response(kp_scale=scale)
-    ax0.plot(t, q, lw=2, color=col, label=f"$k_p$ = {500 * scale:.0f}")
-for scale, col in ((0.25, "#e8743b"), (1.0, "k"), (4.0, "#3b7dd8")):
-    t, q = step_response(kv_scale=scale)
-    ax1.plot(t, q, lw=2, color=col, label=fr"$k_v \times$ {scale}")
+def theory(t, kp_scale=1.0, kv_scale=1.0):
+    z = round(kv[3] * kv_scale / (2 * np.sqrt(kp[3] * kp_scale * M_knee)), 12)
+    return second_order(t, z, np.sqrt(kp[3] * kp_scale / M_knee)), z
+
+fig, (ax0, ax1) = plt.subplots(1, 2, figsize=(9.6, 3.4), sharey=True)
+rows = []
+for ax, key, lab in ((ax0, "kp", r"$k_p$ = {:.0f}"), (ax1, "kv", r"$k_v \times$ {}")):
+    for scale, col in ((0.25, "#e8743b"), (1.0, "k"), (4.0, "#3b7dd8")):
+        kw = {f"{key}_scale": scale}
+        t, q = step_response(**kw); qt, z = theory(t, **kw)
+        ax.plot(t, q, lw=2, color=col, label=lab.format(500 * scale if key == "kp" else scale))
+        ax.plot(t, qt, lw=1.2, ls="--", color=col)
+        rows.append((f"{key} x{scale}", z, first_within(t, q), max(q.max() - 0.5, 0) / 0.5,
+                     first_within(t, qt), max(qt.max() - 0.5, 0) / 0.5))
 for ax, title in ((ax0, "stiffness sets how fast"), (ax1, "damping sets whether it overshoots")):
     ax.axhline(0.5, color="0.5", ls=":"); ax.set_xlabel("time after the step (s)")
     ax.legend(fontsize=8, loc="lower right"); ax.grid(alpha=0.3); ax.set_title(title, fontsize=10)
 ax0.set_ylabel("knee angle (rad)")
 fig.tight_layout(); plt.show()
+print(f"{'':9s} {'zeta':>5s} | {'MuJoCo: 1 %':>11s} {'overshoot':>9s} | {'formula: 1 %':>12s} {'overshoot':>9s}")
+for r in rows:
+    fmt = lambda x: "not yet" if np.isnan(x) else f"{x:.3f} s"
+    print(f"{r[0]:9s} {r[1]:5.2f} | {fmt(r[2]):>11s} {r[3]:9.1%} | {fmt(r[4]):>12s} {r[5]:9.1%}")
 ```
 
-Four times the stiffness reaches the target three times sooner — and draws
-four times the torque, 1000 N·m against 250 for this half-radian step. A
-quarter of the damping overshoots by 9%; four times the damping never quite
-arrives. The nominal pair does neither, which is what $\zeta = 1$ means.
+---
+
+## Reading the step response {.smaller}
+
+- **Stiffness ×4** reaches 1 % in 0.032 s against 0.110 s — about 3.4 times
+  sooner. Two things add up: $\omega_n \propto \sqrt{k_p}$ doubles, and
+  $\zeta \propto 1/\sqrt{k_p}$ halves to 0.5, which rushes in and pays with a
+  4.0 % overshoot. It also **draws four times the torque**: at the first
+  instant the error is the whole 0.5 rad, so ${\color{#2a9d5c}{\tau}} = {\color{#c0392b}{k_p}} \times 0.5$ —
+  250 N·m nominal, 1000 N·m at ×4.
+- **A quarter of the stiffness, or four times the damping**, never gets within
+  1 % in half a second ("not yet" in the table): over-damped, $\zeta = 2$ and $4$.
+- **The nominal pair** is within 1 % at 0.110 s with no overshoot — the formula
+  says 0.106 s (sampled every 2 ms, as MuJoCo is). $\zeta = 1$ predicted it.
+
+But the under-damped cases **overshoot less than the formula says**: 16.9 %
+measured against 44.4 % for ${\color{#8e44ad}{k_v}}/4$. The next slide says why.
+
+(The lab's `servo.py` prints smaller overshoots — 4.6 % for ${\color{#8e44ad}{k_v}}/4$ —
+because it starts with the feet on the floor and a foot touches it during the
+step. This slide lifts the robot clear. Same law, different load.)
+
+---
+
+## Why the formula over-predicts the ringing {.smaller}
+
+The one-joint model assumed "every other joint held still". The knee in a
+floating robot does not push against a wall — it pushes against the rest of
+the body, which moves back. Two limits bracket the truth:
+
+```{python}
+Minv = np.linalg.inv(M)
+M_locked, M_free = M_knee, 1.0 / Minv[dofs[3], dofs[3]]
+for label, m_ in (("every other joint locked   M_ii       ", M_locked),
+                  ("every other joint free     1/(M^-1)_ii", M_free)):
+    z = kv[3] / 4 / (2 * np.sqrt(kp[3] * m_))
+    print(f"{label} = {m_:.4f} kg m^2 -> zeta(kv/4) = {z:.2f}, "
+          f"overshoot {np.exp(-np.pi * z / np.sqrt(1 - z**2)):.1%}")
+```
+
+- ${\color{#8c564b}{M_{ii}}}$ (the diagonal) is the inertia when everything else is welded in place.
+- $1/(M^{-1})_{ii}$ is the inertia when everything else — the other joints and the floating pelvis — is **perfectly free** to move out of the way. Less to push, so a smaller number and more damping per unit inertia.
+- The real robot is in between: the other 28 joints are servoed, stiff but not rigid, and the pelvis floats. The measured 16.9 % is closer to the "free" limit, and even a little below it: a one-joint model, with either inertia, brackets the robot rather than fitting it.
+
+**The formula is right about the direction and about the design rule** ($\zeta = 1$
+gives no overshoot), and only approximate about the numbers. Use it to choose
+gains; measure to know what you got.
 
 ---
 
 ## Verify it, do not believe it {.smaller}
 
-If that equation really is the actuator, we can predict the torque exactly:
+If the PD law really is the actuator, we can predict the torque exactly:
 
 ```{python}
 data = soc4180.keyframe_data(model, "stand")
@@ -161,13 +475,90 @@ print(f"predicted torque = {predicted:+.3f} N m")
 print(f"actual   torque  = {data.actuator_force[a]:+.3f} N m")
 ```
 
-A spring, pulling the joint back toward its setpoint with a force proportional to
-the error. **That is why the robot sags: a spring at rest is a spring under
-load, and load means deflection.**
+Read it: error $0 - 0.30 = -0.30$ rad, times 500 N·m/rad, is $-150$ N·m — a
+torque pulling the knee back toward straight. A spring, pulling the joint back
+toward its setpoint with a force proportional to the error. **That is why the
+robot sags: a spring at rest is a spring under load, and load means deflection.**
+
+---
+
+## Sag under gravity, derived {.smaller}
+
+Turn gravity back on. Gravity pulls on everything beyond the joint and adds a
+torque ${\color{#2a9d5c}{\tau_g}}$ (MuJoCo's `qfrc_bias` with the sign flipped, when the robot is at rest):
+
+**Step 1 — Newton with gravity:**
+$${\color{#8c564b}{M}}\,{\color{#3b7dd8}{\ddot q}} = {\color{#c0392b}{k_p}}({\color{#e8743b}{q_{\text{ref}}}} - {\color{#3b7dd8}{q}}) - {\color{#8e44ad}{k_v}}\,{\color{#3b7dd8}{\dot q}} + {\color{#2a9d5c}{\tau_g}}.$$
+
+**Step 2 — wait until it stops.** At rest ${\color{#3b7dd8}{\ddot q}} = {\color{#3b7dd8}{\dot q}} = 0$, so the damper does nothing and the spring alone holds the load:
+$$0 = {\color{#c0392b}{k_p}}({\color{#e8743b}{q_{\text{ref}}}} - {\color{#3b7dd8}{q}}) + {\color{#2a9d5c}{\tau_g}} .$$
+
+**Step 3 — solve for the angle:**
+$$\boxed{\ {\color{#3b7dd8}{q}} - {\color{#e8743b}{q_{\text{ref}}}} = \frac{{\color{#2a9d5c}{\tau_g}}}{{\color{#c0392b}{k_p}}}\ }$$
+
+---
+
+## Reading the sag formula {.smaller}
+
+$${\color{#3b7dd8}{q}} - {\color{#e8743b}{q_{\text{ref}}}} = \frac{{\color{#2a9d5c}{\tau_g}}}{{\color{#c0392b}{k_p}}}$$
+
+- The joint comes to rest **past** its command, in the direction gravity pulls, by load ÷ stiffness.
+- Double ${\color{#c0392b}{k_p}}$, halve the sag. It is **never zero** for a finite spring: the error *is* what makes the holding torque.
+- A PID controller would remove it with an integral (I) term that keeps growing while any error remains. MuJoCo's position actuator has no I term — the formula in *Where the gains live* has nothing that remembers the past.
+- The G1's joints also have `frictionloss` 0.3 N·m, a small dead band: the spring may rest up to $0.3/{\color{#c0392b}{k_p}}$ either side of the prediction.
+
+---
+
+## Sag, measured on one joint {.smaller}
+
+The robot stands; its left arm is held straight out in front (shoulder pitch
+$-1.57$ rad, elbow 0). Only the shoulder's stiffness is changed:
+
+```{python}
+#| fig-align: center
+names = [mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_ACTUATOR, i) for i in range(model.nu)]
+SH, EL = names.index("left_shoulder_pitch_joint"), names.index("left_elbow_joint")
+ARM_OUT = -1.57
+
+def arm_out(kp_scale=1.0, limit=None, seconds=3.0):
+    m = soc4180.load_g1()
+    k0 = m.actuator_gainprm[SH, 0]
+    m.actuator_gainprm[SH, 0] = k0 * kp_scale; m.actuator_biasprm[SH, 1] = -k0 * kp_scale
+    if limit is not None:                                  # a torque limit on this one motor
+        m.actuator_forcelimited[SH] = 1; m.actuator_forcerange[SH] = [-limit, limit]
+    d = soc4180.keyframe_data(m, "stand")
+    qa = m.jnt_qposadr[m.actuator_trnid[[SH, EL], 0]]
+    d.ctrl[[SH, EL]] = [ARM_OUT, 0.0]; d.qpos[qa] = [ARM_OUT, 0.0]
+    mujoco.mj_forward(m, d)
+    while d.time < seconds:
+        mujoco.mj_step(m, d)
+    tau_g = -d.qfrc_bias[m.jnt_dofadr[m.actuator_trnid[SH, 0]]]
+    return d.qpos[qa[0]], tau_g, k0 * kp_scale
+
+rows = [arm_out(s) for s in (0.25, 0.5, 1.0, 2.0, 4.0)]
+body = lambda n: mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, n)
+d = soc4180.keyframe_data(model, "stand"); mujoco.mj_forward(model, d)
+arm = np.linalg.norm(d.xpos[body("left_shoulder_pitch_link")] - d.xpos[body("left_wrist_yaw_link")])
+print(f"{'kp':>6s} {'tau_g (N m)':>12s} {'predicted tau_g/kp':>19s} {'measured q - q_ref':>19s} {'wrist drop':>11s}")
+for q, tg, k in rows:
+    print(f"{k:6.0f} {tg:12.3f} {tg / k * 1000:15.2f} mrad {(q - ARM_OUT) * 1000:15.2f} mrad {(q - ARM_OUT) * arm * 1000:8.1f} mm")
+fig, ax = plt.subplots(figsize=(6.6, 2.9))
+kk = np.linspace(100, 2100, 200)
+ax.plot(kk, rows[2][1] / kk * 1000, "--", color="0.5", label=r"$\tau_g / k_p$")
+ax.plot([r[2] for r in rows], [(r[0] - ARM_OUT) * 1000 for r in rows], "o", ms=8, color="#3b7dd8", label="measured")
+ax.set_xlabel("shoulder $k_p$ (N m/rad)"); ax.set_ylabel("sag (mrad)"); ax.grid(alpha=0.3); ax.legend(fontsize=8)
+fig.tight_layout(); plt.show()
+```
+
+The arm (0.38 m from shoulder to wrist) pulls with 4.7 N·m. At the shipped
+${\color{#c0392b}{k_p}} = 500$ it sags 9.5 mrad — half a degree, 3.6 mm at the
+wrist — and every point lands on $\tau_g/k_p$ to within 0.05 mrad.
 
 ---
 
 ## Measure the sag {.smaller}
+
+The same law, for a whole walking robot:
 
 ```{python}
 from soc4180.walking import WalkingController, GaitParams
@@ -189,14 +580,15 @@ print(f"worst sag               : {np.max(sag)*1000:+.1f} mm")
 print(f"peak joint torque       : {peak:.1f} N m")
 ```
 
-Eleven millimetres of steady droop. Not a bug — the necessary deflection of a
-finite spring holding up a 33 kg robot.
+Eleven millimetres of steady droop. Not a bug — the necessary deflection of
+finite springs holding up a 33 kg robot. Each leg joint sags by its own
+$\tau_g/k_p$, and the pelvis drop is those small angles added up along the leg.
 
 ---
 
 ## Sag against stiffness {.smaller}
 
-A spring under a fixed load deflects as $1/k_p$. Sweep the stiffness and check:
+The derivation says sag $\propto 1/k_p$. Sweep the stiffness of **every** joint and check:
 
 ```{python}
 #| fig-align: center
@@ -222,9 +614,12 @@ ax.plot(kk, sags[1] * 500 / kk, "--", color="0.5", label=r"$\propto 1/k_p$ throu
 ax.set_xlabel("$k_p$"); ax.set_ylabel("mean pelvis sag (mm)"); ax.set_ylim(bottom=-1)
 ax.legend(fontsize=8); ax.grid(alpha=0.3)
 fig.tight_layout(); plt.show()
+print("  ".join(f"kp {500 * s:.0f}: {'%.1f mm' % mm if o else 'fell'}" for s, mm, o in zip(scales, sags, ok)))
 ```
 
-Between 500 and 750 the sag follows the spring law. Below 500 the robot does
+500 and 600 sit on the $1/k_p$ curve; 750 sags a little less than it
+predicts (6.0 mm against 7.3) — the pelvis sag is many joints at once, each
+at its own load, so the single-spring law is a guide, not a fit. Below 500 the robot does
 not sag more — it **falls**: a leg that gives too much at support exchange has
 stopped supporting. Above 750 it falls too, for the reason on the next slides —
 the gait's timing was tuned against one particular stiffness.
@@ -248,6 +643,70 @@ No real motor behaves like this. Every hardware actuator has a stall torque, a
 thermal limit, and a gearbox that fails. **This is a sim-to-real gap sitting in
 plain sight in the model file**, and unlike most of them it costs one line to
 close.
+
+---
+
+## Saturation, written as maths {.smaller}
+
+A torque limit ${\color{#2a9d5c}{\tau_{\max}}}$ clips the PD law:
+
+$${\color{#2a9d5c}{\tau}} = \operatorname{clip}\!\Big({\color{#c0392b}{k_p}}({\color{#e8743b}{q_{\text{ref}}}} - {\color{#3b7dd8}{q}}) - {\color{#8e44ad}{k_v}}\,{\color{#3b7dd8}{\dot q}},\; -{\color{#2a9d5c}{\tau_{\max}}},\; +{\color{#2a9d5c}{\tau_{\max}}}\Big)$$
+
+($\operatorname{clip}(x, lo, hi)$ returns $x$ if it is between the bounds, otherwise the bound it crossed.)
+
+**Step 1 — where the spring is still a spring.** At rest, the law is linear only while
+$|{\color{#c0392b}{k_p}}\,e| \le {\color{#2a9d5c}{\tau_{\max}}}$, i.e.
+$$|e| \le \frac{{\color{#2a9d5c}{\tau_{\max}}}}{{\color{#c0392b}{k_p}}} = \frac{50}{500} = 0.1\ \text{rad} \approx 5.7° \quad\text{(for a 50 N·m limit)}.$$
+
+**Step 2 — outside that band the stiffness is zero.** The torque is stuck at
+${\color{#2a9d5c}{\tau_{\max}}}$: more error buys no more torque, so nothing
+pulls harder as the joint falls further. Everything derived so far ($\omega_n$, $\zeta$, the sag) assumed the linear band.
+
+**Step 3 — holding a load.** The sag formula needs $|{\color{#2a9d5c}{\tau_g}}| \le {\color{#2a9d5c}{\tau_{\max}}}$.
+If gravity asks for more, **no value of ${\color{#c0392b}{k_p}}$ helps**: the joint
+gives way until gravity's own torque has fallen to ${\color{#2a9d5c}{\tau_{\max}}}$ —
+for an arm, until it hangs low enough that its lever arm is shorter.
+
+---
+
+## A weak shoulder, measured {.smaller}
+
+The straight-out arm again, with a torque limit on the shoulder motor alone.
+Green: gravity's torque at each angle (`mj_forward`, no simulation).
+
+```{python}
+#| fig-align: center
+m = soc4180.load_g1(); d = soc4180.keyframe_data(m, "stand")
+qa = m.jnt_qposadr[m.actuator_trnid[[SH, EL], 0]]; sh_dof = m.jnt_dofadr[m.actuator_trnid[SH, 0]]
+angles = np.linspace(ARM_OUT, 0.5, 600); tg = []
+for a_ in angles:
+    d.qpos[qa] = [a_, 0.0]; mujoco.mj_forward(m, d); tg.append(-d.qfrc_bias[sh_dof])
+tg = np.array(tg)
+FRICTION = m.dof_frictionloss[sh_dof]                      # can hold either way
+fig, ax = plt.subplots(figsize=(7.6, 2.7))
+ax.plot(np.degrees(angles), tg, color="#2a9d5c", lw=2, label=r"gravity torque $\tau_g$ at the shoulder")
+print(f"gravity's largest pull on the straight arm: {tg.max():.2f} N m;  joint friction {FRICTION:.1f} N m")
+first = lambda mask: np.degrees(angles[np.argmax(mask)]) if mask.any() else float("nan")
+for lim, col in ((6.0, "0.4"), (4.0, "#e8743b"), (3.0, "#c0392b"), (2.0, "#8e44ad")):
+    q_end, _, _ = arm_out(limit=lim, seconds=4.0)
+    ax.axhline(lim, color=col, ls=":", lw=1)
+    ax.plot(np.degrees(q_end), lim, "o", ms=8, color=col)
+    if tg.max() <= lim:
+        print(f"  limit {lim:.0f} N m: stronger than gravity everywhere -> holds; measured {np.degrees(q_end):6.1f} deg")
+        continue
+    lo, hi = first(tg <= lim + FRICTION), first(tg <= lim - FRICTION)
+    ax.plot([lo, hi if np.isfinite(hi) else 28.6], [lim, lim], lw=6, alpha=0.25, color=col, solid_capstyle="butt")
+    print(f"  limit {lim:.0f} N m: predicted rest between {lo:6.1f} and {hi:6.1f} deg, measured {np.degrees(q_end):6.1f} deg")
+ax.set_xlabel("shoulder pitch (deg);  -90 = straight out,  0 = hanging"); ax.set_ylabel("torque (N m)")
+ax.legend(fontsize=8, loc="upper right"); ax.grid(alpha=0.3)
+ax.set_title("dotted: the limit; band: rest predicted within the friction; dot: measured rest", fontsize=9)
+fig.tight_layout(); plt.show()
+```
+
+6 N·m beats gravity's largest pull (5.09): the arm holds. Weaker, it gives way
+and stops where $\tau_g$ has fallen to the limit — a band, not a point, because
+the 0.3 N·m joint friction holds either way. 4 and 3 N·m land in their bands;
+2 N·m stops 0.4° short. **Stiffness never entered**: past saturation, only ${\color{#2a9d5c}{\tau_{\max}}}$ matters.
 
 ---
 
@@ -310,15 +769,17 @@ print(f"left knee above 50 N m for {(tau[:, 3] > 50).mean():.1%} of the walk")
 ```
 
 The knee holds the body up in single support and spikes at every support
-exchange. It exceeds 50 N·m for about **4% of the walk** — and that is enough.
-A limit that bites for a few hundredths of a second at the wrong moment is a
-limit that drops the robot.
+exchange. (The 124 N·m spike at $t \approx 0$ is the robot landing from its
+starting pose, before walking begins.) It exceeds 50 N·m for about **4% of the walk** — and that is enough.
+In those moments the knee is outside its linear band (Step 2 of the saturation
+slide): it stops being a spring, extra bending meets no extra torque,
+and a limit that bites for a few hundredths of a second drops the robot.
 
 ---
 
 ## Tuning the gains {.smaller}
 
-$k_p$ too low and the robot sinks. Too high and it fights itself. Find the window:
+${\color{#c0392b}{k_p}}$ too low and the robot sinks. Too high and it fights itself. Find the window:
 
 ```{python}
 for scale in (0.25, 0.5, 1.0, 2.0, 4.0):
@@ -334,9 +795,10 @@ weight; double it and the servos overpower the gait's timing and throw it over.
 
 ## The textbook fix that does not work {.smaller}
 
-Control theory says stiffness and damping should scale together — hold the
-damping ratio $\zeta = k_v / (2\sqrt{k_p\,m})$ constant by scaling $k_v$ with
-$\sqrt{k_p}$. Try it:
+The derivation says the *shape* of the response depends only on
+$\zeta = {\color{#8e44ad}{k_v}} / (2\sqrt{{\color{#c0392b}{k_p}}\,{\color{#8c564b}{M}}})$.
+So scale ${\color{#8e44ad}{k_v}}$ by $\sqrt{s}$ whenever ${\color{#c0392b}{k_p}}$ is scaled by $s$,
+and $\zeta$ stays exactly 1.00 on every leg joint. Try it:
 
 ```{python}
 for scale in (0.25, 0.5, 1.0, 2.0, 4.0):
@@ -346,9 +808,11 @@ for scale in (0.25, 0.5, 1.0, 2.0, 4.0):
 ```
 
 **Still only the nominal gain survives.** The theory is not wrong — it is about a
-single joint tracking a setpoint. Our failure is not one joint ringing; it is a
-*whole-body gait whose timing was tuned against this particular plant*. Change
-the plant and the trajectory no longer fits it.
+single joint tracking a setpoint. Holding $\zeta$ keeps the *shape* but changes
+the *speed* ($\omega_n \propto \sqrt{k_p}$) and the *sag* ($\propto 1/k_p$). Our
+failure is not one joint ringing; it is a *whole-body gait whose timing was
+tuned against this particular plant*. Change the plant and the trajectory no
+longer fits it.
 
 Remember that when a learned policy shrugs this off in Week 11.
 
@@ -357,8 +821,8 @@ Remember that when a learned policy shrugs this off in Week 11.
 ## Rhythm without a model {.smaller}
 
 The Week 4 walker needed a balance model. Biology often seems not to: a **central
-pattern generator** in the spinal cord produces rhythmic stepping with no plan at
-all. Two anti-phase oscillators, driving hips and knees:
+pattern generator** (CPG) — a circuit of neurons in the spinal cord — produces
+rhythmic stepping with no plan at all. Two anti-phase oscillators, driving hips and knees:
 
 ```{python}
 cpg = soc4180.CPG(model, frequency=1.2, hip_amplitude=0.25, knee_amplitude=0.40)
@@ -373,16 +837,97 @@ soc4180.show_video(frames, fps=30)
 
 ---
 
+## A CPG is coupled oscillators {.smaller}
+
+Give each leg a **phase** ${\color{#3b7dd8}{\phi}}$ (blue here: the state; ${\color{#8e44ad}{w}}$ purple: the coupling) (radians, going round and
+round: $\phi$ and $\phi + 2\pi$ are the same moment of the stride). Each phase
+advances at its own rate and is **nudged** by the other:
+
+$${\color{#3b7dd8}{\dot\phi_L}} = \omega_L + {\color{#8e44ad}{w}}\sin({\color{#3b7dd8}{\phi_R}} - {\color{#3b7dd8}{\phi_L}} - \pi),
+\qquad
+{\color{#3b7dd8}{\dot\phi_R}} = \omega_R + {\color{#8e44ad}{w}}\sin({\color{#3b7dd8}{\phi_L}} - {\color{#3b7dd8}{\phi_R}} + \pi)$$
+
+- $\omega_L, \omega_R$ — each leg's own stepping rate, $2\pi f$ (rad/s); $f$ = stride cycles per second
+- ${\color{#8e44ad}{w}}$ — the **coupling** strength (1/s): how hard each leg pulls the other's phase
+- $\pi$ — the **desired phase offset**: the legs half a stride apart, i.e. alternating
+
+**Step 1 — watch the phase error** $e = {\color{#3b7dd8}{\phi_R}} - {\color{#3b7dd8}{\phi_L}} - \pi$. Subtract the two equations (note $\phi_L - \phi_R + \pi = -e$):
+$$\dot e = (\omega_R - \omega_L) - 2{\color{#8e44ad}{w}}\sin e .$$
+
+One equation in one unknown: the whole two-leg question is now "where does $e$ go?"
+
+---
+
+## Why the legs lock {.smaller}
+
+$$\dot e = (\omega_R - \omega_L) - 2{\color{#8e44ad}{w}}\sin e, \qquad e = {\color{#3b7dd8}{\phi_R}} - {\color{#3b7dd8}{\phi_L}} - \pi$$
+
+**Step 2 — equal rates.** $\dot e = -2{\color{#8e44ad}{w}}\sin e$. Near $e = 0$, $\sin e \approx e$, so $e(t) = e_0\,e^{-2wt}$ — the same kind of decaying exponential as the servo. The legs **lock into anti-phase**, the error shrinking by a factor $\mathrm{e} \approx 2.72$ every $1/(2w)$ seconds. $e = \pi$ (both legs together — a hop) is also a rest point, but an unstable one: there $\sin e \approx -(e - \pi)$ pushes away.
+
+**Step 3 — unequal rates**, $\Delta\omega = \omega_R - \omega_L$. The error stops where $\dot e = 0$: $\sin e^* = \Delta\omega / 2w$. That has a solution **only if $|\Delta\omega| \le 2w$** — coupling strong enough to overrule the mismatch locks the legs with a small lag $e^*$; weaker coupling lets them drift apart for ever.
+
+---
+
+## Coupled oscillators, drawn {.smaller}
+
+```{python}
+#| fig-align: center
+def phase_error(e0, w, dw, f=1.2, seconds=4.0, dt=1e-3):
+    """Integrate the two phase equations (Euler) and return t and the wrapped error e."""
+    pL, pR = 0.0, e0 + np.pi
+    wL, wR = 2 * np.pi * f, 2 * np.pi * f + dw
+    ts, es = [], []
+    for k in range(int(seconds / dt)):
+        dL = wL + w * np.sin(pR - pL - np.pi); dR = wR + w * np.sin(pL - pR + np.pi)
+        pL += dL * dt; pR += dR * dt
+        ts.append(k * dt); es.append(np.angle(np.exp(1j * (pR - pL - np.pi))))
+    return np.array(ts), np.array(es)
+
+fig, (ax0, ax1) = plt.subplots(1, 2, figsize=(10.4, 3.4))
+for e0 in (-3.0, -1.5, 0.5, 2.0, 3.1):
+    t, e = phase_error(e0, w=2.0, dw=0.0)
+    ax0.plot(t, e, lw=1.8)
+ax0.axhline(0, color="k", ls=":"); ax0.set_ylim(-np.pi - 0.2, np.pi + 0.2)
+ax0.set_xlabel("time (s)"); ax0.set_ylabel(r"phase error $e$ (rad)"); ax0.grid(alpha=0.3)
+ax0.set_title(r"equal rates, $w$ = 2/s: every start locks to $e = 0$", fontsize=10)
+dw = 2 * np.pi * 0.1
+for w, col in ((2.0, "#3b7dd8"), (0.25, "#e8743b")):
+    t, e = phase_error(0.0, w=w, dw=dw, seconds=12.0)
+    ax1.plot(t, e, lw=1.8, color=col, label=f"$w$ = {w}/s  ($2w$ = {2 * w:.2f})")
+    pred = np.arcsin(dw / (2 * w)) if dw <= 2 * w else float("nan")
+    print(f"w = {w:4}: 2w = {2*w:.2f} vs mismatch {dw:.3f} rad/s -> predicted lag {pred:.3f} rad, "
+          f"measured e after 12 s = {e[-1]:+.3f} rad")
+ax1.set_ylim(-np.pi - 0.2, np.pi + 0.2); ax1.set_xlabel("time (s)"); ax1.grid(alpha=0.3); ax1.legend(fontsize=8)
+ax1.set_title(r"right leg 0.1 Hz faster ($\Delta\omega$ = 0.63 rad/s)", fontsize=10)
+fig.tight_layout(); plt.show()
+t, e = phase_error(0.5, w=2.0, dw=0.0)
+print(f"equal rates, w = 2: e went 0.500 -> {e[int(0.25 / 1e-3)]:.3f} rad after 1/(2w) = 0.25 s "
+      f"(the formula says {0.5 * np.exp(-1):.3f})")
+```
+
+Left: whatever the starting error, the legs settle half a stride apart within
+about a second — the start near $e = \pi$ (a hop) lingers longest before
+tipping off the unstable point. Right: with strong coupling (blue) the faster
+leg is held back and the pair locks with a small constant lag; with weak
+coupling (orange) the error wraps round and round: the legs drift in and out of step.
+
+---
+
 ## What the oscillator commands {.smaller}
 
-Two sinusoids per leg, in anti-phase between the legs; the knee only ever bends
-(a half-wave rectified sine) and the ankle counter-rotates to keep the foot
-roughly level:
+The package's `soc4180.CPG` uses the **locked solution directly**: equal rates,
+$e = 0$ from the start, so ${\color{#3b7dd8}{\phi_L}} = 2\pi f t$ and
+${\color{#3b7dd8}{\phi_R}} = {\color{#3b7dd8}{\phi_L}} + \pi$ with no coupling term to compute —
+nothing ever disturbs an open-loop clock. Each phase is turned into joint targets
+(added to the Week 4 crouch):
 
-$$\theta_{\text{hip}} = A_h \sin\phi,\qquad
-\theta_{\text{knee}} = A_k \max(0, \sin\phi),\qquad
-\theta_{\text{ankle}} = -\tfrac{1}{2} A_h \sin\phi,\qquad
-\phi = 2\pi f t \;(+\pi\ \text{for the other leg})$$
+$$\theta_{\text{hip}} = A_h \sin{\color{#3b7dd8}{\phi}},\qquad
+\theta_{\text{knee}} = A_k \max(0, \sin{\color{#3b7dd8}{\phi}}),\qquad
+\theta_{\text{ankle}} = -\tfrac{1}{2} A_h \sin{\color{#3b7dd8}{\phi}}$$
+
+- $A_h$ (`hip_amplitude`, 0.25 rad) swings the thigh forward and back
+- $A_k$ (`knee_amplitude`, 0.40 rad) bends the knee only on the forward half: $\max(0, \cdot)$ cuts off the negative half, since a knee cannot bend backward
+- the ankle counter-rotates by half the hip swing to keep the foot roughly level
 
 ```{python}
 #| fig-align: center
@@ -392,12 +937,12 @@ idx = {s: kin.leg_qpos_indices(model, s) for s in ("left", "right")}
 act_q = np.array([model.jnt_qposadr[model.actuator_trnid[a, 0]] for a in range(model.nu)])
 cmd = np.array([cpg.control(cpg.settle_time + t) for t in tt])       # actuator order
 full = np.tile(cpg.nominal, (len(tt), 1)); full[:, act_q] = cmd
-fig, axs = plt.subplots(2, 1, figsize=(8.4, 4.0), sharex=True)
+fig, axs = plt.subplots(2, 1, figsize=(8.4, 3.4), sharex=True)
 for ax, side in zip(axs, ("left", "right")):
     i = idx[side]
     for j, lab, col in ((0, "hip pitch", "#3b7dd8"), (3, "knee", "#e8743b"), (4, "ankle pitch", "#2a9d5c")):
         ax.plot(tt, full[:, i[j]] - cpg.nominal[i[j]], lw=2, color=col, label=lab)
-    ax.set_ylabel(f"{side} leg (rad)"); ax.grid(alpha=0.3)
+    ax.set_ylabel(f"{side} (rad)"); ax.grid(alpha=0.3)
 axs[0].legend(fontsize=8, ncol=3, loc="upper right"); axs[1].set_xlabel("time (s)")
 fig.tight_layout(); plt.show()
 ```
@@ -408,16 +953,25 @@ A perfectly plausible stepping pattern. It also has no idea where the floor is.
 
 ## Rhythm is not balance {.smaller}
 
-It falls. So does every parameter setting we tried:
+Three stepping rates × three amplitude pairs, 8 s each:
 
-| frequency | hip | knee | outcome |
-| --- | --- | --- | --- |
-| 0.8 Hz | 0.15 – 0.35 | 0.25 – 0.55 | fell (3 of 3) |
-| 1.2 Hz | 0.15 – 0.35 | 0.25 – 0.55 | fell (3 of 3) |
-| 1.6 Hz | 0.15 – 0.35 | 0.25 – 0.55 | fell (3 of 3) |
+```{python}
+for f in (0.8, 1.2, 1.6):
+    row = []
+    for h, k in ((0.15, 0.25), (0.25, 0.40), (0.35, 0.55)):
+        c = soc4180.CPG(model, frequency=f, hip_amplitude=h, knee_amplitude=k)
+        d = c.initial_data(); fell = None
+        while d.time < 8.0:
+            d.ctrl[:] = c.control(d.time); mujoco.mj_step(model, d)
+            if fell is None and d.qpos[2] < 0.5:
+                fell = d.time
+        row.append(f"A=({h:.2f},{k:.2f}): " + (f"fell at {fell:.1f} s" if fell else "upright"))
+    print(f"{f} Hz   " + "   ".join(row))
+```
 
-The legs move in a perfectly good walking pattern. Nothing keeps the centre of
-mass over the support polygon, so the robot walks its legs and falls anyway.
+**All nine fall, between 1.9 and 3.2 seconds in.** The legs move in a
+perfectly good walking pattern. Nothing keeps the centre of mass over the
+support polygon, so the robot walks its legs and falls anyway.
 
 **This is the value of Week 4 stated negatively.** The LIPM was not decoration;
 it was the entire reason the robot stayed up.
@@ -428,7 +982,10 @@ it was the entire reason the robot stayed up.
 
 Real CPGs are not open loop. In an animal the rhythm is continuously **entrained
 by sensory feedback** — load on the leg, joint angle, skin contact — through
-reflex pathways that adjust the pattern step by step.
+reflex pathways that adjust the pattern step by step. In the phase equations
+that is one more term: $\dot\phi = \omega + (\text{coupling}) + (\text{feedback})$,
+and a feedback term that speeds up or holds back one leg's phase is exactly the
+kind of disturbance Step 3 says the coupling can absorb.
 
 An open-loop oscillator is a CPG with its spinal cord cut off from its body.
 
@@ -520,6 +1077,11 @@ replays. `--walk` runs the gait under the new gains instead.
    more load (read `data.actuator_force`). Does one feedback term save it?
 6. **Cost of transport.** Compute $\int |\tau \dot q|\,dt$ per metre for the
    Week 4 walker. Keep the number — you will compare a learned policy against it.
+7. **Overshoot from the formula.** Using the knee's $M_{ii}$ and the free-body
+   $1/(M^{-1})_{ii}$, predict the overshoot for $k_v \times 0.5$, then measure
+   it with the lifted step response. Which limit is closer?
+8. **Lock the legs.** In `phase_error`, find the weakest coupling $w$ that
+   still locks a 0.2 Hz mismatch, from Step 3, and check it by simulation.
 
 ---
 

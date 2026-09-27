@@ -10,7 +10,13 @@ from __future__ import annotations
 import pathlib
 import urllib.request
 
-from .models import cache_dir
+
+
+def cache_dir() -> pathlib.Path:
+    """Where downloads are kept: $SOC4180_CACHE, or ~/.cache/soc4180."""
+    import os
+
+    return pathlib.Path(os.environ.get("SOC4180_CACHE") or pathlib.Path.home() / ".cache" / "soc4180")
 
 __all__ = ["download", "checkpoint_path"]
 

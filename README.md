@@ -27,6 +27,11 @@ result. Every deck is readable in a browser at
 | [08](weeks/08-ppo/) | Policy gradients and PPO | [deck](https://gnoejh.github.io/soc4180/08-ppo/slides.html) | [![Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gnoejh/soc4180/blob/main/weeks/08-ppo/lab.ipynb) | [`lab_train.py`](weeks/08-ppo/lab_train.py), [`train.py`](weeks/08-ppo/train.py) | GPU (render) |
 | [09](weeks/09-reward/) | Reward shaping | [deck](https://gnoejh.github.io/soc4180/09-reward/slides.html) | [![Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gnoejh/soc4180/blob/main/weeks/09-reward/lab.ipynb) | [`lab_reward.py`](weeks/09-reward/lab_reward.py), [`shape.py`](weeks/09-reward/shape.py) | GPU (render) |
 | [10](weeks/10-scaling/) | Scaling: GPU-parallel training | [deck](https://gnoejh.github.io/soc4180/10-scaling/slides.html) | [![Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gnoejh/soc4180/blob/main/weeks/10-scaling/lab.ipynb) | [`lab_many.py`](weeks/10-scaling/lab_many.py), [`many.py`](weeks/10-scaling/many.py) | **GPU (training)** |
+| [11](weeks/11-planning/) | Planning at run time — MPC by sampling (MPPI) | [deck](https://gnoejh.github.io/soc4180/11-planning/slides.html) | [![Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gnoejh/soc4180/blob/main/weeks/11-planning/lab.ipynb) | [`lab_plan.py`](weeks/11-planning/lab_plan.py) (graded game, edit [`costs.py`](weeks/11-planning/costs.py)), [`plan.py`](weeks/11-planning/plan.py) | CPU |
+| [12](weeks/12-robustness/) | Robustness — PPO push recovery, domain randomisation | [deck](https://gnoejh.github.io/soc4180/12-robustness/slides.html) | [![Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gnoejh/soc4180/blob/main/weeks/12-robustness/lab.ipynb) | [`lab_robust.py`](weeks/12-robustness/lab_robust.py) (graded audit, edit [`audit.py`](weeks/12-robustness/audit.py)), [`robust.py`](weeks/12-robustness/robust.py) | CPU (checkpoints shipped) |
+| [13](weeks/13-imitation/) | Imitation — behaviour cloning, DAgger, distillation | [deck](https://gnoejh.github.io/soc4180/13-imitation/slides.html) | [![Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gnoejh/soc4180/blob/main/weeks/13-imitation/lab.ipynb) | [`lab_imitate.py`](weeks/13-imitation/lab_imitate.py) (graded game, edit [`students.py`](weeks/13-imitation/students.py)), [`imitate.py`](weeks/13-imitation/imitate.py) | CPU |
+| [14](weeks/14-vision/) | Learning from pixels — a camera, a CNN, visual randomisation | [deck](https://gnoejh.github.io/soc4180/14-vision/slides.html) | [![Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gnoejh/soc4180/blob/main/weeks/14-vision/lab.ipynb) | [`lab_look.py`](weeks/14-vision/lab_look.py) (graded game, edit [`eyes.py`](weeks/14-vision/eyes.py)), [`look.py`](weeks/14-vision/look.py) | GPU (render) |
+| [15](weeks/15-language/) | Language — grounding words in pixels, a tiny VLA, an agent | [deck](https://gnoejh.github.io/soc4180/15-language/slides.html) | [![Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gnoejh/soc4180/blob/main/weeks/15-language/lab.ipynb) | [`lab_agent.py`](weeks/15-language/lab_agent.py) (graded game, edit [`instructions.py`](weeks/15-language/instructions.py)), [`ground.py`](weeks/15-language/ground.py) | GPU (render) |
 
 00 is the day-one lecture, taught before 01. 02b is 02's
 **lab class** — the same robot read as code — not a separate week.
@@ -41,7 +46,10 @@ program with flags: it computes, prints what it did, then shows it in the
 simulator; read it in class with the slides open. The lab is the second class
 of the week.
 
-*11–15 are planned; see the syllabus in `CLAUDE.md`.*
+Weeks 11–15 are the AI half's second part: planning, robustness, imitation, pixels and
+language. Their labs are graded games like week 3's: students edit one data file,
+`G` grades it to a score, and a scorer code shows the referee is unchanged.
+Capstone presentations take the final-exam slot.
 
 ## For students
 
@@ -99,7 +107,8 @@ runs on the laptop.
 
 ### Running a week's laptop lab
 
-Every week 0–10 ships two scripts (week 3 ships one, a graded game), and both are complete and explained line by
+Every week 0–10 ships two scripts (week 3 ships one, a graded game); weeks 11–15 ship a
+graded game plus a pipeline script. All are complete and explained line by
 line — nothing is left blank; the exercises are experiments whose expected
 numbers were measured with the scripts themselves:
 
@@ -109,7 +118,8 @@ numbers were measured with the scripts themselves:
   difference on screen between right and wrong.
 - **The pipeline script** (`stack.py`, `mjcf_run.py`, `fk.py`, `anatomy.py`,
   `walk.py`, `servo.py`, `imu.py`, `env_run.py`, `train.py`,
-  `shape.py`, `many.py`). Linear, numbered steps, flags on the command line:
+  `shape.py`, `many.py`, `plan.py`, `robust.py`, `imitate.py`, `look.py`,
+  `ground.py`). Linear, numbered steps, flags on the command line:
   it computes, **prints** what it did, then **replays or shows** the result in
   the simulator. `--no-viewer` runs it headless. This is the file to read in
   class, with the slides open; [`docs/mujoco-calls.md`](docs/mujoco-calls.md)
@@ -181,7 +191,7 @@ be rebuilt from a phone.
 
 **The decks are still not committed, and should not be.** `embed-resources: true`
 inlines reveal.js, images and base64 video into one file, measured at 3.4–5.1 MB
-per deck and ~43 MB for the set. Inlined base64 does not delta-compress, so every
+per deck and ~43 MB for the eleven decks of weeks 0–10 (more now, with 11–15). Inlined base64 does not delta-compress, so every
 re-render would add a fresh full copy to history — tens of megabytes per render,
 permanently. The workflow instead uploads the built site as a Pages *artifact*:
 nothing enters git, there is no `gh-pages` branch, and the URL is stable.

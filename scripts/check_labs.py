@@ -8,7 +8,8 @@ Each week's pipeline script (`stack.py`, `walk.py`, ...) runs with
 `--no-viewer` and the smallest arguments that exercise it; each interactive lab
 (`lab_*.py`) runs with `SOC4180_AUTOCLOSE=4`, which closes its window after
 four seconds. A script passes if it exits 0 within its time limit. Failures
-print the tail of their output. The RL weeks need `uv sync --extra rl`.
+print the tail of their output. The RL weeks (7 on) need `uv sync --extra rl`. Weeks 11-15's
+`lab_*.py` are graded games; their `--grade --problem N` runs one problem headless.
 
 This is the smoke test behind the "every script passed" claims in CLAUDE.md;
 run it after touching the package.
@@ -38,6 +39,16 @@ PIPELINES = [
     ("08", "weeks/08-ppo/train.py --steps 0 --episodes 1"),
     ("09", "weeks/09-reward/shape.py --steps 2048 --episodes 1"),
     ("10", "weeks/10-scaling/many.py --robots 1 2 --procs 1 --seconds 0.5"),
+    ("11", "weeks/11-planning/plan.py --seconds 0.5 --samples 8"),
+    ("11", "weeks/11-planning/lab_plan.py --grade --problem 1"),
+    ("12", "weeks/12-robustness/robust.py --episodes 1"),
+    ("12", "weeks/12-robustness/lab_robust.py --grade --problem 1"),
+    ("13", "weeks/13-imitation/imitate.py --expert policy --demos 2"),
+    ("13", "weeks/13-imitation/lab_imitate.py --grade --problem 1"),
+    ("14", "weeks/14-vision/look.py --train 200 --test 50 --epochs 1"),
+    ("14", "weeks/14-vision/lab_look.py --grade --problem 1"),
+    ("15", "weeks/15-language/ground.py --train 200 --epochs 1"),
+    ("15", "weeks/15-language/lab_agent.py --grade --problem 1"),
 ]
 
 LABS = [
@@ -53,6 +64,11 @@ LABS = [
     ("08", "weeks/08-ppo/lab_train.py"),
     ("09", "weeks/09-reward/lab_reward.py"),
     ("10", "weeks/10-scaling/lab_many.py"),
+    ("11", "weeks/11-planning/lab_plan.py"),
+    ("12", "weeks/12-robustness/lab_robust.py"),
+    ("13", "weeks/13-imitation/lab_imitate.py"),
+    ("14", "weeks/14-vision/lab_look.py"),
+    ("15", "weeks/15-language/lab_agent.py"),
 ]
 
 

@@ -19,8 +19,8 @@ it and `uv sync` reproduces it, so a lab may only depend on what the lock file
 installs (plus `--extra rl` from week 7). Colab is the no-install fallback for
 the notebook, not the primary lab environment. A week is not finished until it has a lab-class
 artifact students can edit and run locally — week 2's `lab_viewer.py` and week
-2b's `lab_body.py` are the pattern, and **every week 0–10 now has one** (see
-*Lab scripts* below).
+2b's `lab_body.py` are the pattern, and **every week 0–15 now has one** (see
+*Lab scripts* below; weeks 11–15 are graded games).
 
 **Week 0 is the day-one stack/vocabulary lecture, taught before Week 1.** Every
 week names which of its five layers it belongs to.
@@ -32,7 +32,9 @@ This replaces the older course description, which covered deep learning broadly
 neuroscience, MicroDuck and NVIDIA IsaacSim. **Those are deliberately out of
 scope.** MicroDuck went because there is no hardware; IsaacSim because it cannot
 run on Colab, which the zero-install requirement depends on. Generative and
-agentic content returns only where it attaches to the robot, in weeks 14–15.
+agentic content returns only where it attaches to the robot, in weeks 14–15
+(a 20k-parameter words-to-pixels attention model and a skill agent, not LLM
+training; an LLM planner appears only as a non-executed code block).
 
 | Wk | Topic | Deck | Status |
 | --- | --- | --- | --- |
@@ -47,11 +49,11 @@ agentic content returns only where it attaches to the robot, in weeks 14–15.
 | 08 | Policy gradients and PPO | `08` | built; `lab_train.py` + `train.py`; Pages-green since the OSMesa/triton fix (below); **not re-tested on Colab since 2026-09-20** |
 | 09 | Reward shaping and diagnosing failed runs | `09` | built; `lab_reward.py` + `shape.py`; Pages-green, same history as 08; **not re-tested on Colab since 2026-09-20** |
 | 10 | Scaling: GPU-parallel locomotion training | `10` | built; GPU training **runs on A100, untimed**; `lab_many.py` + `many.py`; renders locally only with `--extra gpu` synced and the machine quiet |
-| 11 | Domain randomization and robustness | — | not written |
-| 12 | Sim-to-real, measured | — | not written |
-| 13 | Perception and imitation | — | not written |
-| 14 | Vision-language-action: grounding instructions | — | **blocked** |
-| 15 | Agentic robotics: perception, reasoning, action | — | **blocked** |
+| 11 | Planning at run time: MPC by sampling (MPPI), MuJoCo as the model | `11` | built 2026-09-27; game `lab_plan.py` + `costs.py` (ref 6/6), `plan.py`; package `planning.py`; **not Pages- or Colab-tested** |
+| 12 | Robustness: PPO push recovery, domain randomisation, sim-to-real gap measured in sim | `12` | built 2026-09-27; game `lab_robust.py` + `audit.py` (ref 5/5), `robust.py`; checkpoints shipped; **not Pages- or Colab-tested** |
+| 13 | Imitation: behaviour cloning, DAgger, distillation | `13` | built 2026-09-27; game `lab_imitate.py` + `students.py` (ref 4/4), `imitate.py`; package `imitation.py`; **not Pages- or Colab-tested** |
+| 14 | Learning from pixels: a head camera, a CNN, visual randomisation | `14` | built 2026-09-27; game `lab_look.py` + `eyes.py` (ref 5/5), `look.py`; package `vision.py`; **not Pages- or Colab-tested** |
+| 15 | Language: grounding words in pixels, a tiny VLA, an agent that verifies | `15` | built 2026-09-27; game `lab_agent.py` + `instructions.py` (ref 5/5), `ground.py`; package `agent.py`; **not Pages- or Colab-tested** |
 
 Capstone presentations occupy the final-exam slot. Weeks 0 and 1 share the first
 session — the stack lecture is short, the MuJoCo lab is hands-on. **That session
@@ -59,7 +61,9 @@ is now the longest of the course**: week 1 grew from 14 slides to 38 when MJCF
 was taught properly, so plan to split it or set part of the MJCF read as
 preparation.
 
-**Current state (2026-09-21).** Every deck 0–10 renders on the Pages runner
+**Current state (2026-09-27).** Weeks 11–15 added (below): rendered locally,
+`check_labs.py --only 11 12 13 14 15` 15 of 15, pushed 2026-09-27, not yet
+Pages- or Colab-verified. Weeks 0–10 as of 2026-09-21: every deck 0–10 renders on the Pages runner
 (all twelve green on 2026-09-20, after the 2b import-order and the
 OSMesa/triton fixes) and every week ships two complete, explained lab scripts
 that `scripts/check_labs.py` runs 24 of 24. **None of the weeks has been opened
@@ -67,9 +71,15 @@ on Colab since the 2026-09-20 rework**; weeks 1–9 were Colab-verified before
 it, weeks 1 (MJCF material) and 2b never. Week 10 is built and its GPU training path now runs on a Colab
 A100, after a long series of dependency failures documented below —
 but **no run has been timed**, so `num_timesteps = 5M` is a reduction from a
-known-too-slow figure rather than a measured one. Weeks 11–15 are designed and
-unwritten; 14–15 additionally depend on a trained locomotion policy that does
-not yet exist.
+known-too-slow figure rather than a measured one.
+
+**Weeks 11–15 (built 2026-09-27, on request: "more on AI and training and
+advanced topics").** The old plan (DR, sim-to-real, perception+imitation, VLA,
+agentic; 14–15 blocked on a trained walking policy) was redesigned so that no
+week depends on a learned walker: 11 planning, 12 robustness, 13 imitation,
+14 pixels, 15 language + agents. Every lab is a graded game on the shared
+`soc4180.game` machinery. See *Weeks 11–15* below for what was measured,
+including three designs that failed and why.
 
 **Week 8 facts, measured.** REINFORCE from scratch on CartPole: 60 -> 489 in
 173 s, using a **batch of 8 episodes per update** — with one episode per update
@@ -200,7 +210,7 @@ uv run scripts/instructor.py open|seal         # encrypted answers <-> weeks/*/i
 There is no test suite or linter configured. Add the tooling before inventing
 commands for it.
 
-### Lab scripts, weeks 0–10: the standard (set 2026-09-20)
+### Lab scripts, weeks 0–10: the standard (set 2026-09-20; weeks 11–15 are games, see *Weeks 11–15*)
 
 **Every week ships two complete, explained scripts, and nothing is left
 blank.** The instructor asked for labs that are hands-on with complete, fully
@@ -436,6 +446,101 @@ first thing a student drags. Both `view.py --static` and the week 2 lab copy
 `ctrl` into `qpos[jnt_qposadr[actuator_trnid[:, 0]]]` every tick (every G1
 actuator drives one hinge; `ctrlrange == jnt_range`), and copy `qpos` back into
 `ctrl` whenever the script sets a pose so the sliders show it.
+
+## Weeks 11–15 (built 2026-09-27)
+
+**Every lab is a graded game on `soc4180.game`** (week 3's shape, shared):
+`read_answers` parses the answers file as data (`...` → `Blank(lineno)`, plain
+values, names defined above, `{**X}` and + − × ÷ on numbers), `need(answers,
+NAME)` refuses a blank and names its lines, `Problem(title, text, make)`,
+`Attempt.step/verdict/draw/images`, `grade_headless`, `run_viewer` (digits
+play, `G` grades, the scorer code is a hash of the lab file; the viewer reopens
+when an attempt brings a different model; `set_images` draws a picture in the
+corner). Week 3 keeps its own copy — its scorer code must not move. Reference
+answers live in each week's `instructor/` (gitignored; **the instructor must
+re-seal**: 11 `costs_solution.py`, 12 `audit_solution.py`, 13
+`students_solution.py`, 14 `eyes_solution.py`, 15 `instructions_solution.py`).
+
+**Grade by margins, never on a knife edge.** Several first-draft problems
+were one weight wide (week 11's hop-free CRANE passed at `plant_right` 1000
+and failed at 500 and 2000) — those were changed or not graded. Every graded
+problem now has a reference with room on both sides and a measured wrong
+answer that fails. Falls are chaotic across machines (see *Cross-platform*),
+so the pass lines sit well away from the reference numbers.
+
+### 11 — planning (MPPI)
+
+- `planning.MPPI.plan`: `mj_getState(FULLPHYSICS)` → K perturbed knot plans
+  (σ on the 12 leg servo targets, 10 knots × 40 ms) → `mujoco.rollout.rollout`
+  on one `MjData` per thread → cost on `Rollouts` → `exp(−(J−Jmin)/λ)` average →
+  shift. `xfrc_applied` is not part of the state: the planner never sees the
+  shove coming. `planning_model()` adds six sensors with `MjSpec.add_sensor`
+  so costs read feet/hands/head/CoM from `sensordata`.
+- Hold falls at 70 N sideways (stands at 65) — **it takes more than 3 s to hit
+  the floor**, so `plan.py` runs 4 s and counts a final tilt > 15° as a fall.
+  MPPI (64 × 0.4 s) stands at 150 and 300 N **by stepping, and keeps walking
+  sideways ~3 m**: nothing in the cost rewards stopping.
+- Samples: 2 fall at 150; 4 and 16 stand at 150, fall at 300; 16 with σ 0.25
+  (0.2–0.35 all) stand at 300. ~115 ms per decision on 16 threads (0.35× real
+  time); one 64 × 200 rollout 93 ms.
+- Costs: only `fall` falls **with no push** (sparse, seen too late); only
+  `still` falls when pushed; all zero falls in 1.4 s. Squat: height weight 20
+  **never moves** (every sample that goes down also tilts — a local minimum),
+  100 reaches 0.503 m. MPPI cannot squat with the lecture's standing weights at all.
+- Model error (`--model-mass`, planner only): −10 kg falls at 150; +10/+20
+  stand at 150, fall at 300; +40 falls at 150.
+
+### 12 — robustness
+
+- **Residual PPO on the week-4 walker failed and was dropped**: the walker
+  survives 10/10 with zero residual but 4/10 with 0.005 rad of per-step action
+  noise and 0/10 at 0.02 — any exploration knocks it over, so 1 M steps made it
+  worse (0/20). Push recovery while standing is the week's task instead.
+- `G1PushEnv` checkpoints: 3 M steps, 16 procs, ~16 min each on 36 cores.
+  **Evaluate with sideways shoves of exact size**; random-direction shoves are
+  harder (front/back) and made the first grid look like DR did nothing.
+- A privileged teacher (`--privileged`, same budget) was **worse** in the
+  nominal world (3/10 at 60 N); deleted, not shipped. Do not claim privileged
+  information helps here.
+- The deck downloads `push_*.zip` from raw GitHub on Colab
+  (`soc4180.checkpoints.download`) — the files must be pushed first.
+
+### 13 — imitation
+
+- The unifying rule, measured three ways: **the expert's action must be a
+  function of what the student sees, deterministic, and closed loop.** Walker
+  (open loop, time-indexed): clock+time walks, adding sensors lowers the MSE and
+  falls. PPO policy: cloning works from its own 42 numbers. MPPI: its action
+  depends on its internal plan and random samples — the student falls at 60 N
+  where doing nothing survives, and DAgger makes the MSE *rise*.
+- DAgger's first round mixes teacher and student 50/50 (`beta`); results
+  fluctuate between rounds (history-5 blind student: 3 → 19 → 16) — quote the
+  final round, 20 episodes.
+
+### 14 — pixels
+
+- The camera is on `torso_link` at `pos (0.08, 0, 0.45)`, `xyaxes (0,−1,0, 0,0,1)`,
+  fovy 90: 1.28 m high, turns with the waist. A mocap ball needs `mj_forward`
+  after `mocap_pos` changes or the first render shows it at its old place.
+- **`torch.set_num_threads(4)` everywhere**: 8 threads gave 1.1/26.8/18.9°,
+  4 threads 1.0/27.8/15.2° for the same seeds. Deck, `look.py` and `lab_look.py`
+  now agree to the digit.
+- First-layer filters of `BallNet` look like noise — that figure was cut; do not
+  claim the network "learned red".
+
+### 15 — language
+
+- `HeatNet` attention: the first version with normalised features and a
+  temperature of 3 collapsed to a one-hot softmax (entropy 0.001) and never
+  trained; with raw features and 1/√C it trains. The unscaled version *also*
+  trains with this architecture, so do not claim √C is what saves it here.
+- A 20k-parameter model plus cross-entropy over 16×16 cells: 2.0° on trained
+  phrasings, 2.1° on new ones, ~31° (chance) for "crimson". Absent balls still
+  get confident peaks (up to 0.98) — the agent checks pixel colour instead.
+- `agent.look` verifies the colour of the pixels **where the network points**
+  (not the image centre — the ball's elevation puts it off-centre) and |az| < 5°.
+- The Anthropic tool-use loop in the deck is a plain fenced block (no key, no
+  `anthropic` in `uv.lock`); model id `claude-opus-5`.
 
 ## Adding a week
 

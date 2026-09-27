@@ -23,7 +23,7 @@ from ._gl import GL_BACKEND  # noqa: F401  (sets MUJOCO_GL before mujoco loads)
 
 import mujoco
 
-__all__ = ["DEFAULT_REWARD", "G1WalkEnv", "walker_actions"]
+__all__ = ["DEFAULT_REWARD", "G1PushEnv", "G1WalkEnv", "NOMINAL_WORLD", "RANDOM_WORLD", "walker_actions"]
 
 #: Reward term weights. Week 9 removes these one at a time.
 DEFAULT_REWARD = {
@@ -201,6 +201,115 @@ class G1WalkEnv(_BASE):
             return True
         tilt = float(np.linalg.norm(gravity_body(self.data)[:2]))
         return tilt > self.max_tilt
+
+
+#: What G1PushEnv can randomise, name -> (low, high) of a uniform draw per episode.
+#: (1, 1) and (0, 0) mean "fixed at nominal".
+NOMINAL_WORLD = {
+    "friction": (1.0, 1.0),     # scale on every geom's sliding friction
+    "mass": (0.0, 0.0),         # kilograms added to the torso
+    "kp": (1.0, 1.0),           # scale on every servo's stiffness (and matching damping)
+}
+RANDOM_WORLD = {"friction": (0.3, 1.2), "mass": (-5.0, 10.0), "kp": (0.7, 1.3)}
+
+
+class G1PushEnv(G1WalkEnv):
+    """Stand in the crouch and survive a shove. Weeks 12 and 13.
+
+    Same observation, action and reward as ``G1WalkEnv`` (with the target
+    velocity at zero, so standing still is the goal), but every episode:
+
+    - a push of a random size up to ``push_max`` newtons, in a random
+      horizontal direction, hits the torso for ``push_seconds`` at a random
+      moment inside ``push_window``;
+    - the world is drawn from ``world`` -- friction, added torso mass and
+      servo stiffness, each uniform in its range (``NOMINAL_WORLD`` fixes them,
+      ``RANDOM_WORLD`` is week 12's domain randomisation);
+    - with ``privileged=True`` the observation gains nine numbers no real
+      robot can measure: the pelvis's linear velocity (3) and height (1), the
+      push force being applied now (2), and this episode's friction, mass and
+      stiffness (3). That is a *teacher's* observation (week 13).
+
+    Measured (week 12, `robust.py`, sideways shoves, 10 episodes): holding
+    the crouch survives 60 N; PPO trained 3M steps in the nominal world 80 N;
+    on randomised worlds, 100 N -- and 120 N with a torso 15 kg heavier,
+    where holding the crouch falls with no shove at all.
+    """
+
+    PRIVILEGED = 9
+
+    def __init__(self, *, push_max: float = 200.0, push_window=(1.0, 3.0), push_seconds: float = 0.2,
+                 world: dict | None = None, privileged: bool = False, episode_seconds: float = 5.0,
+                 control_hz: float = 50.0, action_scale: float = 0.3, reward_weights: dict | None = None):
+        super().__init__(target_velocity=0.0, control_hz=control_hz, action_scale=action_scale,
+                         episode_seconds=episode_seconds, reward_weights=reward_weights)
+        self.world = dict(NOMINAL_WORLD)
+        if world:
+            unknown = set(world) - set(NOMINAL_WORLD)
+            if unknown:
+                raise ValueError(f"unknown world parameters: {sorted(unknown)}")
+            self.world.update(world)
+        self.push_max, self.push_window, self.push_seconds = push_max, push_window, push_seconds
+        self.privileged = privileged
+        self.torso = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, "torso_link")
+        self._friction0 = self.model.geom_friction[:, 0].copy()
+        self._mass0 = float(self.model.body_mass[self.torso])
+        self._gain0 = self.model.actuator_gainprm[:, 0].copy()
+        self._bias0 = self.model.actuator_biasprm[:, 1:3].copy()
+        n = self.observation_space.shape[0] + (self.PRIVILEGED if privileged else 0)
+        self.observation_space = spaces.Box(-np.inf, np.inf, (n,), dtype=np.float32)
+        self.drawn = {k: v[0] for k, v in self.world.items()}
+        self.push_force = np.zeros(2)
+        self.push_time = 0.0
+
+    def set_world(self, **values):
+        """Apply one world: friction scale, added torso mass (kg), servo stiffness scale."""
+        self.drawn.update(values)
+        self.model.geom_friction[:, 0] = self._friction0 * self.drawn["friction"]
+        self.model.body_mass[self.torso] = self._mass0 + self.drawn["mass"]
+        k = self.drawn["kp"]
+        self.model.actuator_gainprm[:, 0] = self._gain0 * k
+        self.model.actuator_biasprm[:, 1] = self._bias0[:, 0] * k
+        self.model.actuator_biasprm[:, 2] = self._bias0[:, 1] * np.sqrt(k)   # keep the damping ratio
+
+    def reset(self, *, seed=None, options=None):
+        _BASE.reset(self, seed=seed)
+        rng = self.np_random
+        self.set_world(**{k: float(rng.uniform(*v)) for k, v in self.world.items()})
+        angle = rng.uniform(0.0, 2.0 * np.pi)
+        size = rng.uniform(0.0, self.push_max) if self.push_max else 0.0
+        self.push_force = size * np.array([np.cos(angle), np.sin(angle)])
+        self.push_time = float(rng.uniform(*self.push_window))
+        mujoco.mj_resetData(self.model, self.data)
+        self.data.qpos[:] = self.nominal
+        self.data.qpos[2] = 0.72
+        self.data.qpos[self.leg_qpos] += rng.uniform(-0.02, 0.02, len(self.leg_qpos))
+        mujoco.mj_forward(self.model, self.data)
+        self._prev_action[:] = 0.0
+        self._step = 0
+        return self._observation(), {}
+
+    def step(self, action):
+        # The push is on for whole decisions: at 50 Hz, 0.2 s is ten of them.
+        t = self.data.time
+        on = self.push_time <= t < self.push_time + self.push_seconds
+        self.data.xfrc_applied[self.torso, :2] = self.push_force if on else 0.0
+        return super().step(action)
+
+    def _observation(self) -> np.ndarray:
+        obs = super()._observation()
+        if not getattr(self, "privileged", False):
+            return obs
+        t = self.data.time
+        on = self.push_time <= t < self.push_time + self.push_seconds
+        R = self.data.xmat[1].reshape(3, 3)                    # pelvis orientation
+        extra = np.concatenate([
+            R.T @ self.data.qvel[0:3],                          # pelvis velocity, body frame
+            [self.data.qpos[2]],                                # height
+            self.push_force / 100.0 if on else np.zeros(2),     # the shove, in 100 N
+            [self.drawn["friction"], self.drawn["mass"] / 10.0, self.drawn["kp"]],
+        ])
+        return np.concatenate([obs, extra]).astype(np.float32)
 
 
 def gravity_z(data) -> float:

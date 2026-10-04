@@ -340,6 +340,13 @@ Facts these scripts and the new figures established, each measured:
   short after 0.5 s. Sag vs `kp`: 11.0 mm at 500, 9.4 at 600, 6.0 at 750 (the
   $1/k_p$ law), falls at 400 and at 1000. The knee exceeds 50 N·m for only
   **4.0%** of the walk and that limit still drops the robot.
+- **Week 5's P/PD/PI/PID slides (2026-10-04)** simulate one knee (M from `mj_fullM`,
+  kp 500, 0.5 rad step, constant 10 N·m load, joint damping ζ 0.15). Measured:
+  P 19 ms rise, 55.6 % overshoot, 20 mrad final error; PD 78 ms, 0.0 %, 20 mrad;
+  PI 19 ms, 57.0 %, 1.7 mrad at 4 s, inside 2 % after 1.0 s; PID 72 ms, 0.0 %,
+  0.8 mrad, inside 2 % after 0.17 s. **The textbook table says PD is "fast"; here
+  PD's rise is slower than P's**, because P is quick only by ringing. The deck
+  says so. P and PD never get inside 2 % (sag is 4 % of the step).
 - Week 6's complementary filter: on the biased-gyro walk, mean error is
   smallest at $\alpha = 0.9985$ ($\tau = 1.32$ s) and final error at 0.9977.
   Both bottom out near 0.998 — an earlier draft claimed they pulled opposite

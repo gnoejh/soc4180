@@ -509,6 +509,119 @@ $${\color{#3b7dd8}{q}} - {\color{#e8743b}{q_{\text{ref}}}} = \frac{{\color{#2a9d
 
 ---
 
+## P, PD, PI, PID: what each term buys {.smaller}
+
+Our servo is $\tau = {\color{#c0392b}{k_p}}\,e - {\color{#8e44ad}{k_v}}\,\dot q$ with $e = q_{\text{ref}} - q$: a **PD** controller. Two more terms complete the family:
+
+$$\tau = \underbrace{{\color{#c0392b}{k_p}}\,e}_{\text{P: now}} + \underbrace{{\color{#2a9d5c}{k_i}}\!\int e\,dt}_{\text{I: the past}} + \underbrace{{\color{#8e44ad}{k_d}}\,\dot e}_{\text{D: the trend}}$$
+
+- **P** reacts to the error now. **I** adds up the error over time, so it keeps growing until the error is zero. **D** reacts to how fast the error is changing, so it brakes before the target. (For a constant command $\dot e = -\dot q$, which is our $-k_v\dot q$.)
+
+The textbook comparison (a rule of thumb, not a measurement; the measured version is on the next slide):
+
+| Controller | Rise time | Overshoot | Steady-state error |
+| --- | --- | --- | --- |
+| P | medium | often | usually non-zero |
+| PD | fast | small | may remain |
+| PI | medium | moderate | zero |
+| PID | fast | small | zero |
+
+The next two slides test this table on the knee, with a constant gravity load.
+
+---
+
+## P, PD, PI, PID on one joint, measured {.smaller}
+
+The knee's inertia $M$ and ${\color{#c0392b}{k_p}} = 500$, a 0.5 rad step, and a constant 10 N·m gravity load pulling back. The joint also has a little natural damping ($\zeta_{\text{joint}} = 0.15$), so "P" is not frictionless. Gains: P $= (k_p)$; PD adds ${\color{#8e44ad}{k_v}}$ for $\zeta = 1$; PI adds ${\color{#2a9d5c}{k_i}} = 300$; PID has both.
+
+```{python}
+#| fig-align: center
+Mk, KP, TG, KI, STEP = M_knee, kp[3], 10.0, 300.0, 0.5
+B_JOINT = 0.15 * 2 * np.sqrt(KP * Mk)
+KD = 2 * np.sqrt(KP * Mk)
+CTRL = {"P": (KP, 0, 0), "PD": (KP, KD, 0), "PI": (KP, 0, KI), "PID": (KP, KD, KI)}
+COL = {"P": "#c0392b", "PD": "#8e44ad", "PI": "#2a9d5c", "PID": "k"}
+
+def run(kpg, kdg, kig, T=4.0, dt=2e-4):
+    n = int(T / dt); q = v = I = 0.0
+    out = np.zeros((n, 5))                       # q, tau_P, tau_I, tau_D, tau_total
+    for k in range(n):
+        e = STEP - q; I += e * dt
+        tp, ti, td = kpg * e, kig * I, -kdg * v
+        v += (tp + ti + td - B_JOINT * v - TG) / Mk * dt     # semi-implicit Euler
+        q += v * dt
+        out[k] = q, tp, ti, td, tp + ti + td
+    return np.arange(n) * dt, out
+
+runs = {k: run(*g) for k, g in CTRL.items()}
+def stats(t, q):
+    rise = t[np.argmax(q >= 0.9 * STEP)] - t[np.argmax(q >= 0.1 * STEP)]
+    out_of_band = np.abs(q - STEP) > 0.02 * STEP
+    settle = t[np.where(out_of_band)[0][-1]] if out_of_band.any() else 0.0
+    return rise, max(q.max() - STEP, 0) / STEP, STEP - q[-1], settle
+
+print(f"load/kp = {TG / KP * 1000:.0f} mrad sag expected without an I term")
+print(f"{'':4s} {'rise 10-90%':>12s} {'overshoot':>10s} {'final error':>12s} {'within 2% after':>16s}")
+for k, (t, o) in runs.items():
+    r, os_, ss, st = stats(t, o[:, 0])
+    print(f"{k:4s} {r * 1000:9.0f} ms {os_:10.1%} {ss * 1000:9.2f} mrad {st:12.2f} s")
+
+fig, ax = plt.subplots(1, 2, figsize=(10.4, 3.5), gridspec_kw={"width_ratios": [1.5, 1]})
+for k, (t, o) in runs.items():
+    ls = "--" if k == "P" else "-"          # P and PI share their first 0.3 s: draw P dashed on top
+    ax[0].plot(t, o[:, 0], lw=2, ls=ls, color=COL[k], label=k, zorder=3 if k == "P" else 2)
+    ax[1].plot(t, STEP - o[:, 0], lw=2, ls=ls, color=COL[k], label=k, zorder=3 if k == "P" else 2)
+ax[0].axhline(STEP, color="#e8743b", ls="--", label=r"$q_{ref}$")
+ax[0].set_xlim(0, 1.5); ax[0].set_xlabel("time after the step (s)"); ax[0].set_ylabel("knee angle (rad)")
+ax[0].set_title("response to the step", fontsize=10); ax[0].legend(fontsize=8); ax[0].grid(alpha=0.3)
+ax[1].set_xlim(0, 4); ax[1].set_ylim(-0.05, 0.1); ax[1].axhline(0, color="0.5", lw=0.8)
+ax[1].set_xlabel("time (s)"); ax[1].set_ylabel("error $e$ (rad)")
+ax[1].set_title("what is left over", fontsize=10); ax[1].grid(alpha=0.3)
+fig.tight_layout(); plt.show()
+```
+
+---
+
+## Reading the comparison {.smaller}
+
+- **P and PD keep the sag.** The error settles at load $/k_p$ = 20 mrad: a spring needs an error to push. The D term changes *how* it arrives, not *where*.
+- **The I term is the only one that removes it**, by integrating the leftover error until the extra torque equals the load. PI and PID head for zero: after 4 s the error is 1.7 mrad (PI) and 0.8 mrad (PID), still shrinking, against 20 for P and PD.
+- **D is the brake.** With D the overshoot disappears (0.0 %, against 56 % for P); without it the lightly damped joint rings. PD's rise time is *longer* than P's here: P is quick because it is under-damped, and the quickness is the ringing.
+- **I costs speed and invites ringing**: PI overshoots as much as P (57 %) and needs 1.0 s to come within 2 %, because the integral keeps pushing after the error crosses zero. PID tames that with D: 0.0 % overshoot, inside 2 % after 0.17 s. P and PD never get inside 2 %, since their 20 mrad sag is 4 % of the step.
+
+This matches the table in direction, and the measured numbers above are the real ones for this joint. The G1's servo is **PD**: it sags (week 5, next), and MuJoCo has no integral term.
+
+---
+
+## The three terms, drawn as signals {.smaller}
+
+For the PID run, the torque each term contributes over time — the sum is what the motor delivers:
+
+```{python}
+#| fig-align: center
+t, o = runs["PID"]
+fig, ax = plt.subplots(1, 2, figsize=(10.4, 3.5))
+for j, (lab, col) in enumerate((("P  $k_p e$", "#c0392b"), ("I  $k_i\int e$", "#2a9d5c"),
+                                ("D  $-k_d \dot q$", "#8e44ad"), ("sum", "k"))):
+    ax[0].plot(t, o[:, j + 1], lw=2 if lab != "sum" else 2.4, color=col, label=lab,
+               ls="-" if lab != "sum" else "--")
+ax[0].axhline(TG, color="0.5", ls=":"); ax[0].text(0.9, TG + 15, "load 10 N m", fontsize=8, color="0.4")
+ax[0].set_xlim(0, 1.5); ax[0].set_ylim(-170, 270); ax[0].set_xlabel("time (s)"); ax[0].set_ylabel("torque (N m)")
+ax[0].set_title("PID: each term's torque", fontsize=10); ax[0].legend(fontsize=8); ax[0].grid(alpha=0.3)
+t, o = runs["PD"]
+ax[1].plot(t, o[:, 1], color="#c0392b", lw=2, label="P"); ax[1].plot(t, o[:, 3], color="#8e44ad", lw=2, label="D")
+ax[1].plot(t, o[:, 4], "k--", lw=2.4, label="sum")
+ax[1].axhline(TG, color="0.5", ls=":"); ax[1].set_xlim(0, 1); ax[1].set_xlabel("time (s)")
+ax[1].set_title("PD: no I, so P ends at the load", fontsize=10); ax[1].legend(fontsize=8); ax[1].grid(alpha=0.3)
+fig.tight_layout(); plt.show()
+print(f"PID at 4 s: P {runs['PID'][1][-1,1]:+.2f}, I {runs['PID'][1][-1,2]:+.2f}, D {runs['PID'][1][-1,3]:+.2f} N m "
+      f"(sum {runs['PID'][1][-1,4]:+.2f} = load {TG:.0f})")
+```
+
+At 4 s the P term is down to 0.4 N·m (almost no error) and the **I term carries 9.6 N·m of the load**: it has *remembered* the sag. PD has no memory, so its P term must stay at 10 N·m, which means an error of 20 mrad for ever.
+
+---
+
 ## Sag, measured on one joint {.smaller}
 
 The robot stands; its left arm is held straight out in front (shoulder pitch

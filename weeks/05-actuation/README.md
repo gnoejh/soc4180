@@ -35,6 +35,11 @@
   predicts 21.8%, and the robot sits between the two limits. (An earlier version
   quoted 9% — that run let a foot touch the floor mid-step; `servo.py` does too,
   hence its 4.6%.)
+- P / PD / PI / PID on the knee (0.5 rad step, constant 10 N·m load, joint
+  damping ζ 0.15; slides only, no script): P 19 ms rise, 55.6 % overshoot, 20 mrad
+  final error; PD 78 ms, 0.0 %, 20 mrad; PI 19 ms, 57.0 %, 1.7 mrad at 4 s; PID
+  72 ms, 0.0 %, 0.8 mrad. Only the I term removes the sag, and the G1's servo is
+  PD. PD's rise is slower than P's: P is quick because it rings.
 - Sag, one joint (left arm straight out, shoulder only re-tuned): gravity torque
   4.73 N·m, sag 9.45 mrad at $k_p = 500$ against $\tau_g/k_p = 9.46$; the $1/k_p$ law
   holds to 0.05 mrad from 125 to 2000.

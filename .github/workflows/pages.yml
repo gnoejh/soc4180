@@ -18,6 +18,11 @@ on:
       - "uv.lock"
       - ".github/workflows/pages.yml"
   workflow_dispatch:
+    inputs:
+      weeks:
+        description: "Only render these week folders (space-separated, e.g. 05-actuation); the other decks are copied from the live site. Empty = every week."
+        required: false
+        default: ""
 
 permissions:
   contents: read
@@ -88,7 +93,15 @@ jobs:
         # are reported by a later job, so the decks that did render still ship.
         run: |
           failed=""
+          only="${{ inputs.weeks }}"
           for qmd in weeks/*/slides.qmd; do
+            slug=$(basename "$(dirname "$qmd")")
+            if [ -n "$only" ] && ! echo " $only " | grep -q " $slug "; then
+              # Not selected: keep the deck that is already published, so the
+              # artifact deploy does not drop it from the site.
+              curl -fsSL -o "weeks/$slug/slides.html"                 "https://gnoejh.github.io/soc4180/$slug/slides.html"                 && echo "kept live deck: $slug" || echo "no live deck for $slug"
+              continue
+            fi
             echo "::group::render $qmd"
             if uv run quarto render "$qmd"; then
               echo "ok: $qmd"

@@ -78,7 +78,20 @@ import numpy as np
 import soc4180
 from soc4180.walking import GaitParams, WalkingController
 
+# =====================================================================================
+# YOUR PART: everything from here down to the end of torque_from_law (section 1).
+# Save the file and run it again after an edit; the keys only switch between
+# what is already written here. Below section 1 is the lab's machinery: read it,
+# do not change it.
+# =====================================================================================
+
 # name, kp scale, kv scale, torque limit (N m, or None). Keys 1-9. Add your own.
+#
+# TO DO (experiment 6): add rows below "add your own" with a smaller kp scale,
+# e.g. ("kp x 0.9", 0.9, 1.0, None), then 0.8, 0.7 ... Press the row's number,
+# watch whether it walks all eight steps, and press ENTER at the end for the
+# mean sag. Find the lowest kp scale that still walks; write down kp and sag
+# for every row you try and plot sag against kp on paper.
 SERVOS = [
     ("as shipped: kp 500, no limit",   1.0, 1.0, None),
     ("torque limit 50 N m",            1.0, 1.0, 50.0),
@@ -89,6 +102,10 @@ SERVOS = [
     # add your own below
 ]
 
+# TO DO (experiment 5): set SERVO_HZ = 500, run, press H, and explain what you
+# see with week 1's exercise 14. Then put it back to 1000.
+# REFERENCE_TORQUE only changes the colours; lower it to see smaller torques go red.
+# Do not change CONTROL_DT: it is the walker's timing, not the servo's.
 REFERENCE_TORQUE = 100.0     # N m that paints a sphere fully red when there is no limit
 SERVO_HZ = 1000              # rate of YOUR servo loop after H (500 is unstable: try it)
 CONTROL_DT = 0.002           # the walker's targets update at 500 Hz regardless
@@ -96,6 +113,12 @@ CONTROL_DT = 0.002           # the walker's targets update at 500 Hz regardless
 # The servo laws L cycles through. "PD" is torque_from_pd below (yours to edit);
 # the others are built from its terms, one per letter: P = kp (ctrl - q),
 # I = ki * (the error summed over time), D = -kv qdot. Add a combination to try it.
+#
+# TO DO (experiment 7): run, press L repeatedly, and for each law write down
+# whether the robot walks or falls, when, and its sag (ENTER). Then:
+#   - add "I" and "ID" to LAWS and predict what they do before you run them;
+#   - set KI_RATIO = 0.2, run PID again (--law PID, then H), and explain the
+#     fall: what does the integral keep adding while the target keeps moving?
 LAWS = ["PD", "P", "PI", "PID", "D"]
 LAW = "PD"                   # the law H hands over to (or: --law PID)
 KI_RATIO = 0.05              # ki = KI_RATIO * kp per joint (0.1 walks 0.43 m, 0.2 falls)
@@ -113,6 +136,14 @@ def torque_from_pd(kp, kv, ctrl, q, qdot): # Compute the torque for all actuator
     The first term is a spring pulling the joint toward its target; the
     second is a damper resisting motion. With kv = 2 sqrt(kp M) the pair is
     critically damped, which every G1 leg joint is (zeta = 1.00 on all twelve).
+
+    TO DO (experiment 2): run, press H -- the walk must not change. Then edit
+    the line below one way at a time, save, run, press H, and describe what
+    the robot does:
+      - delete "- kv * qdot"          (no damper: what do the joints do?)
+      - write (q - ctrl) for (ctrl - q)   (the spring pushes the wrong way)
+      - multiply kv by 4, then by 0.25    (compare with SERVOS rows 1 and 6)
+    Put the line back exactly as it is now before you go on.
     """
     return kp * (ctrl - q) - kv * qdot
 
@@ -124,6 +155,10 @@ def torque_from_law(law, kp, kv, ki, ctrl, q, qdot, integral):
     name adds the terms whose letters it contains: P the spring, I the
     integral (it keeps pushing while any error remains -- the term that can
     remove sag), D the damper.
+
+    Optional, for the fast: add your own term, give it a letter, and add a
+    name with that letter to LAWS. For example "G": a constant extra torque
+    per joint that holds up the body's weight, so the spring has less to do.
     """
     if law == "PD":
         return torque_from_pd(kp, kv, ctrl, q, qdot)

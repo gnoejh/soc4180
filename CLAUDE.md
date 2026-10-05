@@ -235,7 +235,7 @@ one-fill-in-returning-`None` convention is gone. What replaced it:
 | 02b | `lab_body.py` | `anatomy.py --nudge CHAIN --pose --mirror` | the qpos/qvel map; one heat-map row live |
 | 03 | `lab_connected.py` (graded game; students edit `moves.py`) | — (`lab_connected.py --grade --no-viewer` is its headless mode) | score out of 10; which poses fall under gravity |
 | 04 | `lab_walk.py` (`predict_com` complete) | `walk.py --step-time --double-support --gravity --friction` | one row per step: x, pelvis z, ZMP range, IK error |
-| 05 | `lab_servo.py` (`torque_from_pd` complete, `H` hands over) | `servo.py --joint --kp-scale --kv-scale --limit --walk` | ζ from `mj_fullM`, rise time, overshoot, peak torque; sag and falls |
+| 05 | `lab_servo.py` (`torque_from_pd` complete, `H` hands over, `L`/`--law` cycles P/PD/PI/PID/D) | `servo.py --joint --kp-scale --kv-scale --limit --walk` | ζ from `mj_fullM`, rise time, overshoot, peak torque; sag and falls |
 | 06 | `lab_imu.py` (`my_filter` complete) | `imu.py --walk --noise --alpha --sweep` | three estimators' error per second; the α sweep |
 | 07 | `lab_env.py` (`my_policy` = the ankle strategy) | `env_run.py --policy --push --weights --hz --action-scale` | reward per second by term; pushes survived |
 | 08 | `lab_train.py` (`choose_action` complete) | `train.py --log-std --steps` | deterministic vs stochastic, before and after |
@@ -347,6 +347,11 @@ Facts these scripts and the new figures established, each measured:
   0.8 mrad, inside 2 % after 0.17 s. **The textbook table says PD is "fast"; here
   PD's rise is slower than P's**, because P is quick only by ringing. The deck
   says so. P and PD never get inside 2 % (sag is 4 % of the step).
+- **The same laws on the walking robot** (`lab_servo.py` `L`, 2026-10-05, after
+  `H` at 1 kHz): PD 0.65 m, sag 10.8 mm; P falls 2.4 s; PI 2.5 s; D alone 1.0 s;
+  PID with `ki = 0.05 kp` walks 0.63 m, sag 9.8 mm. The knee slide's ki/kp = 0.6
+  **falls** (4.2 s); 0.1 walks 0.43 m, 0.2 falls. On a moving target the I term
+  buys ~1 mm, not the knee step's near-zero sag.
 - Week 6's complementary filter: on the biased-gyro walk, mean error is
   smallest at $\alpha = 0.9985$ ($\tau = 1.32$ s) and final error at 0.9977.
   Both bottom out near 0.998 — an earlier draft claimed they pulled opposite

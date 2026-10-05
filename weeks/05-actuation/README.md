@@ -91,6 +91,11 @@ gains are zeroed and the law's torques go straight into `qfrc_applied` at
 exercise 14; the engine integrates its own servo implicitly). A correct law
 changes nothing; break it and the robot is the week 0 rag doll.
 
+**`L` tries variations of the law**: it restarts the walk with the next entry
+of `LAWS` (`PD`, `P`, `PI`, `PID`, `D`), already handed over; `--law PID`
+starts with one. `"PD"` is the student's `torque_from_pd`; the others are built
+from its terms, one per letter, with `ki = KI_RATIO * kp` (0.05).
+
 | Step | Do | Right looks like (measured with `servo.py`) |
 | --- | --- | --- |
 | 1 | `ENTER` | gap ~1e-12; the two terms explained |
@@ -99,6 +104,7 @@ changes nothing; break it and the robot is the week 0 rag doll.
 | 4 | `4` and `5` (half and double $k_p$) | half sinks and falls; double is thrown at 5.0 s with 327 N·m at the knee |
 | 5 | `SERVO_HZ = 500`, `H` | it blows up; explained with week 1 |
 | 6 | the lowest $k_p$ that walks eight steps, in `SERVOS` | `ENTER` prints its sag; sag against $k_p$ on paper (11 mm at 500) |
+| 7 | `L` through `LAWS`, `ENTER` at the end | PD walks 0.65 m (sag 10.8 mm); P falls at 2.4 s, PI at 2.5 s; PID walks 0.63 m (sag 9.8 mm); D alone falls at 1.0 s; `KI_RATIO = 0.2` falls |
 
 ### `servo.py`: one servo, measured
 

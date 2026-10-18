@@ -243,3 +243,8 @@ weeks/*/instructor/
 
 # MuJoCo writes this on warnings (week 1 triggers BADQACC on purpose)
 MUJOCO_LOG.TXT
+
+# Midterm: only the student study guide is published. The exam paper, its
+# answer key and the cover template stay on the instructor's machine.
+weeks/exam_midterm/*
+!weeks/exam_midterm/overview.md

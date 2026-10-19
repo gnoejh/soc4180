@@ -8,6 +8,11 @@ the only shared copy.
 
 Weeks whose deck failed to render are listed as unavailable rather than
 silently dropped, and this script always exits 0: the render step owns failure.
+
+A week may instead carry a plain HTML deck (`deck.json` + `slides/*.html`,
+assembled by its own `build.py`; week 16). Its `build.py` is run here, and the
+students' copy -- `slides_students.html`, no speaker notes -- is published as
+that week's `slides.html`.
 """
 
 from __future__ import annotations
@@ -15,8 +20,11 @@ from __future__ import annotations
 import argparse
 import html
 import pathlib
+import json
 import re
 import shutil
+import subprocess
+import sys
 
 REPO = "gnoejh/soc4180"
 COLAB = f"https://colab.research.google.com/github/{REPO}/blob/main/weeks"
@@ -46,6 +54,8 @@ def build(out: pathlib.Path) -> list[dict]:
     for week_dir in sorted((ROOT / "weeks").iterdir()):
         qmd = week_dir / "slides.qmd"
         if not qmd.is_file():
+            if (week_dir / "deck.json").is_file():
+                weeks.append(_html_deck(week_dir, out))
             continue
         slug = week_dir.name
         title, subtitle = _frontmatter(qmd)
@@ -70,6 +80,30 @@ def build(out: pathlib.Path) -> list[dict]:
         )
     (out / "index.html").write_text(_index(weeks), encoding="utf-8")
     return weeks
+
+
+def _html_deck(week_dir: pathlib.Path, out: pathlib.Path) -> dict:
+    """A week whose deck is plain HTML: assemble it, publish the students' copy."""
+    slug = week_dir.name
+    meta = json.loads((week_dir / "deck.json").read_text(encoding="utf-8"))
+    built = week_dir / "slides_students.html"
+    builder = week_dir / "build.py"
+    if builder.is_file():
+        try:
+            subprocess.run([sys.executable, str(builder)], check=True)
+        except subprocess.CalledProcessError as exc:
+            print(f"{slug}: build.py failed ({exc}); listing the deck as unavailable")
+    dest = out / slug
+    dest.mkdir()
+    if built.is_file():
+        shutil.copy2(built, dest / "slides.html")
+    return {
+        "slug": slug,
+        "title": meta.get("title", slug),
+        "subtitle": meta.get("subtitle", ""),
+        "deck": built.is_file(),
+        "lab": False,
+    }
 
 
 def _card(w: dict) -> str:

@@ -1,0 +1,34 @@
+<section id="demo" data-transition="fade" style="background:#F6F4EE;color:#14213D;font-family:'IBM Plex Sans', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:40px">
+<div style="display:flex;flex-direction:column;gap:16px">
+<p style="font-size:24px;font-weight:600;letter-spacing:3px;text-transform:uppercase;color:#B0521A">Part 4 · Demo</p>
+<h2 style="font-size:64px;font-weight:700;line-height:1.1">Live: walk, push, brace</h2>
+</div>
+<div style="display:flex;flex-direction:column;gap:24px">
+<div style="display:flex;gap:40px;align-items:center;background:#FFFDF8;padding:28px 40px;border-radius:16px;border:2px solid #D9D4C7">
+<p style="width:80px;font-size:72px;font-weight:700;line-height:1;color:#E07A2F">1</p>
+<div style="flex:1;display:flex;flex-direction:column;gap:10px">
+<h3 style="font-size:34px;font-weight:700">It walks, and learns to predict itself</h3>
+<p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:26px;color:#2F6FB0">uv run examples/lab_cerebellum.py --viewer</p>
+<p style="font-size:26px;color:#3A4458">Ask first: what will the error do in the first seconds?</p>
+</div>
+</div>
+<div style="display:flex;gap:40px;align-items:center;background:#FFFDF8;padding:28px 40px;border-radius:16px;border:2px solid #D9D4C7">
+<p style="width:80px;font-size:72px;font-weight:700;line-height:1;color:#E07A2F">2</p>
+<div style="flex:1;display:flex;flex-direction:column;gap:10px">
+<h3 style="font-size:34px;font-weight:700">Tone, then push: no bracing</h3>
+<p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:26px;color:#2F6FB0">uv run examples/lab_cerebellum.py --viewer --pushes 6 --bracing off</p>
+<p style="font-size:26px;color:#3A4458">Ask first: how many of the six pushes will it survive?</p>
+</div>
+</div>
+<div style="display:flex;gap:40px;align-items:center;background:#FFFDF8;padding:28px 40px;border-radius:16px;border:2px solid #D9D4C7">
+<p style="width:80px;font-size:72px;font-weight:700;line-height:1;color:#E07A2F">3</p>
+<div style="flex:1;display:flex;flex-direction:column;gap:10px">
+<h3 style="font-size:34px;font-weight:700">The same, with the cerebellum bracing</h3>
+<p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:26px;color:#2F6FB0">uv run examples/lab_cerebellum.py --viewer --pushes 12</p>
+<p style="font-size:26px;color:#3A4458">Ask first: when will the falls stop, if they stop?</p>
+</div>
+</div>
+</div>
+<p style="position:absolute;left:128px;bottom:64px;width:1664px;font-size:24px;color:#6B7385">The cerebellum in a walking robot · 17</p>
+<aside>Run from the ubrain folder. Each push comes 4 s apart, so demo 3 takes about a minute. Watch the X and . record fill in on the console beside the viewer. If the projector machine cannot run the viewer, play the recorded clip instead: uv run --extra video examples/g1_bracing.py --record demo (records bracing off, then on, side by side). Write the class’s guesses on the board before each run.</aside>
+</section>

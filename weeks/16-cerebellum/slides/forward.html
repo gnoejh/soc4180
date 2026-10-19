@@ -1,0 +1,36 @@
+<section id="forward" data-transition="fade" style="background:#F6F4EE;color:#14213D;font-family:'IBM Plex Sans', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:40px">
+<div style="display:flex;flex-direction:column;gap:16px">
+<p style="font-size:24px;font-weight:600;letter-spacing:3px;text-transform:uppercase;color:#B0521A">Part 1 · Principles</p>
+<h2 style="font-size:64px;font-weight:700;line-height:1.1">The forward model, in five lines</h2>
+</div>
+<div style="display:flex;flex-direction:column">
+<div style="display:flex;gap:32px;align-items:center;padding:18px 0;border-top:2px solid #D9D4C7">
+<p style="width:300px;font-size:30px;font-weight:600">Mossy fibres</p>
+<p style="width:560px;font-family:'JetBrains Mono', 'Courier New', monospace;font-size:32px;color:#2F6FB0">c = [ body , cmd ]</p>
+<p style="flex:1;font-size:28px;color:#3A4458">70 body numbers and the 3-number walk command</p>
+</div>
+<div style="display:flex;gap:32px;align-items:center;padding:18px 0;border-top:2px solid #D9D4C7">
+<p style="width:300px;font-size:30px;font-weight:600">Granule cells</p>
+<p style="width:560px;font-family:'JetBrains Mono', 'Courier New', monospace;font-size:32px;color:#2F6FB0">g = kWTA( G c )</p>
+<p style="flex:1;font-size:28px;color:#3A4458">G random and fixed; keep the k largest, centre, scale to length 1</p>
+</div>
+<div style="display:flex;gap:32px;align-items:center;padding:18px 0;border-top:2px solid #D9D4C7">
+<p style="width:300px;font-size:30px;font-weight:600">Purkinje cells</p>
+<p style="width:560px;font-family:'JetBrains Mono', 'Courier New', monospace;font-size:32px;color:#2F6FB0">ŷ = M g</p>
+<p style="flex:1;font-size:28px;color:#3A4458">the predicted change of the body over the next tick</p>
+</div>
+<div style="display:flex;gap:32px;align-items:center;padding:18px 0;border-top:2px solid #D9D4C7">
+<p style="width:300px;font-size:30px;font-weight:600">Climbing fibre</p>
+<p style="width:560px;font-family:'JetBrains Mono', 'Courier New', monospace;font-size:32px;color:#2F6FB0">e = y − ŷ</p>
+<p style="flex:1;font-size:28px;color:#3A4458">what really happened, minus what was predicted</p>
+</div>
+<div style="display:flex;gap:32px;align-items:center;padding:18px 0;border-top:2px solid #D9D4C7;border-bottom:2px solid #D9D4C7">
+<p style="width:300px;font-size:30px;font-weight:600">Learning</p>
+<p style="width:560px;font-family:'JetBrains Mono', 'Courier New', monospace;font-size:32px;color:#B0521A">M ← M + η e gᵀ</p>
+<p style="flex:1;font-size:28px;color:#3A4458">the delta rule: only active cells change</p>
+</div>
+</div>
+<p style="font-size:28px;line-height:1.4;color:#3A4458">In the lab: G has <b>--granules</b> rows (2048), k is <b>--active</b> (128), η is <b>--eta-forward</b> (0.5). The score is the error as a percentage of the error of predicting “no change”.</p>
+<p style="position:absolute;left:128px;bottom:64px;width:1664px;font-size:24px;color:#6B7385">The cerebellum in a walking robot · 6</p>
+<aside>y is the one-tick change of 41 sensed channels: the IMUs and the 29 joint velocities. Each tick the prediction is scored before the update it drives, so the curve is the error a live robot would feel. 100 % means no better than predicting nothing changes; lower is better.</aside>
+</section>

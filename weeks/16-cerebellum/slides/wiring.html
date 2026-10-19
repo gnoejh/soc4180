@@ -1,0 +1,18 @@
+<section id="wiring" data-transition="fade" style="background:#F6F4EE;color:#14213D;font-family:'IBM Plex Sans', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:40px">
+<div style="display:flex;flex-direction:column;gap:16px">
+<p style="font-size:24px;font-weight:600;letter-spacing:3px;text-transform:uppercase;color:#B0521A">Part 3 · The code</p>
+<h2 style="font-size:64px;font-weight:700;line-height:1.1">The anatomy, as a file: walker.toml</h2>
+</div>
+<div style="display:flex;gap:48px;align-items:start">
+<div style="width:980px;background:#14213D;padding:40px;border-radius:16px">
+<p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;line-height:1.4;color:#E8ECF3"><span style="color:#F0A060">[regions."cerebellum.forward"]</span><br>d_g = 2048&#160;&#160;&#160;&#160;<span style="color:#8FA3BF"># granule cells</span><br>s&#160;&#160;&#160;= 128&#160;&#160;&#160;&#160;&#160;<span style="color:#8FA3BF"># active at once</span><br>eta = 0.5&#160;&#160;&#160;&#160;&#160;<span style="color:#8FA3BF"># learning rate</span><br><span style="color:#F0A060">[regions."cerebellum.brace"]</span><br>tau = 0.9&#160;&#160;&#160;&#160;&#160;<span style="color:#8FA3BF"># trace fading per tick</span><br>eta = 0.3&#160;&#160;&#160;&#160;&#160;<span style="color:#8FA3BF"># learning per trial</span><br><span style="color:#F0A060">[inputs]</span><br>"cerebellum.forward.proprio" = "proprio"<br>"cerebellum.forward.command" = "goal"<br>"cerebellum.brace.proprio"&#160;&#160; = "proprio"<br>"cerebellum.brace.cue"&#160;&#160;&#160;&#160;&#160;&#160; = "tone"<br><span style="color:#F0A060">[outputs]</span><br>walk = "goal + cerebellum.brace"</p>
+</div>
+<div style="flex:1;display:flex;flex-direction:column;gap:28px">
+<p style="font-size:28px;line-height:1.4;color:#3A4458"><b style="color:#14213D">Regions</b> and their parameters: the numbers you will change.</p>
+<p style="font-size:28px;line-height:1.4;color:#3A4458"><b style="color:#14213D">Inputs</b>: which sense feeds which port. The forward model also gets the command: an efference copy.</p>
+<p style="font-size:28px;line-height:1.4;color:#3A4458"><b style="color:#14213D">Outputs</b>: the walk command is your goal plus the counter-move.</p>
+</div>
+</div>
+<p style="position:absolute;left:128px;bottom:64px;width:1664px;font-size:24px;color:#6B7385">The cerebellum in a walking robot · 13</p>
+<aside>The profile is the brain’s anatomy in a dozen lines: which regions exist, their parameters, and how senses and actions are wired. Shortened here; in Python, profile("walker") returns the same thing. The efference copy is a real cerebellar idea: the forward model must know what was commanded to predict what will happen.</aside>
+</section>

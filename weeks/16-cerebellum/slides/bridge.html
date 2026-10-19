@@ -1,0 +1,31 @@
+<section id="bridge" data-transition="fade" style="background:#F6F4EE;color:#14213D;font-family:'IBM Plex Sans', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:48px">
+<div style="display:flex;flex-direction:column;gap:16px">
+<p style="font-size:24px;font-weight:600;letter-spacing:3px;text-transform:uppercase;color:#B0521A">Part 2 · The G1 connection</p>
+<h2 style="font-size:64px;font-weight:700;line-height:1.1">Two programs, one tick at a time</h2>
+</div>
+<div style="position:absolute;left:128px;top:330px;width:600px;height:520px;display:flex;flex-direction:column;gap:20px;background:#14213D;padding:40px;border-radius:16px">
+<h3 style="font-size:40px;font-weight:700;color:#F6F4EE">The brain</h3>
+<p style="font-size:28px;color:#C9D3E3">ubrain · Python and numpy</p>
+<ul style="font-size:28px;line-height:1.45;color:#F6F4EE">
+<li>cerebellum.forward: predicts the body, every tick</li>
+<li>cerebellum.brace: the timed counter-move to a push</li>
+<li>your goal comes in here: speed and turn</li>
+</ul>
+</div>
+<div style="position:absolute;left:1192px;top:330px;width:600px;height:520px;display:flex;flex-direction:column;gap:20px;background:#FFFDF8;padding:40px;border:2px solid #14213D;border-radius:16px">
+<h3 style="font-size:40px;font-weight:700">The body</h3>
+<p style="font-size:28px;color:#3A4458">MuJoCo · its own process</p>
+<ul style="font-size:28px;line-height:1.45;color:#3A4458">
+<li>Unitree G1 humanoid, 29 joints</li>
+<li>a frozen walking policy: the “spinal cord”</li>
+<li>the world: tones and pushes</li>
+</ul>
+</div>
+<x-connector x1="1192" y1="480" x2="728" y2="480" head="end" style="color:#2F6FB0;border-width:6px"></x-connector>
+<x-connector x1="728" y1="720" x2="1192" y2="720" head="end" style="color:#B0521A;border-width:6px"></x-connector>
+<p style="position:absolute;left:752px;top:384px;width:416px;font-size:26px;line-height:1.35;text-align:center;color:#2F6FB0">senses: 70 body numbers and the tone</p>
+<p style="position:absolute;left:752px;top:570px;width:416px;font-size:30px;font-weight:700;text-align:center;color:#14213D">the tick bridge · 50 Hz</p>
+<p style="position:absolute;left:752px;top:740px;width:416px;font-size:26px;line-height:1.35;text-align:center;color:#B0521A">action: the walk command (forward, sideways, turn)</p>
+<p style="position:absolute;left:128px;bottom:64px;width:1664px;font-size:24px;color:#6B7385">The cerebellum in a walking robot · 12</p>
+<aside>The body runs in its own process with its own environment (bodies/mujoco); the brain never imports MuJoCo. Every 20 ms: the body sends its state, the brain ticks once, the brain sends one action back. The 70 body numbers are two IMUs (gyro and accelerometer, torso and pelvis), 29 joint angles and 29 joint velocities. The cerebellum never moves a joint directly: it adjusts the walking command, which the frozen policy turns into joint targets.</aside>
+</section>

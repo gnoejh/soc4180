@@ -1,0 +1,12 @@
+<section id="params" data-transition="fade" style="background:#F6F4EE;color:#14213D;font-family:'IBM Plex Sans', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:40px">
+<div style="display:flex;flex-direction:column;gap:16px">
+<p style="font-size:24px;font-weight:600;letter-spacing:3px;text-transform:uppercase;color:#B0521A">Part 3 · The code</p>
+<h2 style="font-size:64px;font-weight:700;line-height:1.1">Changing the cerebellum</h2>
+</div>
+<div style="background:#14213D;padding:40px;border-radius:16px">
+<p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:26px;line-height:1.45;color:#E8ECF3">w = profile("walker")<br>regions = {<br>&#160;&#160;&#160;&#160;"cerebellum.forward": {"d_g": <span style="color:#F0A060">2048</span>, "s": <span style="color:#F0A060">128</span>, "eta": <span style="color:#F0A060">0.5</span>},<br>&#160;&#160;&#160;&#160;"cerebellum.brace":&#160;&#160; {"tau": <span style="color:#F0A060">0.9</span>, "eta": <span style="color:#F0A060">0.3</span>},<br>}<br>wiring = Wiring(w.name, w.contract, regions=regions,<br>&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;inputs=dict(w.inputs), outputs=dict(w.outputs))<br>brain = Brain(wiring, m)<br>brain.bracing = True&#160;&#160;&#160;&#160;<span style="color:#8FA3BF"># False: it still learns, but sends no counter-move</span></p>
+</div>
+<p style="font-size:30px;line-height:1.4;color:#3A4458">Same wiring, new numbers. <b style="color:#14213D">lab_cerebellum.py</b> does exactly this from its command-line flags, so in class 2 you change a flag, not the code.</p>
+<p style="position:absolute;left:128px;bottom:64px;width:1664px;font-size:24px;color:#6B7385">The cerebellum in a walking robot · 15</p>
+<aside>From build_brain() in examples/lab_cerebellum.py. Students who want to go further can copy the file and change the code itself, for example the brace’s gain or the push timing.</aside>
+</section>

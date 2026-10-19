@@ -54,6 +54,7 @@ training; an LLM planner appears only as a non-executed code block).
 | 13 | Imitation: behaviour cloning, DAgger, distillation | `13` | built 2026-09-27; game `lab_imitate.py` + `students.py` (ref 4/4), `imitate.py`; package `imitation.py`; **not Pages- or Colab-tested** |
 | 14 | Learning from pixels: a head camera, a CNN, visual randomisation | `14` | built 2026-09-27; game `lab_look.py` + `eyes.py` (ref 5/5), `look.py`; package `vision.py`; **not Pages- or Colab-tested** |
 | 15 | Language: grounding words in pixels, a tiny VLA, an agent that verifies | `15` | built 2026-09-27; game `lab_agent.py` + `instructions.py` (ref 5/5), `ground.py`; package `agent.py`; **not Pages- or Colab-tested** |
+| 16 | The cerebellum in a walking robot (ubrain) | `16` | added 2026-10-19; **HTML deck, not Quarto**: `deck.json` + `slides/*.html`, copied from `papercode/teaching/lecture_robot/cerebellum_g1`, assembled by `build.py`; not on Pages (the site only builds `slides.qmd` weeks); lab is `lab_cerebellum.py` in ubrain, outside `uv.lock`; **ubrain stays private until ICLR 2027** (github.com/untrained-brain opens then), so the instructor hands it out by hand — never link a clone URL students cannot reach |
 
 Capstone presentations occupy the final-exam slot. Weeks 0 and 1 share the first
 session — the stack lecture is short, the MuJoCo lab is hands-on. **That session

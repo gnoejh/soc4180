@@ -1,0 +1,20 @@
+<section id="delta" data-transition="fade" style="background:#F6F4EE;color:#14213D;font-family:'IBM Plex Sans', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:48px">
+<div style="display:flex;flex-direction:column;gap:16px">
+<p style="font-size:24px;font-weight:600;letter-spacing:3px;text-transform:uppercase;color:#B0521A">Part 1 · Principles</p>
+<h2 style="font-size:64px;font-weight:700;line-height:1.1">Learning from the error: the step size η</h2>
+</div>
+<p style="font-size:44px;font-weight:600;line-height:1.3">Each tick, the prediction moves a fraction η of the way toward what really happened.</p>
+<div style="display:flex;gap:32px">
+<div style="flex:1;display:flex;flex-direction:column;gap:16px;background:#FFFDF8;padding:40px;border-radius:16px;border-left:10px solid #2F6FB0">
+<h3 style="font-size:36px;font-weight:700">Small η</h3>
+<p style="font-size:30px;line-height:1.45;color:#3A4458">Safe but slow: it takes many strides before the predictions are good.</p>
+</div>
+<div style="flex:1;display:flex;flex-direction:column;gap:16px;background:#FFFDF8;padding:40px;border-radius:16px;border-left:10px solid #E07A2F">
+<h3 style="font-size:36px;font-weight:700">Large η</h3>
+<p style="font-size:30px;line-height:1.45;color:#3A4458">Fast, until each correction is bigger than the error it corrects. Then it overshoots, and the error grows instead of shrinking.</p>
+</div>
+</div>
+<p style="font-size:32px;font-weight:600;color:#B0521A">For class 2: where is the edge? You will find it with --eta-forward.</p>
+<p style="position:absolute;left:128px;bottom:64px;width:1664px;font-size:24px;color:#6B7385">The cerebellum in a walking robot · 8</p>
+<aside>A picture that helps: a ball rolling into a valley, step size η. Small steps creep down; steps that are too long jump across the valley to a higher point on the other side, and each jump is longer than the last. Do not give the edge’s value; question 3 asks them to find it and explain it.</aside>
+</section>

@@ -1,0 +1,41 @@
+<section id="trace" data-transition="fade" style="background:#F6F4EE;color:#14213D;font-family:'IBM Plex Sans', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:32px">
+<div style="display:flex;flex-direction:column;gap:16px">
+<p style="font-size:24px;font-weight:600;letter-spacing:3px;text-transform:uppercase;color:#B0521A">Part 1 · Principles</p>
+<h2 style="font-size:64px;font-weight:700;line-height:1.1">How the brace learns: fading traces</h2>
+</div>
+<div style="display:flex;flex-direction:column">
+<div style="display:flex;gap:32px;align-items:center;padding:14px 0;border-top:2px solid #D9D4C7">
+<p style="width:280px;font-size:30px;font-weight:600">Delay line</p>
+<p style="width:560px;font-family:'JetBrains Mono', 'Courier New', monospace;font-size:30px;color:#2F6FB0">unit j, j = 0 … 39</p>
+<p style="flex:1;font-size:28px;color:#3A4458">unit j fires j ticks after the tone (0.8 s in all)</p>
+</div>
+<div style="display:flex;gap:32px;align-items:center;padding:14px 0;border-top:2px solid #D9D4C7">
+<p style="width:280px;font-size:30px;font-weight:600">Trace</p>
+<p style="width:560px;font-family:'JetBrains Mono', 'Courier New', monospace;font-size:30px;color:#B0521A">E_j(t) = τ^(t − j)</p>
+<p style="flex:1;font-size:28px;color:#3A4458">fades by τ every tick: <b>--tau</b></p>
+</div>
+<div style="display:flex;gap:32px;align-items:center;padding:14px 0;border-top:2px solid #D9D4C7">
+<p style="width:280px;font-size:30px;font-weight:600">Kick (error)</p>
+<p style="width:560px;font-family:'JetBrains Mono', 'Courier New', monospace;font-size:30px;color:#2F6FB0">κ(t)</p>
+<p style="flex:1;font-size:28px;color:#3A4458">the jolt the body got this tick, from the pelvis accelerometer</p>
+</div>
+<div style="display:flex;gap:32px;align-items:center;padding:14px 0;border-top:2px solid #D9D4C7">
+<p style="width:280px;font-size:30px;font-weight:600">Credit</p>
+<p style="width:560px;font-family:'JetBrains Mono', 'Courier New', monospace;font-size:30px;color:#2F6FB0">S_j = Σ_t κ(t) E_j(t)</p>
+<p style="flex:1;font-size:28px;color:#3A4458">every unit still glowing shares the blame</p>
+</div>
+<div style="display:flex;gap:32px;align-items:center;padding:14px 0;border-top:2px solid #D9D4C7">
+<p style="width:280px;font-size:30px;font-weight:600">Learning</p>
+<p style="width:560px;font-family:'JetBrains Mono', 'Courier New', monospace;font-size:30px;color:#B0521A">M ← (1 − η) M + η S</p>
+<p style="flex:1;font-size:28px;color:#3A4458">once per trial: <b>--eta-brace</b></p>
+</div>
+<div style="display:flex;gap:32px;align-items:center;padding:14px 0;border-top:2px solid #D9D4C7;border-bottom:2px solid #D9D4C7">
+<p style="width:280px;font-size:30px;font-weight:600">Counter-move</p>
+<p style="width:560px;font-family:'JetBrains Mono', 'Courier New', monospace;font-size:30px;color:#2F6FB0">cmd ← cmd − γ M_j</p>
+<p style="flex:1;font-size:28px;color:#3A4458">j ticks after the tone, step against the kick to come</p>
+</div>
+</div>
+<p style="font-size:30px;font-weight:600;line-height:1.35">A unit is credited with every kick after it, through its trace, so the counter-move ramps up before the push lands.</p>
+<p style="position:absolute;left:128px;bottom:64px;width:1664px;font-size:24px;color:#6B7385">The cerebellum in a walking robot · 10</p>
+<aside>Work one number on the board: with τ = 0.9, how much of unit 0’s trace is left after 10 ticks? 0.9 to the 10th, about a third. Then ask what happens with a smaller τ, but let them compute it in class 2 (question 5). γ is fixed (0.8) and the counter-move is capped at 0.6 m/s, the gait’s own range.</aside>
+</section>

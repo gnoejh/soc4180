@@ -10,6 +10,8 @@ Each week's pipeline script (`stack.py`, `walk.py`, ...) runs with
 four seconds. A script passes if it exits 0 within its time limit. Failures
 print the tail of their output. The RL weeks (7 on) need `uv sync --extra rl`. Weeks 11-15's
 `lab_*.py` are graded games; their `--grade --problem N` runs one problem headless.
+Week 16 runs on ubrain from weeks/16-cerebellum/vendor/; its scripts are headless by
+default and run exactly as written.
 
 This is the smoke test behind the "every script passed" claims in CLAUDE.md;
 run it after touching the package.
@@ -51,6 +53,12 @@ PIPELINES = [
     ("15", "weeks/15-language/lab_agent.py --grade --problem 1"),
 ]
 
+# run as written: no --no-viewer appended (week 16's scripts use --headless, or no flag)
+AS_IS = [
+    ("16", "weeks/16-cerebellum/lab_cerebellum.py --seconds 3 --name check_labs"),
+    ("16", "weeks/16-cerebellum/lab_cerebellum_walk.py --headless --seconds 3"),
+]
+
 LABS = [
     ("00", "weeks/00-robot-stack/lab_stack.py"),
     ("01", "weeks/01-intro/lab_mjcf.py"),
@@ -76,7 +84,7 @@ def run(cmd: str, viewer: bool, limit: float) -> tuple[bool, float, str]:
     env = dict(os.environ, PYTHONIOENCODING="utf-8")
     if viewer:
         env["SOC4180_AUTOCLOSE"] = "4"
-    else:
+    elif cmd not in {c for _, c in AS_IS}:
         cmd += " --no-viewer"
     t0 = time.time()
     try:
@@ -96,7 +104,7 @@ def main(argv=None) -> int:
     ap.add_argument("--limit", type=float, default=300.0, help="seconds per script")
     args = ap.parse_args(argv)
 
-    jobs = [(w, c, False) for w, c in PIPELINES]
+    jobs = [(w, c, False) for w, c in PIPELINES + AS_IS]
     if not args.no_viewer:
         jobs += [(w, c, True) for w, c in LABS]
     if args.only:

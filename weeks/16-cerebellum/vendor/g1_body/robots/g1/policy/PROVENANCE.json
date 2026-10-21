@@ -1,0 +1,12 @@
+{
+  "what": "the G1 locomotion policy, a frozen pattern generator (Phase XI.0, 2026-10-12)",
+  "source": "https://github.com/unitreerobotics/unitree_rl_gym",
+  "commit": "276801e46c5d433564f24658bac64f254b7d2d4b",
+  "commit_date": "2025-07-25",
+  "file": "deploy/pre_train/g1/motion.pt",
+  "file_sha256": "cf668f75b90d1abf73d2b87612a6e76bccc61ff7e083b63582d3f6aaa3c1759d",
+  "license": "BSD-3-Clause, Copyright (c) 2016-2023 HangZhou YuShu TECHNOLOGY CO.,LTD. (Unitree Robotics)",
+  "interface": "deploy/deploy_mujoco/configs/g1.yaml (obs 47, actions 12, kp/kd, scales, 0.8 s phase)",
+  "extracted": "weights read once with torch 2.9.1 in a throwaway env; parity_x/parity_y are 50 torch input/output pairs",
+  "npz_sha256": "6a7ffd1bf27c14deb718c8e9199c4219d037da35f1fa3d697d9a0b67585a2e2d"
+}

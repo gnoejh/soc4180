@@ -1,0 +1,23 @@
+bodies/mujoco -- the MuJoCo body for ubrain
+Copyright 2026 Hong Jeong
+
+The code in this folder is licensed under the Apache License, Version 2.0
+(see LICENSE), except for the third-party components below, which keep their own
+licences and copyright holders.
+
+Included in this folder:
+
+- robots/g1/policy/unitree_g1_motion.npz -- the Unitree G1 walking policy, converted
+  from Unitree's unitree_rl_gym. Copyright (c) 2016-2023 HangZhou YuShu TECHNOLOGY
+  CO., LTD. ("Unitree Robotics"). BSD 3-Clause License: robots/g1/policy/LICENSE.
+  Provenance: robots/g1/policy/PROVENANCE.json.
+- scenes/gallery_cc0/*.png -- 21 photographs released under CC0 1.0 by their
+  creators, retrieved through Openverse. Sources and creators:
+  scenes/gallery_cc0/PROVENANCE.json.
+
+Installed as dependencies, not included here:
+
+- The Unitree G1 model, from the MuJoCo Menagerie (mujoco-menagerie), under the
+  Menagerie's licence for that model.
+- MuJoCo (Apache-2.0), numpy, and the other packages in pyproject.toml, under their
+  own licences.

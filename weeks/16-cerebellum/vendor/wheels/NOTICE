@@ -1,0 +1,10 @@
+ubrain -- Untrained Brain
+Copyright 2026 Hong Jeong
+
+The examples, documentation and profiles are licensed under the Apache License,
+Version 2.0 (see LICENSE). The ubrain package itself is distributed compiled, under
+the ubrain Binary Licence (see LICENSE-BINARY); its source code is not distributed.
+
+Optional components installed by extras are not part of this distribution and keep
+their own licences, among them CLIP (openai/clip-vit-base-patch32, MIT), PyTorch,
+Hugging Face Transformers and imageio-ffmpeg.

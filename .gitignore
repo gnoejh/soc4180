@@ -249,3 +249,10 @@ MUJOCO_LOG.TXT
 # answer key and the cover template stay on the instructor's machine.
 weeks/exam_midterm/*
 !weeks/exam_midterm/overview.md
+
+# week 16: ubrain_local.py unpacks the wheel here on first run; the lab writes its results
+weeks/16-cerebellum/vendor/.unpacked/
+!weeks/16-cerebellum/vendor/wheels/
+weeks/16-cerebellum/results.csv
+weeks/16-cerebellum/last_run.json
+weeks/16-cerebellum/run_*.png

@@ -1,0 +1,19 @@
+<section id="code" data-transition="fade" style="background:#F6F4EE;color:#14213D;font-family:'IBM Plex Sans', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:40px">
+<div style="display:flex;flex-direction:column;gap:16px">
+<p style="font-size:24px;font-weight:600;letter-spacing:3px;text-transform:uppercase;color:#B0521A">Part 4 · The code</p>
+<h2 style="font-size:64px;font-weight:700;line-height:1.1">Push, boundary, recollect</h2>
+</div>
+<div style="width:1660px;background:#14213D;padding:36px;border-radius:16px"><p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:26px;line-height:1.45;color:#E8ECF3;white-space:pre">brain = Brain(profile("rememberer"), body, codecs={"camera": sense})
+
+for episode in range(E):
+    for _ in range(8):
+        brain.tick({"camera": perceive(before, during)})   <span style="color:#8FA3BF"># into the episode</span>
+    brain.tick({"boundary": True})       <span style="color:#8FA3BF"># replay into the cortex, clear the episode</span>
+
+got = [brain.tick({"recollect": n})["recollected"] for n in range(8 * E)]
+
+decode_law(8, 64, 8)                          <span style="color:#8FA3BF"># 0.90: the episode</span>
+weighted_law(1, 160, 64 * 64, 8, d_self=64)   <span style="color:#8FA3BF"># 1.00: the cortex, for 160 DIFFERENT pairs</span></p></div>
+<p style="position:absolute;left:128px;bottom:64px;width:1664px;font-size:24px;color:#6B7385">From hippocampus to cortex · 12</p>
+<aside>The lab also asks the hippocampus for slot 0 right after each boundary, to show it is empty (None).</aside>
+</section>

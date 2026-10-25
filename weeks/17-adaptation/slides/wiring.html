@@ -1,0 +1,28 @@
+<section id="wiring" data-transition="fade" style="background:#F6F4EE;color:#14213D;font-family:'IBM Plex Sans', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:40px">
+<div style="display:flex;flex-direction:column;gap:16px">
+<p style="font-size:24px;font-weight:600;letter-spacing:3px;text-transform:uppercase;color:#B0521A">Part 4 · The code</p>
+<h2 style="font-size:64px;font-weight:700;line-height:1.1">The anatomy, as a file: adapter.toml</h2>
+</div>
+
+<div style="display:flex;gap:48px;align-items:start">
+<div style="width:900px;background:#14213D;padding:36px;border-radius:16px"><p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;line-height:1.45;color:#E8ECF3;white-space:pre"><span style="color:#F0A060">[regions."cerebellum.adapt"]</span>
+arm = "dual"     <span style="color:#8FA3BF"># or "single"</span>
+
+<span style="color:#F0A060">[inputs]</span>
+"cerebellum.adapt.proprio" = "proprio"
+"cerebellum.adapt.clamp"   = "clamp"
+
+<span style="color:#F0A060">[outputs]</span>
+walk = "goal + cerebellum.brace
+        + cerebellum.adapt"
+offsets = "zero"</p></div>
+<div style="flex:1;display:flex;flex-direction:column;gap:28px">
+<p style="font-size:28px;line-height:1.45;color:#3A4458"><b style='color:#14213D'>The walker plus one region.</b> The forward model and the brace of week 16 are still there, unchanged.</p>
+<p style="font-size:28px;line-height:1.45;color:#3A4458"><b style='color:#14213D'>proprio</b>: the region reads number 2, the gyroscope's yaw rate.</p>
+<p style="font-size:28px;line-height:1.45;color:#3A4458"><b style='color:#14213D'>clamp</b>: a flag the application adds to the body's channels. True silences the teaching signal.</p>
+<p style="font-size:28px;line-height:1.45;color:#3A4458"><b style='color:#14213D'>walk</b>: your goal, plus the brace, plus the counter-turn on the yaw rate.</p>
+</div>
+</div>
+<p style="position:absolute;left:128px;bottom:64px;width:1664px;font-size:24px;color:#6B7385">Walking in a side wind · 16</p>
+<aside>Shortened: the walker's two regions are omitted. print(profile('adapter')) shows all of it. Nothing in the brain knows about wind; the only new input is the clamp.</aside>
+</section>

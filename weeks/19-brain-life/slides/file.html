@@ -1,0 +1,14 @@
+<section id="file" data-transition="fade" style="background:#F6F4EE;color:#14213D;font-family:'IBM Plex Sans', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:32px">
+<div style="display:flex;flex-direction:column;gap:16px">
+<p style="font-size:24px;font-weight:600;letter-spacing:3px;text-transform:uppercase;color:#B0521A">Part 1 · What is in the file</p>
+<h2 style="font-size:64px;font-weight:700;line-height:1.1">brain.save(path): one .npz file, 1.8 MB for the walker</h2>
+</div>
+<div style="display:flex;flex-direction:column">
+<div style="display:flex;gap:32px;align-items:center;padding:18px 0;border-top:2px solid #D9D4C7"><p style="width:240px;font-size:30px;font-weight:600">Header</p><p style="width:420px;font-family:'JetBrains Mono', 'Courier New', monospace;font-size:32px;color:#2F6FB0">wiring, body, codecs</p><p style="flex:1;font-size:28px;color:#3A4458">the anatomy file, the body's name and digest (mujoco/g1, 4815eedf56d0), every codec's fingerprint</p></div>
+<div style="display:flex;gap:32px;align-items:center;padding:18px 0;border-top:2px solid #D9D4C7"><p style="width:240px;font-size:30px;font-weight:600">Regions</p><p style="width:420px;font-family:'JetBrains Mono', 'Courier New', monospace;font-size:32px;color:#2F6FB0">matrices, traces, tables</p><p style="flex:1;font-size:28px;color:#3A4458">the forward model's read-out (2048 granule cells), the brace's learned counter-move</p></div>
+<div style="display:flex;gap:32px;align-items:center;padding:18px 0;border-top:2px solid #D9D4C7"><p style="width:240px;font-size:30px;font-weight:600">Randomness</p><p style="width:420px;font-family:'JetBrains Mono', 'Courier New', monospace;font-size:32px;color:#2F6FB0">every generator</p><p style="flex:1;font-size:28px;color:#3A4458">the brain's and each region's: the next draw continues the sequence</p></div>
+<div style="display:flex;gap:32px;align-items:center;padding:18px 0;border-top:2px solid #D9D4C7;border-bottom:2px solid #D9D4C7"><p style="width:240px;font-size:30px;font-weight:600">Time</p><p style="width:420px;font-family:'JetBrains Mono', 'Courier New', monospace;font-size:32px;color:#2F6FB0">tick count, last outputs</p><p style="flex:1;font-size:28px;color:#3A4458">2621 ticks for 12 pushes; a recurrent edge reads last tick's outputs</p></div>
+</div><p style="font-size:30px;line-height:1.45;color:#3A4458"><span style='font-family:'JetBrains Mono', 'Courier New', monospace;color:#2F6FB0'>Brain.load(path, body)</span> rebuilds it from the file alone. The file is read without running any code of its own: only ubrain's classes are rebuilt.</p>
+<p style="position:absolute;left:128px;bottom:64px;width:1664px;font-size:24px;color:#6B7385">A brain's life · 4</p>
+<aside>The header can be read without rebuilding anything: ubrain.state.read_header(path). The size is mostly the forward model: 2048 granule cells times 41 predicted channels, plus its random expansion G.</aside>
+</section>

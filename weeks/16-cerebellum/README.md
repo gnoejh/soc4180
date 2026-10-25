@@ -4,7 +4,7 @@
 | --- | --- |
 | **Layer** | 5 — behaviour learned by local plasticity, not by gradient descent |
 | **Runtime** | laptop, CPU |
-| **Needs** | this repo's `uv sync`; ubrain ships in `vendor/` |
+| **Needs** | this repo's `uv sync`; ubrain ships in `vendor/ubrain/` |
 | **Classes** | two: slides and a live demo, then a hands-on class |
 
 From this week on the course teaches **ubrain**, an untrained brain that learns from
@@ -14,9 +14,10 @@ the body will move next, and a **brace** that learns a timed counter-move to a p
 tone announces (eyeblink conditioning).
 
 This is the first week whose lab does not run on the `soc4180` package. It runs on
-ubrain's compiled wheel and its G1 body server, both in `vendor/` in this folder:
-`vendor/wheels/` (ubrain 0.13.0.dev1, Python 3.12, under the ubrain Binary Licence in
-`vendor/wheels/LICENSE-BINARY`) and `vendor/g1_body/` (Apache-2.0; the walking policy is
+ubrain's compiled wheel and its G1 body server, both in the repository's `vendor/ubrain/`, which every Part II week shares:
+`vendor/ubrain/wheels/` (ubrain 0.14.0.dev1, Python 3.12, a local copy while ubrain is not
+public, under the ubrain Binary Licence in `wheels/LICENSE-BINARY`) and
+`vendor/ubrain/g1_body/` (Apache-2.0; the walking policy is
 Unitree's, BSD-3-Clause).
 
 ## Slides
@@ -106,7 +107,7 @@ behind|front|right|left`), an unreliable interval (`--jitter`), and extinction
 (`--tone-only N --test M`). In `lab_cerebellum_walk.py` the same knobs are `PUSH_N`,
 `PUSH_DELAY` and `PUSH_DIR` at the top of the file. Not `HZ`: the body always advances
 20 ms per tick, so `HZ` only changes playback speed. The worksheet's Part B is built on
-these; measured reference results are in `instructor/` (gitignored).
+these; measured reference results are in [instructor/reference.md](instructor/reference.md).
 
 What they should see (measured on the instructor's machine, 2026-10-22, defaults):
 

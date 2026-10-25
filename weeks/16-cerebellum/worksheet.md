@@ -13,7 +13,7 @@ command below runs from this folder**, `weeks/16-cerebellum/`.
 
 ## Before the class (at home, about 2 minutes)
 
-Pull (or clone) the course repository; ubrain is already in `vendor/`. Then:
+Pull (or clone) the course repository; ubrain is already in `vendor/ubrain/`. Then:
 
 ```bash
 uv sync                          # from the repository root, as every week

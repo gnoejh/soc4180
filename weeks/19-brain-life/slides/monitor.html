@@ -1,0 +1,28 @@
+<section id="monitor" data-transition="fade" style="background:#F6F4EE;color:#14213D;font-family:'IBM Plex Sans', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:40px">
+<div style="display:flex;flex-direction:column;gap:16px">
+<p style="font-size:24px;font-weight:600;letter-spacing:3px;text-transform:uppercase;color:#B0521A">Part 2 · The monitor</p>
+<h2 style="font-size:64px;font-weight:700;line-height:1.1">A brain's interior as channels</h2>
+</div>
+
+<div style="display:flex;gap:48px;align-items:start">
+<div style="width:780px;background:#14213D;padding:36px;border-radius:16px"><p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:25px;line-height:1.45;color:#E8ECF3;white-space:pre">monitor_manifest(brain)  <span style="color:#8FA3BF"># 9 channels</span>
+
+cerebellum.forward.stride_ratio
+cerebellum.forward.updates
+cerebellum.forward.eta
+cerebellum.forward.granule_cells
+cerebellum.forward.active_cells
+cerebellum.brace.trials
+cerebellum.brace.tau
+cerebellum.brace.eta
+cerebellum.brace.peak_tick</p></div>
+<div style="flex:1;display:flex;flex-direction:column;gap:26px">
+<p style="font-size:28px;line-height:1.45;color:#3A4458"><b style='color:#14213D'>observe(brain)</b>: read-only copies of what each region holds; reading changes nothing.</p>
+<p style="font-size:28px;line-height:1.45;color:#3A4458"><b style='color:#14213D'>monitor(brain)</b>: this tick's values, as a body's senses in the interface's own terms.</p>
+<p style="font-size:28px;line-height:1.45;color:#3A4458">So a <b style='color:#14213D'>second brain</b> can be built on that manifest and take the first brain's interior as its senses: a brain watching a brain.</p>
+<p style="font-size:28px;line-height:1.45;color:#3A4458">A watcher could, for example, raise a flag when <i>stride_ratio</i> jumps: the robot has met something its body model does not know.</p>
+</div>
+</div>
+<p style="position:absolute;left:128px;bottom:64px;width:1664px;font-size:24px;color:#6B7385">A brain's life · 11</p>
+<aside>ubrain's own example 12 builds such a watcher on the holder profile. Here the monitor is used as instrumentation; wiring a second brain to it is the worksheet's going-further exercise.</aside>
+</section>

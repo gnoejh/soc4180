@@ -1,0 +1,53 @@
+{
+ "v": 4,
+ "title": "Noticing",
+ "subtitle": "ubrain on the G1: a salience gate writes only new pushes, and rest decides when the day is consolidated",
+ "cover": "cover",
+ "order": [
+  "cover",
+  "plan",
+  "why",
+  "gate",
+  "modes",
+  "predict",
+  "measured",
+  "fig_window",
+  "rest",
+  "gusty",
+  "wiring",
+  "code",
+  "flags",
+  "demo",
+  "class2",
+  "questions",
+  "next"
+ ],
+ "sections": {
+  "s1": {
+   "description": "What the two classes are for",
+   "start": "cover"
+  },
+  "s2": {
+   "description": "Part 1: what is worth storing",
+   "start": "why"
+  },
+  "s3": {
+   "description": "Part 2: measured on the robot",
+   "start": "predict"
+  },
+  "s4": {
+   "description": "Part 3: the code, the demo and the hands-on class",
+   "start": "wiring"
+  }
+ },
+ "faces": {
+  "ibm-plex-sans": {
+   "family": "IBM Plex Sans",
+   "href": "https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;600;700&display=swap"
+  },
+  "jetbrains-mono": {
+   "family": "JetBrains Mono",
+   "href": "https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&display=swap"
+  }
+ }
+}

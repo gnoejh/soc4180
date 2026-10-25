@@ -1,0 +1,13 @@
+<section id="why" data-transition="fade" style="background:#F6F4EE;color:#14213D;font-family:'IBM Plex Sans', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:40px">
+<div style="display:flex;flex-direction:column;gap:16px">
+<p style="font-size:24px;font-weight:600;letter-spacing:3px;text-transform:uppercase;color:#B0521A">Part 3 · Why</p>
+<h2 style="font-size:64px;font-weight:700;line-height:1.1">Why a worse estimate chooses better</h2>
+</div>
+<div style="display:flex;gap:32px">
+<div style="flex:1;display:flex;flex-direction:column;gap:16px;background:#FFFDF8;padding:36px;border-radius:16px;border-top:8px solid #2F6FB0"><h3 style="font-size:34px;font-weight:700">Slow learner (η 0.05)</h3><p style="font-size:28px;line-height:1.45;color:#3A4458">Values close to the payoffs: 0.85, 0.25, 0.55. The race then runs close to matching: the right brake about half the time.</p></div>
+<div style="flex:1;display:flex;flex-direction:column;gap:16px;background:#FFFDF8;padding:36px;border-radius:16px;border-top:8px solid #E07A2F"><h3 style="font-size:34px;font-weight:700">Fast learner (η 0.8)</h3><p style="font-size:28px;line-height:1.45;color:#3A4458">One fall drops a move's value most of the way to zero; one success lifts it near one. The values sit far apart, so the race is nearly exclusive: <b style='color:#14213D'>win-stay, lose-shift</b>. Right brake 0.87, stayed up 0.79.</p></div>
+<div style="flex:1;display:flex;flex-direction:column;gap:16px;background:#FFFDF8;padding:36px;border-radius:16px;border-top:8px solid #14213D"><h3 style="font-size:34px;font-weight:700">Too fast (η 1.0)</h3><p style="font-size:28px;line-height:1.45;color:#3A4458">A value is just the last outcome, 0 or 1. Every move that worked last time ties at 1, and the race is a coin again: 0.57, 0.68.</p></div>
+</div><p style="font-size:30px;line-height:1.45;color:#3A4458">The striatum's race is close to matching on the values it has. How spread out those values are decides how exclusive the choice is, and the learning rate decides the spread. <b style='color:#14213D'>Knowing the world and acting well in it are different goals.</b></p>
+<p style="position:absolute;left:128px;bottom:64px;width:1664px;font-size:24px;color:#6B7385">Learning from reward · 12</p>
+<aside>Mean |Q - world| at eta 0.05 / 0.2 / 0.5 / 0.8 / 1.0 over 4 seeds: 0.06 / 0.16 / 0.27 / 0.36 / 0.44, while the robot stays up 0.645 / 0.647 / 0.745 / 0.788 / 0.680. In week 8, PPO's entropy and its action noise played the same role: exploration has a price.</aside>
+</section>

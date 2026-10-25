@@ -1,0 +1,27 @@
+<section id="task" data-transition="fade" style="background:#F6F4EE;color:#14213D;font-family:'IBM Plex Sans', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:40px">
+<div style="display:flex;flex-direction:column;gap:16px">
+<p style="font-size:24px;font-weight:600;letter-spacing:3px;text-transform:uppercase;color:#B0521A">Part 2 · The G1 as a bandit</p>
+<h2 style="font-size:64px;font-weight:700;line-height:1.1">When to brake against a push</h2>
+</div>
+
+<div style="display:flex;gap:40px;align-items:stretch">
+<div style="flex:1;background:#FFFDF8;border-radius:16px;padding:36px;border-top:8px solid #E07A2F;display:flex;flex-direction:column;gap:14px">
+<h3 style="font-size:34px;font-weight:700">The cue (situation)</h3>
+<p style="font-size:28px;line-height:1.45;color:#3A4458">Every trial a tone announces a push from behind, 250 N for 0.1 s, and says when:</p>
+<p style="font-size:28px;line-height:1.45;color:#3A4458"><b style='color:#14213D'>soon</b>: 0.2 s after the cue<br><b style='color:#14213D'>late</b>: 0.5 s after the cue</p>
+</div>
+<div style="flex:1;background:#FFFDF8;border-radius:16px;padding:36px;border-top:8px solid #2F6FB0;display:flex;flex-direction:column;gap:14px">
+<h3 style="font-size:34px;font-weight:700">The moves (actions)</h3>
+<p style="font-size:28px;line-height:1.45;color:#3A4458"><b style='color:#14213D'>brake early</b>: walk 0.4 m/s slower, 0.06 to 0.3 s after the cue</p>
+<p style="font-size:28px;line-height:1.45;color:#3A4458"><b style='color:#14213D'>brake late</b>: the same, 0.36 to 0.6 s</p>
+<p style="font-size:28px;line-height:1.45;color:#3A4458"><b style='color:#14213D'>keep walking</b></p>
+</div>
+<div style="flex:1;background:#FFFDF8;border-radius:16px;padding:36px;border-top:8px solid #14213D;display:flex;flex-direction:column;gap:14px">
+<h3 style="font-size:34px;font-weight:700">The reward</h3>
+<p style="font-size:28px;line-height:1.45;color:#3A4458">3 s after the push: <b style='color:#14213D'>1</b> if the robot is still up, <b style='color:#14213D'>0</b> if it fell.</p>
+<p style="font-size:28px;line-height:1.45;color:#3A4458">Nothing about the push, its timing, or which way the fall went.</p>
+</div>
+</div><p style="font-size:30px;line-height:1.45;color:#3A4458">Each trial starts at a random point of the stride, so the same move does not always work: the world pays with a <b style='color:#14213D'>probability</b>.</p>
+<p style="position:absolute;left:128px;bottom:64px;width:1664px;font-size:24px;color:#6B7385">Learning from reward · 6</p>
+<aside>Where the moves come from: week 16's trained brace, logged around a push, brakes hard (vx -0.39) exactly while the push lands, then speeds up. Here the brake's shape is given; the striatum only chooses its timing. A trial resets the body, walks 2 s plus a random 0-39 ticks, then cues.</aside>
+</section>

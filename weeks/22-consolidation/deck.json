@@ -1,0 +1,57 @@
+{
+ "v": 4,
+ "title": "From Hippocampus to Cortex",
+ "subtitle": "ubrain on the G1: episodes of pushes replayed into a slow cortical store, and a law that meets the robot's world",
+ "cover": "cover",
+ "order": [
+  "cover",
+  "plan",
+  "two",
+  "flow",
+  "laws",
+  "predict",
+  "fig_cortex",
+  "measured",
+  "control",
+  "forget",
+  "wiring",
+  "code",
+  "flags",
+  "demo",
+  "class2",
+  "questions",
+  "next"
+ ],
+ "sections": {
+  "s1": {
+   "description": "What the two classes are for",
+   "start": "cover"
+  },
+  "s2": {
+   "description": "Part 1: two stores and a replay",
+   "start": "two"
+  },
+  "s3": {
+   "description": "Part 2: the laws and their assumption",
+   "start": "laws"
+  },
+  "s4": {
+   "description": "Part 3: measured on the robot",
+   "start": "measured"
+  },
+  "s5": {
+   "description": "Part 4: the code, the demo and the hands-on class",
+   "start": "wiring"
+  }
+ },
+ "faces": {
+  "ibm-plex-sans": {
+   "family": "IBM Plex Sans",
+   "href": "https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;600;700&display=swap"
+  },
+  "jetbrains-mono": {
+   "family": "JetBrains Mono",
+   "href": "https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&display=swap"
+  }
+ }
+}

@@ -1,0 +1,29 @@
+<section id="wiring" data-transition="fade" style="background:#F6F4EE;color:#14213D;font-family:'IBM Plex Sans', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:40px">
+<div style="display:flex;flex-direction:column;gap:16px">
+<p style="font-size:24px;font-weight:600;letter-spacing:3px;text-transform:uppercase;color:#B0521A">Part 3 · The code</p>
+<h2 style="font-size:64px;font-weight:700;line-height:1.1">The anatomy, as a file: attender.toml</h2>
+</div>
+
+<div style="display:flex;gap:48px;align-items:start">
+<div style="width:1040px;background:#14213D;padding:36px;border-radius:16px"><p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;line-height:1.45;color:#E8ECF3;white-space:pre"><span style="color:#F0A060">[regions."salience.gate"]</span>
+window = 8
+alpha  = 0.05
+<span style="color:#F0A060">[regions."modes.controller"]</span>
+arm = "triangle"
+k   = 4
+
+<span style="color:#F0A060">[inputs]</span>
+"salience.gate.item"           = "camera"
+"modes.controller.novel"       = "salience.gate.novel"
+"hippocampus.episode.item"     = "salience.gate.passed"
+"hippocampus.episode.boundary" = "modes.controller.idle"</p></div>
+<div style="flex:1;display:flex;flex-direction:column;gap:24px">
+<p style="font-size:28px;line-height:1.45;color:#3A4458"><b style='color:#14213D'>passed</b>: only novel percepts reach the episode.</p>
+<p style="font-size:28px;line-height:1.45;color:#3A4458"><b style='color:#14213D'>novel</b> is a demand on the mode controller.</p>
+<p style="font-size:28px;line-height:1.45;color:#3A4458"><b style='color:#14213D'>idle</b> is the episode's boundary: rest replays it.</p>
+<p style="font-size:28px;line-height:1.45;color:#3A4458">The cortex behind it is week 22's.</p>
+</div>
+</div>
+<p style="position:absolute;left:128px;bottom:64px;width:1664px;font-size:24px;color:#6B7385">Noticing · 11</p>
+<aside>Shortened; the episode and cortex settings are week 22's (the lab sets 32 slots). The lab adds an output 'novel' so it can print the gate's verdict.</aside>
+</section>

@@ -4,10 +4,10 @@
     uv run weeks/16-cerebellum/lab_cerebellum_walk.py --headless --seconds 10 --vx 0.5
 
 Copied from ubrain's examples/g1_walker.py. ubrain itself is in
-weeks/16-cerebellum/vendor/ (see ubrain_local.py); nothing else beyond
+vendor/ubrain/ (see ubrain_local.py); nothing else beyond
 `uv sync`.
 
-It starts the MuJoCo body (vendor/g1_body, on this repository's Python) as a child process
+It starts the MuJoCo body (vendor/ubrain/g1_body, on this repository's Python) as a child process
 and drives the brain, `ubrain.Brain` with the `walker` profile, against it at 50 Hz
 in wall-clock time. It
 is a runner, not a second brain. The brain's cerebellum predicts every tick
@@ -30,7 +30,7 @@ THE SYSTEM: two processes, one tick every 20 ms
   +-----|--------------------------------------------------------------|---------+
         |  state: proprio (70), upright, tone, tick                    |  action (32)
         |            TCP (body.act), every tick                        v  walk_offset
-  +-----|-- THE BODY: a child process, vendor/g1_body ---------------------------+
+  +-----|-- THE BODY: a child process, vendor/ubrain/g1_body --------------------+
   |   MuJoCo G1 at 500 Hz: 10 physics steps per tick                             |
   |   frozen walking policy, the "spinal cord": (vx, vy, wz) -> 29 joint targets |
   |   the experimenter's hand: P = tone, then push; ctrl + right-drag (viewer)   |
@@ -77,7 +77,7 @@ from dataclasses import dataclass
 
 import ubrain_local
 
-ubrain_local.load()                 # vendor/'s wheel onto sys.path, before `import ubrain`
+ubrain_local.load()                 # the vendored wheel onto sys.path, before `import ubrain`
 
 from soc4180 import terminal_keys  # noqa: E402
 from ubrain.bodies import BodyClient, free_port, kill_tree  # noqa: E402

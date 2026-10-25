@@ -46,7 +46,7 @@ parameters and the results), so a group can compare runs, or a class can collect
 one table.
 
 Copied from ubrain's examples/lab_cerebellum.py. ubrain itself is in
-weeks/16-cerebellum/vendor/ (see ubrain_local.py); nothing else beyond
+vendor/ubrain/ (see ubrain_local.py); nothing else beyond
 `uv sync`.
 """
 
@@ -63,7 +63,7 @@ import numpy as np
 
 import ubrain_local
 
-ubrain_local.load()                 # vendor/'s wheel onto sys.path, before `import ubrain`
+ubrain_local.load()                 # the vendored wheel onto sys.path, before `import ubrain`
 
 from ubrain import Brain, Wiring, act_03, manifest_from_hello_03, profile, senses_from_state_03  # noqa: E402
 from ubrain.bodies import BodyClient, kill_tree  # noqa: E402

@@ -1,0 +1,51 @@
+{
+ "v": 4,
+ "title": "The Explorer",
+ "subtitle": "ubrain on the G1: walking down a gallery with CLIP as its eye, and remembering what it saw",
+ "cover": "cover",
+ "order": [
+  "cover",
+  "plan",
+  "scene",
+  "pipeline",
+  "predict",
+  "asshipped",
+  "fig_walk",
+  "drift",
+  "breaks",
+  "code",
+  "flags",
+  "demo",
+  "class2",
+  "questions",
+  "next"
+ ],
+ "sections": {
+  "s1": {
+   "description": "What the two classes are for",
+   "start": "cover"
+  },
+  "s2": {
+   "description": "Part 1: from pixels to an episode",
+   "start": "scene"
+  },
+  "s3": {
+   "description": "Part 2: measured",
+   "start": "predict"
+  },
+  "s4": {
+   "description": "Part 3: the code, the demo and the hands-on class",
+   "start": "code"
+  }
+ },
+ "faces": {
+  "ibm-plex-sans": {
+   "family": "IBM Plex Sans",
+   "href": "https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;600;700&display=swap"
+  },
+  "jetbrains-mono": {
+   "family": "JetBrains Mono",
+   "href": "https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&display=swap"
+  }
+ }
+}

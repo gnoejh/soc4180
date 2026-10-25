@@ -241,6 +241,9 @@ weeks/**/lab_*work*.ipynb
 # Instructor answers, any week: never published in the clear. They are pushed
 # only as instructor.tar.gz.gpg, via scripts/instructor.py seal.
 weeks/*/instructor/
+# Part II (week 16 on): measured reference answers are published, not sealed (user, 2026-10-25)
+!weeks/1[6-9]-*/instructor/
+!weeks/2[0-9]-*/instructor/
 
 # MuJoCo writes this on warnings (week 1 triggers BADQACC on purpose)
 MUJOCO_LOG.TXT
@@ -250,9 +253,11 @@ MUJOCO_LOG.TXT
 weeks/exam_midterm/*
 !weeks/exam_midterm/overview.md
 
-# week 16: ubrain_local.py unpacks the wheel here on first run; the lab writes its results
-weeks/16-cerebellum/vendor/.unpacked/
-!weeks/16-cerebellum/vendor/wheels/
-weeks/16-cerebellum/results.csv
-weeks/16-cerebellum/last_run.json
-weeks/16-cerebellum/run_*.png
+# Part II: vendor/ubrain/ubrain_vendor.py unpacks the wheel here on first run
+vendor/ubrain/.unpacked/
+!vendor/ubrain/wheels/
+# Part II labs write their results beside them
+weeks/*/results.csv
+weeks/*/last_run.json
+weeks/*/run_*.png
+weeks/*/brains/

@@ -1,0 +1,501 @@
+{
+ "when": "2026-10-25T19:24:33",
+ "name": "trace",
+ "learner": "off",
+ "schedule": "5:0,30:W,30:0",
+ "wind": 15.0,
+ "vx": 0.5,
+ "blocks": [
+  {
+   "block": 0,
+   "strides": 5,
+   "wind": 0.0,
+   "clamped": false,
+   "turned_deg": -0.4,
+   "turned_first10_deg": -0.4,
+   "turn_first3": -0.0018,
+   "turn_last5": -0.0018,
+   "counter_last5": 0.0
+  },
+  {
+   "block": 1,
+   "strides": 30,
+   "wind": 15.0,
+   "clamped": false,
+   "turned_deg": 230.1,
+   "turned_first10_deg": 73.3,
+   "turn_first3": 0.1298,
+   "turn_last5": 0.1726,
+   "counter_last5": 0.0
+  },
+  {
+   "block": 2,
+   "strides": 30,
+   "wind": 0.0,
+   "clamped": false,
+   "turned_deg": 2.4,
+   "turned_first10_deg": 4.0,
+   "turn_first3": 0.0329,
+   "turn_last5": -0.0017,
+   "counter_last5": 0.0
+  }
+ ],
+ "fell": "",
+ "strides": [
+  {
+   "block": 0,
+   "wind": 0.0,
+   "clamped": false,
+   "turn": -0.0018664363184818177,
+   "counter": 0.0
+  },
+  {
+   "block": 0,
+   "wind": 0.0,
+   "clamped": false,
+   "turn": -0.0017696405086540857,
+   "counter": 0.0
+  },
+  {
+   "block": 0,
+   "wind": 0.0,
+   "clamped": false,
+   "turn": -0.0017560847037256162,
+   "counter": 0.0
+  },
+  {
+   "block": 0,
+   "wind": 0.0,
+   "clamped": false,
+   "turn": -0.0018051183730636716,
+   "counter": 0.0
+  },
+  {
+   "block": 0,
+   "wind": 0.0,
+   "clamped": false,
+   "turn": -0.0018701177524184792,
+   "counter": 0.0
+  },
+  {
+   "block": 1,
+   "wind": 15.0,
+   "clamped": false,
+   "turn": 0.036623771955453154,
+   "counter": 0.0
+  },
+  {
+   "block": 1,
+   "wind": 15.0,
+   "clamped": false,
+   "turn": 0.18388903863579914,
+   "counter": 0.0
+  },
+  {
+   "block": 1,
+   "wind": 15.0,
+   "clamped": false,
+   "turn": 0.1687926887941784,
+   "counter": 0.0
+  },
+  {
+   "block": 1,
+   "wind": 15.0,
+   "clamped": false,
+   "turn": 0.17319854744613497,
+   "counter": 0.0
+  },
+  {
+   "block": 1,
+   "wind": 15.0,
+   "clamped": false,
+   "turn": 0.1785341176182623,
+   "counter": 0.0
+  },
+  {
+   "block": 1,
+   "wind": 15.0,
+   "clamped": false,
+   "turn": 0.17249494441265595,
+   "counter": 0.0
+  },
+  {
+   "block": 1,
+   "wind": 15.0,
+   "clamped": false,
+   "turn": 0.17690812175621898,
+   "counter": 0.0
+  },
+  {
+   "block": 1,
+   "wind": 15.0,
+   "clamped": false,
+   "turn": 0.17072385625923706,
+   "counter": 0.0
+  },
+  {
+   "block": 1,
+   "wind": 15.0,
+   "clamped": false,
+   "turn": 0.16837744842181887,
+   "counter": 0.0
+  },
+  {
+   "block": 1,
+   "wind": 15.0,
+   "clamped": false,
+   "turn": 0.1692961183301986,
+   "counter": 0.0
+  },
+  {
+   "block": 1,
+   "wind": 15.0,
+   "clamped": false,
+   "turn": 0.16633181260585128,
+   "counter": 0.0
+  },
+  {
+   "block": 1,
+   "wind": 15.0,
+   "clamped": false,
+   "turn": 0.16970093689169122,
+   "counter": 0.0
+  },
+  {
+   "block": 1,
+   "wind": 15.0,
+   "clamped": false,
+   "turn": 0.1702384034468844,
+   "counter": 0.0
+  },
+  {
+   "block": 1,
+   "wind": 15.0,
+   "clamped": false,
+   "turn": 0.17073976779520317,
+   "counter": 0.0
+  },
+  {
+   "block": 1,
+   "wind": 15.0,
+   "clamped": false,
+   "turn": 0.1715080421584918,
+   "counter": 0.0
+  },
+  {
+   "block": 1,
+   "wind": 15.0,
+   "clamped": false,
+   "turn": 0.17231742420803225,
+   "counter": 0.0
+  },
+  {
+   "block": 1,
+   "wind": 15.0,
+   "clamped": false,
+   "turn": 0.17328533654052133,
+   "counter": 0.0
+  },
+  {
+   "block": 1,
+   "wind": 15.0,
+   "clamped": false,
+   "turn": 0.1741425002107711,
+   "counter": 0.0
+  },
+  {
+   "block": 1,
+   "wind": 15.0,
+   "clamped": false,
+   "turn": 0.17062462586681404,
+   "counter": 0.0
+  },
+  {
+   "block": 1,
+   "wind": 15.0,
+   "clamped": false,
+   "turn": 0.17404754769835545,
+   "counter": 0.0
+  },
+  {
+   "block": 1,
+   "wind": 15.0,
+   "clamped": false,
+   "turn": 0.168800945749159,
+   "counter": 0.0
+  },
+  {
+   "block": 1,
+   "wind": 15.0,
+   "clamped": false,
+   "turn": 0.1663875453218307,
+   "counter": 0.0
+  },
+  {
+   "block": 1,
+   "wind": 15.0,
+   "clamped": false,
+   "turn": 0.16787079356262458,
+   "counter": 0.0
+  },
+  {
+   "block": 1,
+   "wind": 15.0,
+   "clamped": false,
+   "turn": 0.1725770878176271,
+   "counter": 0.0
+  },
+  {
+   "block": 1,
+   "wind": 15.0,
+   "clamped": false,
+   "turn": 0.16851638184963993,
+   "counter": 0.0
+  },
+  {
+   "block": 1,
+   "wind": 15.0,
+   "clamped": false,
+   "turn": 0.1721586193995557,
+   "counter": 0.0
+  },
+  {
+   "block": 1,
+   "wind": 15.0,
+   "clamped": false,
+   "turn": 0.1708270087101739,
+   "counter": 0.0
+  },
+  {
+   "block": 1,
+   "wind": 15.0,
+   "clamped": false,
+   "turn": 0.17183664785373137,
+   "counter": 0.0
+  },
+  {
+   "block": 1,
+   "wind": 15.0,
+   "clamped": false,
+   "turn": 0.17319834982551913,
+   "counter": 0.0
+  },
+  {
+   "block": 1,
+   "wind": 15.0,
+   "clamped": false,
+   "turn": 0.17505206413838587,
+   "counter": 0.0
+  },
+  {
+   "block": 2,
+   "wind": 0.0,
+   "clamped": false,
+   "turn": 0.1243925453852758,
+   "counter": 0.0
+  },
+  {
+   "block": 2,
+   "wind": 0.0,
+   "clamped": false,
+   "turn": -0.024902814652833255,
+   "counter": 0.0
+  },
+  {
+   "block": 2,
+   "wind": 0.0,
+   "clamped": false,
+   "turn": -0.0006668325757107907,
+   "counter": 0.0
+  },
+  {
+   "block": 2,
+   "wind": 0.0,
+   "clamped": false,
+   "turn": -0.0017415798354340623,
+   "counter": 0.0
+  },
+  {
+   "block": 2,
+   "wind": 0.0,
+   "clamped": false,
+   "turn": -0.0019982313753512115,
+   "counter": 0.0
+  },
+  {
+   "block": 2,
+   "wind": 0.0,
+   "clamped": false,
+   "turn": -0.0018837637753087084,
+   "counter": 0.0
+  },
+  {
+   "block": 2,
+   "wind": 0.0,
+   "clamped": false,
+   "turn": -0.001924918793006336,
+   "counter": 0.0
+  },
+  {
+   "block": 2,
+   "wind": 0.0,
+   "clamped": false,
+   "turn": -0.0017473777846569005,
+   "counter": 0.0
+  },
+  {
+   "block": 2,
+   "wind": 0.0,
+   "clamped": false,
+   "turn": -0.0016566951679316323,
+   "counter": 0.0
+  },
+  {
+   "block": 2,
+   "wind": 0.0,
+   "clamped": false,
+   "turn": -0.0016566898935451546,
+   "counter": 0.0
+  },
+  {
+   "block": 2,
+   "wind": 0.0,
+   "clamped": false,
+   "turn": -0.0016527608017182726,
+   "counter": 0.0
+  },
+  {
+   "block": 2,
+   "wind": 0.0,
+   "clamped": false,
+   "turn": -0.0016522827188180738,
+   "counter": 0.0
+  },
+  {
+   "block": 2,
+   "wind": 0.0,
+   "clamped": false,
+   "turn": -0.0016531254977396853,
+   "counter": 0.0
+  },
+  {
+   "block": 2,
+   "wind": 0.0,
+   "clamped": false,
+   "turn": -0.0016544044614669295,
+   "counter": 0.0
+  },
+  {
+   "block": 2,
+   "wind": 0.0,
+   "clamped": false,
+   "turn": -0.001655745730504729,
+   "counter": 0.0
+  },
+  {
+   "block": 2,
+   "wind": 0.0,
+   "clamped": false,
+   "turn": -0.0016575115199228385,
+   "counter": 0.0
+  },
+  {
+   "block": 2,
+   "wind": 0.0,
+   "clamped": false,
+   "turn": -0.0016592812169171744,
+   "counter": 0.0
+  },
+  {
+   "block": 2,
+   "wind": 0.0,
+   "clamped": false,
+   "turn": -0.0016610457450784212,
+   "counter": 0.0
+  },
+  {
+   "block": 2,
+   "wind": 0.0,
+   "clamped": false,
+   "turn": -0.0016706180386797914,
+   "counter": 0.0
+  },
+  {
+   "block": 2,
+   "wind": 0.0,
+   "clamped": false,
+   "turn": -0.0016542504692443004,
+   "counter": 0.0
+  },
+  {
+   "block": 2,
+   "wind": 0.0,
+   "clamped": false,
+   "turn": -0.0016762485849745462,
+   "counter": 0.0
+  },
+  {
+   "block": 2,
+   "wind": 0.0,
+   "clamped": false,
+   "turn": -0.0016589382797796842,
+   "counter": 0.0
+  },
+  {
+   "block": 2,
+   "wind": 0.0,
+   "clamped": false,
+   "turn": -0.0016545092905109443,
+   "counter": 0.0
+  },
+  {
+   "block": 2,
+   "wind": 0.0,
+   "clamped": false,
+   "turn": -0.0016789636176768596,
+   "counter": 0.0
+  },
+  {
+   "block": 2,
+   "wind": 0.0,
+   "clamped": false,
+   "turn": -0.0016640735258804302,
+   "counter": 0.0
+  },
+  {
+   "block": 2,
+   "wind": 0.0,
+   "clamped": false,
+   "turn": -0.0016602615066911546,
+   "counter": 0.0
+  },
+  {
+   "block": 2,
+   "wind": 0.0,
+   "clamped": false,
+   "turn": -0.001659182740892684,
+   "counter": 0.0
+  },
+  {
+   "block": 2,
+   "wind": 0.0,
+   "clamped": false,
+   "turn": -0.0016600855083377468,
+   "counter": 0.0
+  },
+  {
+   "block": 2,
+   "wind": 0.0,
+   "clamped": false,
+   "turn": -0.0016617859031315436,
+   "counter": 0.0
+  },
+  {
+   "block": 2,
+   "wind": 0.0,
+   "clamped": false,
+   "turn": -0.0016638640731741206,
+   "counter": 0.0
+  }
+ ]
+}

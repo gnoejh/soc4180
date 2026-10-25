@@ -1,0 +1,15 @@
+<section id="sheet" data-transition="fade" style="background:#F6F4EE;color:#14213D;font-family:'IBM Plex Sans', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:40px">
+<div style="display:flex;flex-direction:column;gap:16px">
+<p style="font-size:24px;font-weight:600;letter-spacing:3px;text-transform:uppercase;color:#B0521A">Part 2 · The datasheet</p>
+<h2 style="font-size:64px;font-weight:700;line-height:1.1">A figure before a single tick</h2>
+</div>
+
+<div style="background:#14213D;border-radius:16px;padding:36px 40px">
+<p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:26px;line-height:1.5;color:#E8ECF3;white-space:pre">walker on mujoco/g1
+region              figure                            value               conditions
+cerebellum.forward  granule code                      128 of 2048 active  eta=0.5
+cerebellum.brace    lead of the counter-move (ticks)  10.0                tau=0.9</p>
+</div><p style="font-size:30px;line-height:1.45;color:#3A4458">Like a chip's datasheet: each figure is the closed-form law of one region under stated conditions, computed from the configuration alone. The brace's <b style='color:#14213D'>lead</b> is how far back its trace of the tone reaches:</p><p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:34px;color:#2F6FB0">lead = 1 / (1 − τ)  ticks     τ 0.5 → 2,  0.9 → 10,  0.97 → 33.3</p>
+<p style="position:absolute;left:128px;bottom:64px;width:1664px;font-size:24px;color:#6B7385">A brain's life · 8</p>
+<aside>datasheet_text(brain) right after Brain(...), before any tick: lab_life.py sheet --tau T. 1/(1-tau) is the sum of tau^k over k, the mean reach of an exponentially fading trace. In week 16, tau 0.5 never learned (0.5^10 = 0.001 left at the push).</aside>
+</section>

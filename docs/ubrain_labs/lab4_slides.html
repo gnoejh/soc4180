@@ -1,0 +1,522 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The Cerebellum in a Walking Robot</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;600;700&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+html, body { margin: 0; height: 100%; background: #0B1222; overflow: hidden; }
+#stage { position: absolute; left: 50%; top: 50%; width: 1920px; height: 1080px; transform-origin: 0 0; }
+section { position: absolute; inset: 0; width: 1920px; height: 1080px; box-sizing: border-box; }
+section:not(.on) { display: none !important; }
+section * { margin: 0; box-sizing: border-box; }
+section ul, section ol { padding-left: 1.2em; }
+section aside { display: none; }
+body.notes section.on aside { display: block; position: absolute; left: 0; right: 0; bottom: 0;
+  background: rgba(11,18,34,.92); color: #F6F4EE; font: 26px/1.4 Arial, sans-serif; padding: 24px 48px; }
+svg.conn { position: absolute; left: 0; top: 0; pointer-events: none; }
+#n { position: fixed; right: 12px; bottom: 8px; color: #8FA3BF; font: 14px Arial, sans-serif; }
+</style></head>
+<body><div id="stage">
+<section id="cover" data-transition="fade" style="background:#14213D;color:#F6F4EE;font-family:'IBM Plex Sans', Arial, sans-serif;padding:128px;display:flex;flex-direction:column;justify-content:center;gap:40px">
+<div style="position:absolute;left:128px;top:128px;width:160px;height:12px;background:#E07A2F"></div>
+<p style="font-size:28px;font-weight:600;letter-spacing:4px;text-transform:uppercase;color:#F0A060">Robot lab · Class 1 of 2</p>
+<h1 style="font-size:112px;font-weight:700;line-height:1.05;color:#F6F4EE">The cerebellum in a walking robot</h1>
+<p style="font-size:36px;line-height:1.4;color:#C9D3E3">How a brain region that predicts and times movement runs on a Unitree G1, and how you can change it.</p>
+<p style="position:absolute;left:128px;bottom:96px;width:1664px;font-size:28px;color:#C9D3E3">[Your name] · [Course] · [Date]</p>
+
+</section>
+<section id="plan" data-transition="fade" style="background:#F6F4EE;color:#14213D;font-family:'IBM Plex Sans', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:48px">
+<div style="display:flex;flex-direction:column;gap:16px">
+<p style="font-size:24px;font-weight:600;letter-spacing:3px;text-transform:uppercase;color:#B0521A">The plan</p>
+<h2 style="font-size:64px;font-weight:700;line-height:1.1">Two classes, one question</h2>
+</div>
+<p style="font-size:40px;line-height:1.3;color:#14213D">What does the cerebellum compute, and what does each of its parts buy the body?</p>
+<div style="display:flex;gap:32px">
+<div style="flex:1;display:flex;flex-direction:column;gap:16px;background:#FFFDF8;padding:40px;border:2px solid #14213D;border-radius:16px">
+<h3 style="font-size:36px;font-weight:700">Class 1 · today</h3>
+<ul style="font-size:30px;line-height:1.45;color:#3A4458">
+<li>The principles: circuit, prediction, timing</li>
+<li>How the brain is wired to the G1</li>
+<li>The code you will change</li>
+<li>Live demo: the robot walks, is pushed, learns to brace</li>
+</ul>
+</div>
+<div style="flex:1;display:flex;flex-direction:column;gap:16px;background:#FFFDF8;padding:40px;border:2px solid #E07A2F;border-radius:16px">
+<h3 style="font-size:36px;font-weight:700">Class 2 · hands-on</h3>
+<ul style="font-size:30px;line-height:1.45;color:#3A4458">
+<li>Groups of 2–3, one laptop each group</li>
+<li>Change one parameter at a time</li>
+<li>Predict first, then run and measure</li>
+<li>Present your result: 5 minutes per group</li>
+</ul>
+</div>
+</div>
+<p style="position:absolute;left:128px;bottom:64px;width:1664px;font-size:24px;color:#6B7385">The cerebellum in a walking robot · 2</p>
+
+</section>
+<section id="why" data-transition="fade" style="background:#F6F4EE;color:#14213D;font-family:'IBM Plex Sans', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:48px">
+<div style="display:flex;flex-direction:column;gap:16px">
+<p style="font-size:24px;font-weight:600;letter-spacing:3px;text-transform:uppercase;color:#B0521A">Part 1 · Principles</p>
+<h2 style="font-size:64px;font-weight:700;line-height:1.1">What the cerebellum does</h2>
+</div>
+<p style="font-size:48px;font-weight:600;line-height:1.25;color:#14213D">It predicts what a movement will do to the body, and times actions to what is about to happen.</p>
+<div style="display:flex;gap:32px">
+<div style="flex:1;display:flex;flex-direction:column;gap:12px;background:#FFFDF8;padding:36px;border-top:8px solid #2F6FB0;border-radius:12px">
+<h3 style="font-size:34px;font-weight:700">Most of the brain’s neurons</h3>
+<p style="font-size:28px;line-height:1.4;color:#3A4458">About four in five neurons sit in the cerebellum, nearly all of them tiny granule cells.</p>
+</div>
+<div style="flex:1;display:flex;flex-direction:column;gap:12px;background:#FFFDF8;padding:36px;border-top:8px solid #2F6FB0;border-radius:12px">
+<h3 style="font-size:34px;font-weight:700">Damage: clumsy, not paralysed</h3>
+<p style="font-size:28px;line-height:1.4;color:#3A4458">Movements still happen, but overshoot, wobble and come at the wrong moment (ataxia).</p>
+</div>
+<div style="flex:1;display:flex;flex-direction:column;gap:12px;background:#FFFDF8;padding:36px;border-top:8px solid #E07A2F;border-radius:12px">
+<h3 style="font-size:34px;font-weight:700">It learns from mistakes</h3>
+<p style="font-size:28px;line-height:1.4;color:#3A4458">One dedicated wire per cell reports the error; the cell corrects itself.</p>
+</div>
+</div>
+<p style="position:absolute;left:128px;bottom:64px;width:1664px;font-size:24px;color:#6B7385">The cerebellum in a walking robot · 3</p>
+
+</section>
+<section id="circuit" data-transition="fade" style="background:#F6F4EE;color:#14213D;font-family:'IBM Plex Sans', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:48px">
+<div style="display:flex;flex-direction:column;gap:16px">
+<p style="font-size:24px;font-weight:600;letter-spacing:3px;text-transform:uppercase;color:#B0521A">Part 1 · Principles</p>
+<h2 style="font-size:64px;font-weight:700;line-height:1.1">The circuit, in five parts</h2>
+</div>
+<div style="position:absolute;left:128px;top:380px;width:330px;height:200px;display:flex;flex-direction:column;gap:8px;background:#FFFDF8;padding:28px;border:2px solid #14213D;border-radius:16px">
+<h3 style="font-size:32px;font-weight:700">Mossy fibres</h3>
+<p style="font-size:26px;line-height:1.4;color:#3A4458">the input: body state and command</p>
+</div>
+<div style="position:absolute;left:548px;top:380px;width:330px;height:200px;display:flex;flex-direction:column;gap:8px;background:#FFFDF8;padding:28px;border:2px solid #14213D;border-radius:16px">
+<h3 style="font-size:32px;font-weight:700">Granule cells</h3>
+<p style="font-size:26px;line-height:1.4;color:#3A4458">expand: very many cells, few active</p>
+</div>
+<div style="position:absolute;left:968px;top:380px;width:330px;height:200px;display:flex;flex-direction:column;gap:8px;background:#FFFDF8;padding:28px;border:2px solid #14213D;border-radius:16px">
+<h3 style="font-size:32px;font-weight:700">Purkinje cells</h3>
+<p style="font-size:26px;line-height:1.4;color:#3A4458">read out: the prediction</p>
+</div>
+<div style="position:absolute;left:1388px;top:380px;width:404px;height:200px;display:flex;flex-direction:column;gap:8px;background:#FFFDF8;padding:28px;border:2px solid #14213D;border-radius:16px">
+<h3 style="font-size:32px;font-weight:700">Output</h3>
+<p style="font-size:26px;line-height:1.4;color:#3A4458">deep nuclei, then movement</p>
+</div>
+<div style="position:absolute;left:968px;top:700px;width:330px;height:180px;display:flex;flex-direction:column;gap:8px;background:#FBE6D6;padding:28px;border:2px solid #B0521A;border-radius:16px">
+<h3 style="font-size:32px;font-weight:700">Climbing fibre</h3>
+<p style="font-size:26px;line-height:1.4;color:#3A4458">the teacher: the error</p>
+</div>
+<svg class="conn" width="1920" height="1080" viewBox="0 0 1920 1080"><line x1="458.0" y1="480.0" x2="532.0" y2="480.0" stroke="#14213D" stroke-width="4.0"/><polygon points="548.0,480.0 532.0,489.6 532.0,470.4" fill="#14213D"/></svg>
+<svg class="conn" width="1920" height="1080" viewBox="0 0 1920 1080"><line x1="878.0" y1="480.0" x2="952.0" y2="480.0" stroke="#14213D" stroke-width="4.0"/><polygon points="968.0,480.0 952.0,489.6 952.0,470.4" fill="#14213D"/></svg>
+<svg class="conn" width="1920" height="1080" viewBox="0 0 1920 1080"><line x1="1298.0" y1="480.0" x2="1372.0" y2="480.0" stroke="#14213D" stroke-width="4.0"/><polygon points="1388.0,480.0 1372.0,489.6 1372.0,470.4" fill="#14213D"/></svg>
+<svg class="conn" width="1920" height="1080" viewBox="0 0 1920 1080"><line x1="1133.0" y1="700.0" x2="1133.0" y2="596.0" stroke="#B0521A" stroke-width="4.0"/><polygon points="1133.0,580.0 1142.6,596.0 1123.4,596.0" fill="#B0521A"/></svg>
+<p style="position:absolute;left:1340px;top:716px;width:452px;font-size:26px;line-height:1.4;color:#3A4458">From the inferior olive. One climbing fibre per Purkinje cell: its spike says “you were wrong”.</p>
+<p style="position:absolute;left:128px;top:640px;width:760px;font-size:26px;line-height:1.4;color:#3A4458">Granule axons run as parallel fibres; each Purkinje cell hears up to two hundred thousand of them.</p>
+<p style="position:absolute;left:128px;bottom:64px;width:1664px;font-size:24px;color:#6B7385">The cerebellum in a walking robot · 4</p>
+
+</section>
+<section id="marr" data-transition="fade" style="background:#F6F4EE;color:#14213D;font-family:'IBM Plex Sans', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:48px">
+<div style="display:flex;flex-direction:column;gap:16px">
+<p style="font-size:24px;font-weight:600;letter-spacing:3px;text-transform:uppercase;color:#B0521A">Part 1 · Principles</p>
+<h2 style="font-size:64px;font-weight:700;line-height:1.1">The Marr–Albus idea (1969, 1971)</h2>
+</div>
+<div style="display:flex;gap:32px">
+<div style="flex:1;display:flex;flex-direction:column;gap:16px;background:#FFFDF8;padding:40px;border-radius:16px;border:2px solid #D9D4C7">
+<p style="font-size:88px;font-weight:700;line-height:1;color:#E07A2F">1</p>
+<h3 style="font-size:36px;font-weight:700">Expand</h3>
+<p style="font-size:28px;line-height:1.45;color:#3A4458">Spread a few inputs over very many granule cells, only a few active at once. States that looked alike become easy to tell apart.</p>
+</div>
+<div style="flex:1;display:flex;flex-direction:column;gap:16px;background:#FFFDF8;padding:40px;border-radius:16px;border:2px solid #D9D4C7">
+<p style="font-size:88px;font-weight:700;line-height:1;color:#E07A2F">2</p>
+<h3 style="font-size:36px;font-weight:700">Read out</h3>
+<p style="font-size:28px;line-height:1.45;color:#3A4458">A Purkinje cell adds up the active granule cells, each through its own synaptic weight.</p>
+</div>
+<div style="flex:1;display:flex;flex-direction:column;gap:16px;background:#FFFDF8;padding:40px;border-radius:16px;border:2px solid #D9D4C7">
+<p style="font-size:88px;font-weight:700;line-height:1;color:#E07A2F">3</p>
+<h3 style="font-size:36px;font-weight:700">Correct</h3>
+<p style="font-size:28px;line-height:1.45;color:#3A4458">When the climbing fibre reports an error, change only the synapses that were active just then.</p>
+</div>
+</div>
+<p style="font-size:36px;font-weight:600;line-height:1.3;color:#14213D">All the learning lives in one place: the granule-to-Purkinje synapses.</p>
+<p style="position:absolute;left:128px;bottom:64px;width:1664px;font-size:24px;color:#6B7385">The cerebellum in a walking robot · 5</p>
+
+</section>
+<section id="forward" data-transition="fade" style="background:#F6F4EE;color:#14213D;font-family:'IBM Plex Sans', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:40px">
+<div style="display:flex;flex-direction:column;gap:16px">
+<p style="font-size:24px;font-weight:600;letter-spacing:3px;text-transform:uppercase;color:#B0521A">Part 1 · Principles</p>
+<h2 style="font-size:64px;font-weight:700;line-height:1.1">The forward model, in five lines</h2>
+</div>
+<div style="display:flex;flex-direction:column">
+<div style="display:flex;gap:32px;align-items:center;padding:18px 0;border-top:2px solid #D9D4C7">
+<p style="width:300px;font-size:30px;font-weight:600">Mossy fibres</p>
+<p style="width:560px;font-family:'JetBrains Mono', 'Courier New', monospace;font-size:32px;color:#2F6FB0">c = [ body , cmd ]</p>
+<p style="flex:1;font-size:28px;color:#3A4458">70 body numbers and the 3-number walk command</p>
+</div>
+<div style="display:flex;gap:32px;align-items:center;padding:18px 0;border-top:2px solid #D9D4C7">
+<p style="width:300px;font-size:30px;font-weight:600">Granule cells</p>
+<p style="width:560px;font-family:'JetBrains Mono', 'Courier New', monospace;font-size:32px;color:#2F6FB0">g = kWTA( G c )</p>
+<p style="flex:1;font-size:28px;color:#3A4458">G random and fixed; keep the k largest, centre, scale to length 1</p>
+</div>
+<div style="display:flex;gap:32px;align-items:center;padding:18px 0;border-top:2px solid #D9D4C7">
+<p style="width:300px;font-size:30px;font-weight:600">Purkinje cells</p>
+<p style="width:560px;font-family:'JetBrains Mono', 'Courier New', monospace;font-size:32px;color:#2F6FB0">ŷ = M g</p>
+<p style="flex:1;font-size:28px;color:#3A4458">the predicted change of the body over the next tick</p>
+</div>
+<div style="display:flex;gap:32px;align-items:center;padding:18px 0;border-top:2px solid #D9D4C7">
+<p style="width:300px;font-size:30px;font-weight:600">Climbing fibre</p>
+<p style="width:560px;font-family:'JetBrains Mono', 'Courier New', monospace;font-size:32px;color:#2F6FB0">e = y − ŷ</p>
+<p style="flex:1;font-size:28px;color:#3A4458">what really happened, minus what was predicted</p>
+</div>
+<div style="display:flex;gap:32px;align-items:center;padding:18px 0;border-top:2px solid #D9D4C7;border-bottom:2px solid #D9D4C7">
+<p style="width:300px;font-size:30px;font-weight:600">Learning</p>
+<p style="width:560px;font-family:'JetBrains Mono', 'Courier New', monospace;font-size:32px;color:#B0521A">M ← M + η e gᵀ</p>
+<p style="flex:1;font-size:28px;color:#3A4458">the delta rule: only active cells change</p>
+</div>
+</div>
+<p style="font-size:28px;line-height:1.4;color:#3A4458">In the lab: G has <b>--granules</b> rows (2048), k is <b>--active</b> (128), η is <b>--eta-forward</b> (0.5). The score is the error as a percentage of the error of predicting “no change”.</p>
+<p style="position:absolute;left:128px;bottom:64px;width:1664px;font-size:24px;color:#6B7385">The cerebellum in a walking robot · 6</p>
+
+</section>
+<section id="sparse" data-transition="fade" style="background:#F6F4EE;color:#14213D;font-family:'IBM Plex Sans', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:48px">
+<div style="display:flex;flex-direction:column;gap:16px">
+<p style="font-size:24px;font-weight:600;letter-spacing:3px;text-transform:uppercase;color:#B0521A">Part 1 · Principles</p>
+<h2 style="font-size:64px;font-weight:700;line-height:1.1">Why sparse? Shared cells mean interference</h2>
+</div>
+<div style="display:flex;gap:48px">
+<div style="flex:1;display:flex;flex-direction:column;gap:20px;background:#FFFDF8;padding:40px;border-radius:16px;border:2px solid #D9D4C7">
+<h3 style="font-size:34px;font-weight:700">Dense: every cell fires</h3>
+<p style="font-size:26px;color:#3A4458">State A</p>
+<svg aria-label="Twelve granule cells, all active for state A" width="672" height="48" viewBox="0 0 672 48"><g fill="#E07A2F"><circle cx="28" cy="24" r="20"/><circle cx="84" cy="24" r="20"/><circle cx="140" cy="24" r="20"/><circle cx="196" cy="24" r="20"/><circle cx="252" cy="24" r="20"/><circle cx="308" cy="24" r="20"/><circle cx="364" cy="24" r="20"/><circle cx="420" cy="24" r="20"/><circle cx="476" cy="24" r="20"/><circle cx="532" cy="24" r="20"/><circle cx="588" cy="24" r="20"/><circle cx="644" cy="24" r="20"/></g></svg>
+<p style="font-size:26px;color:#3A4458">State B</p>
+<svg aria-label="Twelve granule cells, all active for state B" width="672" height="48" viewBox="0 0 672 48"><g fill="#2F6FB0"><circle cx="28" cy="24" r="20"/><circle cx="84" cy="24" r="20"/><circle cx="140" cy="24" r="20"/><circle cx="196" cy="24" r="20"/><circle cx="252" cy="24" r="20"/><circle cx="308" cy="24" r="20"/><circle cx="364" cy="24" r="20"/><circle cx="420" cy="24" r="20"/><circle cx="476" cy="24" r="20"/><circle cx="532" cy="24" r="20"/><circle cx="588" cy="24" r="20"/><circle cx="644" cy="24" r="20"/></g></svg>
+<p style="font-size:28px;line-height:1.4;color:#14213D">Shared: 12 of 12. Correcting A moves B’s prediction too.</p>
+</div>
+<div style="flex:1;display:flex;flex-direction:column;gap:20px;background:#FFFDF8;padding:40px;border-radius:16px;border:2px solid #D9D4C7">
+<h3 style="font-size:34px;font-weight:700">Sparse: a few fire</h3>
+<p style="font-size:26px;color:#3A4458">State A</p>
+<svg aria-label="Twelve granule cells, three active for state A" width="672" height="48" viewBox="0 0 672 48"><g fill="none" stroke="#9AA3B5" stroke-width="3"><circle cx="28" cy="24" r="18"/><circle cx="140" cy="24" r="18"/><circle cx="196" cy="24" r="18"/><circle cx="252" cy="24" r="18"/><circle cx="364" cy="24" r="18"/><circle cx="420" cy="24" r="18"/><circle cx="476" cy="24" r="18"/><circle cx="532" cy="24" r="18"/><circle cx="644" cy="24" r="18"/></g><g fill="#E07A2F"><circle cx="84" cy="24" r="20"/><circle cx="308" cy="24" r="20"/><circle cx="588" cy="24" r="20"/></g></svg>
+<p style="font-size:26px;color:#3A4458">State B</p>
+<svg aria-label="Twelve granule cells, three different ones active for state B" width="672" height="48" viewBox="0 0 672 48"><g fill="none" stroke="#9AA3B5" stroke-width="3"><circle cx="28" cy="24" r="18"/><circle cx="84" cy="24" r="18"/><circle cx="140" cy="24" r="18"/><circle cx="252" cy="24" r="18"/><circle cx="308" cy="24" r="18"/><circle cx="364" cy="24" r="18"/><circle cx="476" cy="24" r="18"/><circle cx="588" cy="24" r="18"/><circle cx="644" cy="24" r="18"/></g><g fill="#2F6FB0"><circle cx="196" cy="24" r="20"/><circle cx="420" cy="24" r="20"/><circle cx="532" cy="24" r="20"/></g></svg>
+<p style="font-size:28px;line-height:1.4;color:#14213D">Shared: 0 of 12. Correcting A leaves B alone.</p>
+</div>
+</div>
+<p style="font-size:32px;font-weight:600;color:#B0521A">For class 2: is sparser always better?</p>
+<p style="position:absolute;left:128px;bottom:64px;width:1664px;font-size:24px;color:#6B7385">The cerebellum in a walking robot · 7</p>
+
+</section>
+<section id="delta" data-transition="fade" style="background:#F6F4EE;color:#14213D;font-family:'IBM Plex Sans', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:48px">
+<div style="display:flex;flex-direction:column;gap:16px">
+<p style="font-size:24px;font-weight:600;letter-spacing:3px;text-transform:uppercase;color:#B0521A">Part 1 · Principles</p>
+<h2 style="font-size:64px;font-weight:700;line-height:1.1">Learning from the error: the step size η</h2>
+</div>
+<p style="font-size:44px;font-weight:600;line-height:1.3">Each tick, the prediction moves a fraction η of the way toward what really happened.</p>
+<div style="display:flex;gap:32px">
+<div style="flex:1;display:flex;flex-direction:column;gap:16px;background:#FFFDF8;padding:40px;border-radius:16px;border-left:10px solid #2F6FB0">
+<h3 style="font-size:36px;font-weight:700">Small η</h3>
+<p style="font-size:30px;line-height:1.45;color:#3A4458">Safe but slow: it takes many strides before the predictions are good.</p>
+</div>
+<div style="flex:1;display:flex;flex-direction:column;gap:16px;background:#FFFDF8;padding:40px;border-radius:16px;border-left:10px solid #E07A2F">
+<h3 style="font-size:36px;font-weight:700">Large η</h3>
+<p style="font-size:30px;line-height:1.45;color:#3A4458">Fast, until each correction is bigger than the error it corrects. Then it overshoots, and the error grows instead of shrinking.</p>
+</div>
+</div>
+<p style="font-size:32px;font-weight:600;color:#B0521A">For class 2: where is the edge? You will find it with --eta-forward.</p>
+<p style="position:absolute;left:128px;bottom:64px;width:1664px;font-size:24px;color:#6B7385">The cerebellum in a walking robot · 8</p>
+
+</section>
+<section id="eyeblink" data-transition="fade" style="background:#F6F4EE;color:#14213D;font-family:'IBM Plex Sans', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:36px">
+<div style="display:flex;flex-direction:column;gap:16px">
+<p style="font-size:24px;font-weight:600;letter-spacing:3px;text-transform:uppercase;color:#B0521A">Part 1 · Principles</p>
+<h2 style="font-size:64px;font-weight:700;line-height:1.1">Timing: eyeblink conditioning</h2>
+</div>
+<p style="font-size:32px;line-height:1.4;color:#3A4458">A tone, then 0.2 s later a puff of air on the eye. After some trials the eye closes just before the puff, and only then: the cerebellum has learned the interval.</p>
+<div style="display:flex;flex-direction:column;gap:20px">
+<div style="display:flex;gap:32px;align-items:center">
+<p style="width:300px;font-size:30px;font-weight:600;color:#2F6FB0">Tone</p>
+<svg aria-label="A short tone at time zero" width="1100" height="70" viewBox="0 0 1100 70"><line x1="0" y1="66" x2="1100" y2="66" stroke="#9AA3B5" stroke-width="3"/><rect x="40" y="16" width="40" height="50" fill="#2F6FB0"/></svg>
+</div>
+<div style="display:flex;gap:32px;align-items:center">
+<p style="width:300px;font-size:30px;font-weight:600;color:#B0521A">Puff (G1: push)</p>
+<svg aria-label="The puff arrives 0.2 seconds after the tone" width="1100" height="70" viewBox="0 0 1100 70"><line x1="0" y1="66" x2="1100" y2="66" stroke="#9AA3B5" stroke-width="3"/><rect x="740" y="6" width="36" height="60" fill="#E07A2F"/></svg>
+</div>
+<div style="display:flex;gap:32px;align-items:center">
+<p style="width:300px;font-size:30px;font-weight:600">Blink, trained</p>
+<svg aria-label="After training, the blink ramps up and peaks as the puff arrives" width="1100" height="70" viewBox="0 0 1100 70"><line x1="0" y1="66" x2="1100" y2="66" stroke="#9AA3B5" stroke-width="3"/><path d="M0 66 L300 66 C500 64 660 24 752 8 C810 16 870 58 920 66 L1100 66" fill="none" stroke="#14213D" stroke-width="6"/></svg>
+</div>
+<div style="display:flex;gap:32px">
+<div style="width:300px"></div>
+<div style="position:relative;width:1100px;height:40px">
+<p style="position:absolute;left:20px;top:0px;width:200px;font-size:26px;color:#3A4458">0 s</p>
+<p style="position:absolute;left:712px;top:0px;width:200px;font-size:26px;color:#3A4458">0.2 s</p>
+</div>
+</div>
+</div>
+<p style="font-size:30px;line-height:1.4;color:#14213D"><b>On the G1:</b> the tone is a sound channel, the puff is a push from the front, and the blink is a step of the walk command into the push.</p>
+<p style="position:absolute;left:128px;bottom:64px;width:1664px;font-size:24px;color:#6B7385">The cerebellum in a walking robot · 9</p>
+
+</section>
+<section id="trace" data-transition="fade" style="background:#F6F4EE;color:#14213D;font-family:'IBM Plex Sans', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:32px">
+<div style="display:flex;flex-direction:column;gap:16px">
+<p style="font-size:24px;font-weight:600;letter-spacing:3px;text-transform:uppercase;color:#B0521A">Part 1 · Principles</p>
+<h2 style="font-size:64px;font-weight:700;line-height:1.1">How the brace learns: fading traces</h2>
+</div>
+<div style="display:flex;flex-direction:column">
+<div style="display:flex;gap:32px;align-items:center;padding:14px 0;border-top:2px solid #D9D4C7">
+<p style="width:280px;font-size:30px;font-weight:600">Delay line</p>
+<p style="width:560px;font-family:'JetBrains Mono', 'Courier New', monospace;font-size:30px;color:#2F6FB0">unit j, j = 0 … 39</p>
+<p style="flex:1;font-size:28px;color:#3A4458">unit j fires j ticks after the tone (0.8 s in all)</p>
+</div>
+<div style="display:flex;gap:32px;align-items:center;padding:14px 0;border-top:2px solid #D9D4C7">
+<p style="width:280px;font-size:30px;font-weight:600">Trace</p>
+<p style="width:560px;font-family:'JetBrains Mono', 'Courier New', monospace;font-size:30px;color:#B0521A">E_j(t) = τ^(t − j)</p>
+<p style="flex:1;font-size:28px;color:#3A4458">fades by τ every tick: <b>--tau</b></p>
+</div>
+<div style="display:flex;gap:32px;align-items:center;padding:14px 0;border-top:2px solid #D9D4C7">
+<p style="width:280px;font-size:30px;font-weight:600">Kick (error)</p>
+<p style="width:560px;font-family:'JetBrains Mono', 'Courier New', monospace;font-size:30px;color:#2F6FB0">κ(t)</p>
+<p style="flex:1;font-size:28px;color:#3A4458">the jolt the body got this tick, from the pelvis accelerometer</p>
+</div>
+<div style="display:flex;gap:32px;align-items:center;padding:14px 0;border-top:2px solid #D9D4C7">
+<p style="width:280px;font-size:30px;font-weight:600">Credit</p>
+<p style="width:560px;font-family:'JetBrains Mono', 'Courier New', monospace;font-size:30px;color:#2F6FB0">S_j = Σ_t κ(t) E_j(t)</p>
+<p style="flex:1;font-size:28px;color:#3A4458">every unit still glowing shares the blame</p>
+</div>
+<div style="display:flex;gap:32px;align-items:center;padding:14px 0;border-top:2px solid #D9D4C7">
+<p style="width:280px;font-size:30px;font-weight:600">Learning</p>
+<p style="width:560px;font-family:'JetBrains Mono', 'Courier New', monospace;font-size:30px;color:#B0521A">M ← (1 − η) M + η S</p>
+<p style="flex:1;font-size:28px;color:#3A4458">once per trial: <b>--eta-brace</b></p>
+</div>
+<div style="display:flex;gap:32px;align-items:center;padding:14px 0;border-top:2px solid #D9D4C7;border-bottom:2px solid #D9D4C7">
+<p style="width:280px;font-size:30px;font-weight:600">Counter-move</p>
+<p style="width:560px;font-family:'JetBrains Mono', 'Courier New', monospace;font-size:30px;color:#2F6FB0">cmd ← cmd − γ M_j</p>
+<p style="flex:1;font-size:28px;color:#3A4458">j ticks after the tone, step against the kick to come</p>
+</div>
+</div>
+<p style="font-size:30px;font-weight:600;line-height:1.35">A unit is credited with every kick after it, through its trace, so the counter-move ramps up before the push lands.</p>
+<p style="position:absolute;left:128px;bottom:64px;width:1664px;font-size:24px;color:#6B7385">The cerebellum in a walking robot · 10</p>
+
+</section>
+<section id="g1" data-transition="fade" style="background:#E07A2F;color:#14213D;font-family:'IBM Plex Sans', Arial, sans-serif;padding:128px;display:flex;flex-direction:column;justify-content:center;gap:40px">
+<p style="font-size:28px;font-weight:600;letter-spacing:4px;text-transform:uppercase;color:#14213D">Part 2 · The G1 connection</p>
+<h1 style="font-size:104px;font-weight:700;line-height:1.05;color:#14213D">A brain and a body, talking 50 times a second</h1>
+<p style="font-size:36px;line-height:1.4;color:#14213D">The walking is not learned here. The cerebellum rides on top of a walking robot and makes it better.</p>
+
+</section>
+<section id="bridge" data-transition="fade" style="background:#F6F4EE;color:#14213D;font-family:'IBM Plex Sans', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:48px">
+<div style="display:flex;flex-direction:column;gap:16px">
+<p style="font-size:24px;font-weight:600;letter-spacing:3px;text-transform:uppercase;color:#B0521A">Part 2 · The G1 connection</p>
+<h2 style="font-size:64px;font-weight:700;line-height:1.1">Two programs, one tick at a time</h2>
+</div>
+<div style="position:absolute;left:128px;top:330px;width:600px;height:520px;display:flex;flex-direction:column;gap:20px;background:#14213D;padding:40px;border-radius:16px">
+<h3 style="font-size:40px;font-weight:700;color:#F6F4EE">The brain</h3>
+<p style="font-size:28px;color:#C9D3E3">ubrain · Python and numpy</p>
+<ul style="font-size:28px;line-height:1.45;color:#F6F4EE">
+<li>cerebellum.forward: predicts the body, every tick</li>
+<li>cerebellum.brace: the timed counter-move to a push</li>
+<li>your goal comes in here: speed and turn</li>
+</ul>
+</div>
+<div style="position:absolute;left:1192px;top:330px;width:600px;height:520px;display:flex;flex-direction:column;gap:20px;background:#FFFDF8;padding:40px;border:2px solid #14213D;border-radius:16px">
+<h3 style="font-size:40px;font-weight:700">The body</h3>
+<p style="font-size:28px;color:#3A4458">MuJoCo · its own process</p>
+<ul style="font-size:28px;line-height:1.45;color:#3A4458">
+<li>Unitree G1 humanoid, 29 joints</li>
+<li>a frozen walking policy: the “spinal cord”</li>
+<li>the world: tones and pushes</li>
+</ul>
+</div>
+<svg class="conn" width="1920" height="1080" viewBox="0 0 1920 1080"><line x1="1192.0" y1="480.0" x2="752.0" y2="480.0" stroke="#2F6FB0" stroke-width="6.0"/><polygon points="728.0,480.0 752.0,465.6 752.0,494.4" fill="#2F6FB0"/></svg>
+<svg class="conn" width="1920" height="1080" viewBox="0 0 1920 1080"><line x1="728.0" y1="720.0" x2="1168.0" y2="720.0" stroke="#B0521A" stroke-width="6.0"/><polygon points="1192.0,720.0 1168.0,734.4 1168.0,705.6" fill="#B0521A"/></svg>
+<p style="position:absolute;left:752px;top:384px;width:416px;font-size:26px;line-height:1.35;text-align:center;color:#2F6FB0">senses: 70 body numbers and the tone</p>
+<p style="position:absolute;left:752px;top:570px;width:416px;font-size:30px;font-weight:700;text-align:center;color:#14213D">the tick bridge · 50 Hz</p>
+<p style="position:absolute;left:752px;top:740px;width:416px;font-size:26px;line-height:1.35;text-align:center;color:#B0521A">action: the walk command (forward, sideways, turn)</p>
+<p style="position:absolute;left:128px;bottom:64px;width:1664px;font-size:24px;color:#6B7385">The cerebellum in a walking robot · 12</p>
+
+</section>
+<section id="wiring" data-transition="fade" style="background:#F6F4EE;color:#14213D;font-family:'IBM Plex Sans', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:40px">
+<div style="display:flex;flex-direction:column;gap:16px">
+<p style="font-size:24px;font-weight:600;letter-spacing:3px;text-transform:uppercase;color:#B0521A">Part 3 · The code</p>
+<h2 style="font-size:64px;font-weight:700;line-height:1.1">The anatomy, as a file: walker.toml</h2>
+</div>
+<div style="display:flex;gap:48px;align-items:start">
+<div style="width:980px;background:#14213D;padding:40px;border-radius:16px">
+<p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;line-height:1.4;color:#E8ECF3"><span style="color:#F0A060">[regions."cerebellum.forward"]</span><br>d_g = 2048&#160;&#160;&#160;&#160;<span style="color:#8FA3BF"># granule cells</span><br>s&#160;&#160;&#160;= 128&#160;&#160;&#160;&#160;&#160;<span style="color:#8FA3BF"># active at once</span><br>eta = 0.5&#160;&#160;&#160;&#160;&#160;<span style="color:#8FA3BF"># learning rate</span><br><span style="color:#F0A060">[regions."cerebellum.brace"]</span><br>tau = 0.9&#160;&#160;&#160;&#160;&#160;<span style="color:#8FA3BF"># trace fading per tick</span><br>eta = 0.3&#160;&#160;&#160;&#160;&#160;<span style="color:#8FA3BF"># learning per trial</span><br><span style="color:#F0A060">[inputs]</span><br>"cerebellum.forward.proprio" = "proprio"<br>"cerebellum.forward.command" = "goal"<br>"cerebellum.brace.proprio"&#160;&#160; = "proprio"<br>"cerebellum.brace.cue"&#160;&#160;&#160;&#160;&#160;&#160; = "tone"<br><span style="color:#F0A060">[outputs]</span><br>walk = "goal + cerebellum.brace"</p>
+</div>
+<div style="flex:1;display:flex;flex-direction:column;gap:28px">
+<p style="font-size:28px;line-height:1.4;color:#3A4458"><b style="color:#14213D">Regions</b> and their parameters: the numbers you will change.</p>
+<p style="font-size:28px;line-height:1.4;color:#3A4458"><b style="color:#14213D">Inputs</b>: which sense feeds which port. The forward model also gets the command: an efference copy.</p>
+<p style="font-size:28px;line-height:1.4;color:#3A4458"><b style="color:#14213D">Outputs</b>: the walk command is your goal plus the counter-move.</p>
+</div>
+</div>
+<p style="position:absolute;left:128px;bottom:64px;width:1664px;font-size:24px;color:#6B7385">The cerebellum in a walking robot · 13</p>
+
+</section>
+<section id="tick" data-transition="fade" style="background:#F6F4EE;color:#14213D;font-family:'IBM Plex Sans', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:40px">
+<div style="display:flex;flex-direction:column;gap:16px">
+<p style="font-size:24px;font-weight:600;letter-spacing:3px;text-transform:uppercase;color:#B0521A">Part 3 · The code</p>
+<h2 style="font-size:64px;font-weight:700;line-height:1.1">The whole loop: sense, tick, act</h2>
+</div>
+<div style="background:#14213D;padding:40px;border-radius:16px">
+<p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;line-height:1.4;color:#E8ECF3"><span style="color:#F0A060">from</span> ubrain <span style="color:#F0A060">import</span> Brain, profile, act_03, manifest_from_hello_03, senses_from_state_03<br><span style="color:#F0A060">from</span> ubrain.bodies <span style="color:#F0A060">import</span> BodyClient, start_body<br>proc, port = start_body(viewer=True)&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;<span style="color:#8FA3BF"># the G1, in its own process</span><br>body = BodyClient("127.0.0.1", port)<br>m = manifest_from_hello_03(body.hello)&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;<span style="color:#8FA3BF"># what this body offers</span><br>brain = Brain(profile("walker"), m)<br>state = body.reset(0)<br><span style="color:#F0A060">for</span> t <span style="color:#F0A060">in</span> range(1500):&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;<span style="color:#8FA3BF"># 30 s at 50 Hz</span><br>&#160;&#160;&#160;&#160;senses = senses_from_state_03(state) | {"goal": (0.5, 0.0, 0.0)}<br>&#160;&#160;&#160;&#160;action = brain.tick(senses)&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;<span style="color:#8FA3BF"># the cerebellum runs here</span><br>&#160;&#160;&#160;&#160;state = body.act(*act_03(m, action))<br>print(brain.forward.stride_ratio)&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;<span style="color:#8FA3BF"># error vs “no change”</span></p>
+</div>
+<p style="font-size:30px;line-height:1.4;color:#3A4458">One call, <b style="color:#14213D">brain.tick(senses)</b>, is one step of the whole brain: 20 ms of the robot’s life.</p>
+<p style="position:absolute;left:128px;bottom:64px;width:1664px;font-size:24px;color:#6B7385">The cerebellum in a walking robot · 14</p>
+
+</section>
+<section id="params" data-transition="fade" style="background:#F6F4EE;color:#14213D;font-family:'IBM Plex Sans', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:40px">
+<div style="display:flex;flex-direction:column;gap:16px">
+<p style="font-size:24px;font-weight:600;letter-spacing:3px;text-transform:uppercase;color:#B0521A">Part 3 · The code</p>
+<h2 style="font-size:64px;font-weight:700;line-height:1.1">Changing the cerebellum</h2>
+</div>
+<div style="background:#14213D;padding:40px;border-radius:16px">
+<p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:26px;line-height:1.45;color:#E8ECF3">w = profile("walker")<br>regions = {<br>&#160;&#160;&#160;&#160;"cerebellum.forward": {"d_g": <span style="color:#F0A060">2048</span>, "s": <span style="color:#F0A060">128</span>, "eta": <span style="color:#F0A060">0.5</span>},<br>&#160;&#160;&#160;&#160;"cerebellum.brace":&#160;&#160; {"tau": <span style="color:#F0A060">0.9</span>, "eta": <span style="color:#F0A060">0.3</span>},<br>}<br>wiring = Wiring(w.name, w.contract, regions=regions,<br>&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;inputs=dict(w.inputs), outputs=dict(w.outputs))<br>brain = Brain(wiring, m)<br>brain.bracing = True&#160;&#160;&#160;&#160;<span style="color:#8FA3BF"># False: it still learns, but sends no counter-move</span></p>
+</div>
+<p style="font-size:30px;line-height:1.4;color:#3A4458">Same wiring, new numbers. <b style="color:#14213D">lab_cerebellum.py</b> does exactly this from its command-line flags, so in class 2 you change a flag, not the code.</p>
+<p style="position:absolute;left:128px;bottom:64px;width:1664px;font-size:24px;color:#6B7385">The cerebellum in a walking robot · 15</p>
+
+</section>
+<section id="flags" data-transition="fade" style="background:#F6F4EE;color:#14213D;font-family:'IBM Plex Sans', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:32px">
+<div style="display:flex;flex-direction:column;gap:16px">
+<p style="font-size:24px;font-weight:600;letter-spacing:3px;text-transform:uppercase;color:#B0521A">Part 3 · The code</p>
+<h2 style="font-size:64px;font-weight:700;line-height:1.1">Your instrument: lab_cerebellum.py</h2>
+</div>
+<table style="font-family:'IBM Plex Sans', Arial, sans-serif;font-size:24px;color:#14213D">
+<tr style="background:#14213D"><th style="width:24%;color:#F6F4EE">flag</th><th style="width:14%;color:#F6F4EE">part</th><th style="width:44%;color:#F6F4EE">what it is</th><th style="width:18%;color:#F6F4EE">default</th></tr>
+<tr><td>--granules</td><td>forward</td><td>number of granule cells</td><td>2048</td></tr>
+<tr style="background:#EFEBE1"><td>--active</td><td>forward</td><td>granule cells firing at once</td><td>128</td></tr>
+<tr><td>--eta-forward</td><td>forward</td><td>learning rate of the read-out</td><td>0.5</td></tr>
+<tr style="background:#EFEBE1"><td>--pushes</td><td>brace</td><td>tone-then-push trials</td><td>0 (just walk)</td></tr>
+<tr><td>--tau</td><td>brace</td><td>trace fading per tick</td><td>0.9</td></tr>
+<tr style="background:#EFEBE1"><td>--eta-brace</td><td>brace</td><td>learning per trial</td><td>0.3</td></tr>
+<tr><td>--delay</td><td>brace</td><td>ticks from tone to push</td><td>10 (0.2 s)</td></tr>
+<tr style="background:#EFEBE1"><td>--force</td><td>brace</td><td>push strength, newtons</td><td>250</td></tr>
+<tr><td>--bracing</td><td>brace</td><td>send the counter-move</td><td>on</td></tr>
+<tr style="background:#EFEBE1"><td>--viewer --wz --name</td><td>run</td><td>watch it; turn; label the run</td><td>off; 0; none</td></tr>
+</table>
+<p style="font-size:28px;line-height:1.4;color:#3A4458">Every run prints the error each second and the pushes (X fell, . stayed up), and adds a row to <b style="color:#14213D">results.csv</b>.</p>
+<p style="position:absolute;left:128px;bottom:64px;width:1664px;font-size:24px;color:#6B7385">The cerebellum in a walking robot · 16</p>
+
+</section>
+<section id="demo" data-transition="fade" style="background:#F6F4EE;color:#14213D;font-family:'IBM Plex Sans', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:40px">
+<div style="display:flex;flex-direction:column;gap:16px">
+<p style="font-size:24px;font-weight:600;letter-spacing:3px;text-transform:uppercase;color:#B0521A">Part 4 · Demo</p>
+<h2 style="font-size:64px;font-weight:700;line-height:1.1">Live: walk, push, brace</h2>
+</div>
+<div style="display:flex;flex-direction:column;gap:24px">
+<div style="display:flex;gap:40px;align-items:center;background:#FFFDF8;padding:28px 40px;border-radius:16px;border:2px solid #D9D4C7">
+<p style="width:80px;font-size:72px;font-weight:700;line-height:1;color:#E07A2F">1</p>
+<div style="flex:1;display:flex;flex-direction:column;gap:10px">
+<h3 style="font-size:34px;font-weight:700">It walks, and learns to predict itself</h3>
+<p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:26px;color:#2F6FB0">uv run examples/lab_cerebellum.py --viewer</p>
+<p style="font-size:26px;color:#3A4458">Ask first: what will the error do in the first seconds?</p>
+</div>
+</div>
+<div style="display:flex;gap:40px;align-items:center;background:#FFFDF8;padding:28px 40px;border-radius:16px;border:2px solid #D9D4C7">
+<p style="width:80px;font-size:72px;font-weight:700;line-height:1;color:#E07A2F">2</p>
+<div style="flex:1;display:flex;flex-direction:column;gap:10px">
+<h3 style="font-size:34px;font-weight:700">Tone, then push: no bracing</h3>
+<p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:26px;color:#2F6FB0">uv run examples/lab_cerebellum.py --viewer --pushes 6 --bracing off</p>
+<p style="font-size:26px;color:#3A4458">Ask first: how many of the six pushes will it survive?</p>
+</div>
+</div>
+<div style="display:flex;gap:40px;align-items:center;background:#FFFDF8;padding:28px 40px;border-radius:16px;border:2px solid #D9D4C7">
+<p style="width:80px;font-size:72px;font-weight:700;line-height:1;color:#E07A2F">3</p>
+<div style="flex:1;display:flex;flex-direction:column;gap:10px">
+<h3 style="font-size:34px;font-weight:700">The same, with the cerebellum bracing</h3>
+<p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:26px;color:#2F6FB0">uv run examples/lab_cerebellum.py --viewer --pushes 12</p>
+<p style="font-size:26px;color:#3A4458">Ask first: when will the falls stop, if they stop?</p>
+</div>
+</div>
+</div>
+<p style="position:absolute;left:128px;bottom:64px;width:1664px;font-size:24px;color:#6B7385">The cerebellum in a walking robot · 17</p>
+
+</section>
+<section id="class2" data-transition="fade" style="background:#F6F4EE;color:#14213D;font-family:'IBM Plex Sans', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:48px">
+<div style="display:flex;flex-direction:column;gap:16px">
+<p style="font-size:24px;font-weight:600;letter-spacing:3px;text-transform:uppercase;color:#B0521A">Part 5 · Class 2</p>
+<h2 style="font-size:64px;font-weight:700;line-height:1.1">Next class: predict, run, explain</h2>
+</div>
+<div style="display:flex;gap:32px">
+<div style="flex:1;display:flex;flex-direction:column;gap:16px;background:#FFFDF8;padding:36px;border-radius:16px;border-top:8px solid #2F6FB0">
+<h3 style="font-size:34px;font-weight:700">Before: at home</h3>
+<p style="font-size:26px;line-height:1.45;color:#3A4458">Clone ubrain, then once:</p>
+<p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;line-height:1.5;color:#2F6FB0">cd bodies/mujoco<br>uv sync<br>cd ../..<br>uv run examples/check_setup.py</p>
+<p style="font-size:26px;line-height:1.45;color:#3A4458">It must end with <b style="color:#14213D">READY</b>. If not, send me its output.</p>
+</div>
+<div style="flex:1;display:flex;flex-direction:column;gap:16px;background:#FFFDF8;padding:36px;border-radius:16px;border-top:8px solid #E07A2F">
+<h3 style="font-size:34px;font-weight:700">During: in groups</h3>
+<ul style="font-size:26px;line-height:1.45;color:#3A4458">
+<li>2–3 people, one laptop</li>
+<li>The worksheet: docs/labs/lab4_walker.md</li>
+<li>Part A (forward model) or Part B (brace)</li>
+<li>Write the prediction before every run</li>
+</ul>
+</div>
+<div style="flex:1;display:flex;flex-direction:column;gap:16px;background:#FFFDF8;padding:36px;border-radius:16px;border-top:8px solid #14213D">
+<h3 style="font-size:34px;font-weight:700">Last 20 minutes: show</h3>
+<ul style="font-size:26px;line-height:1.45;color:#3A4458">
+<li>5 minutes per group</li>
+<li>The question and your prediction</li>
+<li>The command and the result</li>
+<li>Your explanation, and what surprised you</li>
+</ul>
+</div>
+</div>
+<p style="position:absolute;left:128px;bottom:64px;width:1664px;font-size:24px;color:#6B7385">The cerebellum in a walking robot · 18</p>
+
+</section>
+<section id="questions" data-transition="fade" style="background:#14213D;color:#F6F4EE;font-family:'IBM Plex Sans', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:48px">
+<div style="display:flex;flex-direction:column;gap:16px">
+<p style="font-size:24px;font-weight:600;letter-spacing:3px;text-transform:uppercase;color:#F0A060">Take these home</p>
+<h2 style="font-size:64px;font-weight:700;line-height:1.1;color:#F6F4EE">Four questions to answer by experiment</h2>
+</div>
+<ol style="font-size:40px;line-height:1.5;color:#F6F4EE">
+<li>Is a sparser granule code always better?</li>
+<li>What do more granule cells buy, and what would they cost a real brain?</li>
+<li>How fast can the cerebellum learn before learning breaks down?</li>
+<li>How long must the tone’s trace last for the brace to learn?</li>
+</ol>
+<p style="font-size:32px;line-height:1.4;color:#C9D3E3">Write down your guess now. Next class, you measure it.</p>
+<p style="position:absolute;left:128px;bottom:64px;width:1664px;font-size:24px;color:#C9D3E3">The cerebellum in a walking robot · 19</p>
+
+</section>
+<section id="next" data-transition="fade" style="background:#F6F4EE;color:#14213D;font-family:'IBM Plex Sans', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:48px">
+<div style="display:flex;flex-direction:column;gap:16px">
+<p style="font-size:24px;font-weight:600;letter-spacing:3px;text-transform:uppercase;color:#B0521A">Summary</p>
+<h2 style="font-size:64px;font-weight:700;line-height:1.1">What to remember, and where it goes</h2>
+</div>
+<div style="display:flex;gap:48px">
+<div style="flex:1;display:flex;flex-direction:column;gap:24px">
+<h3 style="font-size:36px;font-weight:700">Today</h3>
+<p style="font-size:30px;line-height:1.45;color:#3A4458"><b style="color:#14213D">Expand, read out, correct:</b> a random sparse expansion and one learned layer, taught by the error.</p>
+<p style="font-size:30px;line-height:1.45;color:#3A4458"><b style="color:#14213D">Prediction:</b> the forward model learns what each command does to the body.</p>
+<p style="font-size:30px;line-height:1.45;color:#3A4458"><b style="color:#14213D">Timing:</b> fading traces turn a tone into a counter-move that lands with the push.</p>
+</div>
+<div style="flex:1;display:flex;flex-direction:column;gap:24px;background:#FFFDF8;padding:40px;border-radius:16px;border:2px solid #D9D4C7">
+<h3 style="font-size:36px;font-weight:700">Later in the course</h3>
+<ul style="font-size:30px;line-height:1.5;color:#3A4458">
+<li>The striatum: learning which action pays, from reward</li>
+<li>The hippocampus: the G1 remembers what it saw</li>
+<li>Your own brain: write a profile, wire the regions</li>
+</ul>
+</div>
+</div>
+<p style="position:absolute;left:128px;bottom:64px;width:1664px;font-size:24px;color:#6B7385">The cerebellum in a walking robot · 20</p>
+
+</section>
+</div><div id="n"></div>
+<script>
+const s = [...document.querySelectorAll('section')]; let i = 0;
+const stage = document.getElementById('stage');
+function fit() { const k = Math.min(innerWidth / 1920, innerHeight / 1080);
+  stage.style.transform = `scale(${k}) translate(-50%, -50%)`; }
+function show(j) { i = Math.max(0, Math.min(s.length - 1, j));
+  s.forEach((x, k) => x.classList.toggle('on', k === i));
+  document.getElementById('n').textContent = `${i + 1} / ${s.length}`; location.hash = i + 1; }
+addEventListener('resize', fit);
+addEventListener('keydown', e => {
+  if (['ArrowRight', 'PageDown', ' '].includes(e.key)) show(i + 1);
+  else if (['ArrowLeft', 'PageUp'].includes(e.key)) show(i - 1);
+  else if (e.key === 'Home') show(0); else if (e.key === 'End') show(s.length - 1);
+  else if (e.key === 'n' || e.key === 'N') document.body.classList.toggle('notes');
+  else if (e.key === 'f' || e.key === 'F') document.documentElement.requestFullscreen?.(); });
+addEventListener('click', e => show(e.clientX > innerWidth / 3 ? i + 1 : i - 1));
+fit(); show((parseInt(location.hash.slice(1)) || 1) - 1);
+</script></body></html>

@@ -1,0 +1,32 @@
+{
+ "64,8": {
+  "memory": 0.938,
+  "perception": 0.9,
+  "certificate": 0.941
+ },
+ "64,16": {
+  "memory": 0.794,
+  "perception": 0.95,
+  "certificate": 0.76
+ },
+ "64,24": {
+  "memory": 0.671,
+  "perception": 0.912,
+  "certificate": 0.64
+ },
+ "32,8": {
+  "memory": 0.713,
+  "perception": 0.9,
+  "certificate": 0.76
+ },
+ "32,16": {
+  "memory": 0.525,
+  "perception": 0.95,
+  "certificate": 0.557
+ },
+ "32,24": {
+  "memory": 0.463,
+  "perception": 0.912,
+  "certificate": 0.463
+ }
+}

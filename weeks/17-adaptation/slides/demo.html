@@ -1,0 +1,14 @@
+<section id="demo" data-transition="fade" style="background:#F6F4EE;color:#14213D;font-family:'IBM Plex Sans', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:40px">
+<div style="display:flex;flex-direction:column;gap:16px">
+<p style="font-size:24px;font-weight:600;letter-spacing:3px;text-transform:uppercase;color:#B0521A">Part 5 · Demo</p>
+<h2 style="font-size:64px;font-weight:700;line-height:1.1">Live: wind on, wind off</h2>
+</div>
+
+<div style="display:flex;flex-direction:column;gap:24px">
+<div style="display:flex;gap:40px;align-items:center;background:#FFFDF8;padding:28px 40px;border-radius:16px;border:2px solid #D9D4C7"><p style="width:80px;font-size:72px;font-weight:700;line-height:1;color:#E07A2F">1</p><div style="flex:1;display:flex;flex-direction:column;gap:10px"><h3 style="font-size:34px;font-weight:700">Feel it: steer into the wind</h3><p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:26px;color:#2F6FB0">uv run lab_adapt_walk.py</p><p style="font-size:26px;color:#3A4458">W wind on, wait 20 s, W off. Ask first: which way will it turn when the wind stops?</p></div></div>
+<div style="display:flex;gap:40px;align-items:center;background:#FFFDF8;padding:28px 40px;border-radius:16px;border:2px solid #D9D4C7"><p style="width:80px;font-size:72px;font-weight:700;line-height:1;color:#E07A2F">2</p><div style="flex:1;display:flex;flex-direction:column;gap:10px"><h3 style="font-size:34px;font-weight:700">No learning against learning</h3><p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:26px;color:#2F6FB0">uv run lab_adapt.py --learner off   (then --learner dual)</p><p style="font-size:26px;color:#3A4458">Ask first: how far will it turn in 24 s without learning?</p></div></div>
+<div style="display:flex;gap:40px;align-items:center;background:#FFFDF8;padding:28px 40px;border-radius:16px;border:2px solid #D9D4C7"><p style="width:80px;font-size:72px;font-weight:700;line-height:1;color:#E07A2F">3</p><div style="flex:1;display:flex;flex-direction:column;gap:10px"><h3 style="font-size:34px;font-weight:700">The error clamp</h3><p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:26px;color:#2F6FB0">uv run lab_adapt.py --schedule recovery</p><p style="font-size:26px;color:#3A4458">Ask first: after unlearning, does the old correction come back?</p></div></div>
+</div>
+<p style="position:absolute;left:128px;bottom:64px;width:1664px;font-size:24px;color:#6B7385">Walking in a side wind · 19</p>
+<aside>Run from weeks/17-adaptation. In demo 1 the status line shows turn, counter and heading: watch the turn fall while the counter grows, then flip sign when the wind stops. Demos 2 and 3 take about 25 s each headless; add --viewer to show the robot.</aside>
+</section>

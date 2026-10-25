@@ -1,0 +1,54 @@
+{
+ "v": 4,
+ "title": "A Brain's Life",
+ "subtitle": "ubrain on the G1: save what the cerebellum learned, load it, read its datasheet, watch it",
+ "cover": "cover",
+ "order": [
+  "cover",
+  "plan",
+  "why",
+  "file",
+  "trained",
+  "identical",
+  "refuse",
+  "sheet",
+  "measured_sheet",
+  "health",
+  "monitor",
+  "loadedfwd",
+  "code",
+  "steps",
+  "demo",
+  "class2",
+  "questions",
+  "next"
+ ],
+ "sections": {
+  "s1": {
+   "description": "What the two classes are for",
+   "start": "cover"
+  },
+  "s2": {
+   "description": "Part 1: a brain as a file",
+   "start": "why"
+  },
+  "s3": {
+   "description": "Part 2: the datasheet, health and the monitor",
+   "start": "sheet"
+  },
+  "s4": {
+   "description": "Part 3: the code, the demo and the hands-on class",
+   "start": "code"
+  }
+ },
+ "faces": {
+  "ibm-plex-sans": {
+   "family": "IBM Plex Sans",
+   "href": "https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;600;700&display=swap"
+  },
+  "jetbrains-mono": {
+   "family": "JetBrains Mono",
+   "href": "https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&display=swap"
+  }
+ }
+}

@@ -1,0 +1,52 @@
+{
+ "v": 4,
+ "title": "One Number Each",
+ "subtitle": "ubrain on the G1: serotonin sets the striatum's patience, noradrenaline the salience gate's criterion",
+ "cover": "cover",
+ "order": [
+  "cover",
+  "plan",
+  "knobs",
+  "deal",
+  "law",
+  "predict",
+  "measured",
+  "fig_patience",
+  "depends",
+  "ne",
+  "code",
+  "flags",
+  "demo",
+  "class2",
+  "questions",
+  "next"
+ ],
+ "sections": {
+  "s1": {
+   "description": "What the two classes are for",
+   "start": "cover"
+  },
+  "s2": {
+   "description": "Part 1: serotonin and patience",
+   "start": "knobs"
+  },
+  "s3": {
+   "description": "Part 2: measured",
+   "start": "predict"
+  },
+  "s4": {
+   "description": "Part 3: the code, the demo and the hands-on class",
+   "start": "code"
+  }
+ },
+ "faces": {
+  "ibm-plex-sans": {
+   "family": "IBM Plex Sans",
+   "href": "https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;600;700&display=swap"
+  },
+  "jetbrains-mono": {
+   "family": "JetBrains Mono",
+   "href": "https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&display=swap"
+  }
+ }
+}

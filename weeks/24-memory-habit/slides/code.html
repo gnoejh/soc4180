@@ -1,0 +1,18 @@
+<section id="code" data-transition="fade" style="background:#F6F4EE;color:#14213D;font-family:'IBM Plex Sans', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:40px">
+<div style="display:flex;flex-direction:column;gap:16px">
+<p style="font-size:24px;font-weight:600;letter-spacing:3px;text-transform:uppercase;color:#B0521A">Part 3 · The code</p>
+<h2 style="font-size:64px;font-weight:700;line-height:1.1">Three brains, one world</h2>
+</div>
+<div style="width:1660px;background:#14213D;padding:36px;border-radius:16px"><p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:26px;line-height:1.45;color:#E8ECF3;white-space:pre">world = json.load(open("traces/world.json"))["outcome[cue][move][phase]"]
+
+for kind in ("striatum", "memory", "chooser"):
+    brain = make_brain(kind, ...)
+    for _ in range(200):
+        cue = rng.integers(2)
+        move = brain.tick({"situation": np.eye(2)[cue], "reward": r})["action"]
+        r = world[cue][move][rng.integers(40)]         <span style="color:#8FA3BF"># the robot's own outcome</span>
+
+observe(chooser)["control.handover"]                  <span style="color:#8FA3BF"># {'decisions': 200, 'on_memory': 190}</span></p></div>
+<p style="position:absolute;left:128px;bottom:64px;width:1664px;font-size:24px;color:#6B7385">Memory first, habit later · 11</p>
+<aside>--live replaces the table lookup with Robot.trial(cue, move, phase): the same outcome, measured again.</aside>
+</section>

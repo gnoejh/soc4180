@@ -1,0 +1,66 @@
+{
+ "v": 4,
+ "title": "Walking in a Side Wind",
+ "subtitle": "ubrain on the G1: the cerebellum adapts its walk to a steady push, with one learning rate or two",
+ "cover": "cover",
+ "order": [
+  "cover",
+  "plan",
+  "problem",
+  "setup",
+  "people",
+  "single",
+  "dual",
+  "predict",
+  "fig_basic",
+  "basic",
+  "integrator",
+  "fig_recovery",
+  "recovery",
+  "savings",
+  "limits",
+  "wiring",
+  "tick",
+  "flags",
+  "demo",
+  "class2",
+  "questions",
+  "next"
+ ],
+ "sections": {
+  "s1": {
+   "description": "What the two classes are for",
+   "start": "cover"
+  },
+  "s2": {
+   "description": "The problem: a steady push",
+   "start": "problem"
+  },
+  "s3": {
+   "description": "The law: one rate or two",
+   "start": "single"
+  },
+  "s4": {
+   "description": "Measured: adaptation, after-effect, savings, recovery",
+   "start": "basic"
+  },
+  "s5": {
+   "description": "The code: the wiring, the tick loop, the flags",
+   "start": "wiring"
+  },
+  "s6": {
+   "description": "The demo and the hands-on class",
+   "start": "demo"
+  }
+ },
+ "faces": {
+  "ibm-plex-sans": {
+   "family": "IBM Plex Sans",
+   "href": "https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;600;700&display=swap"
+  },
+  "jetbrains-mono": {
+   "family": "JetBrains Mono",
+   "href": "https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&display=swap"
+  }
+ }
+}

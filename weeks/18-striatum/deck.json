@@ -1,0 +1,61 @@
+{
+ "v": 4,
+ "title": "Learning from Reward",
+ "subtitle": "ubrain on the G1: the striatum learns when to brake against a push, from staying up alone",
+ "cover": "cover",
+ "order": [
+  "cover",
+  "plan",
+  "teachers",
+  "law",
+  "bandit",
+  "task",
+  "world",
+  "predict",
+  "fig_values",
+  "matching",
+  "fig_eta",
+  "why",
+  "blind",
+  "compare",
+  "wiring",
+  "loop",
+  "flags",
+  "demo",
+  "class2",
+  "questions",
+  "next"
+ ],
+ "sections": {
+  "s1": {
+   "description": "What the two classes are for",
+   "start": "cover"
+  },
+  "s2": {
+   "description": "Part 1: learning from a reward",
+   "start": "teachers"
+  },
+  "s3": {
+   "description": "Part 2: the G1 as a bandit",
+   "start": "task"
+  },
+  "s4": {
+   "description": "Part 4: the code",
+   "start": "wiring"
+  },
+  "s5": {
+   "description": "Part 5: the demo and the hands-on class",
+   "start": "demo"
+  }
+ },
+ "faces": {
+  "ibm-plex-sans": {
+   "family": "IBM Plex Sans",
+   "href": "https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;600;700&display=swap"
+  },
+  "jetbrains-mono": {
+   "family": "JetBrains Mono",
+   "href": "https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&display=swap"
+  }
+ }
+}

@@ -1,0 +1,28 @@
+<section id="wiring" data-transition="fade" style="background:#F6F4EE;color:#14213D;font-family:'IBM Plex Sans', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:40px">
+<div style="display:flex;flex-direction:column;gap:16px">
+<p style="font-size:24px;font-weight:600;letter-spacing:3px;text-transform:uppercase;color:#B0521A">Part 4 · The code</p>
+<h2 style="font-size:64px;font-weight:700;line-height:1.1">The anatomy, as a file: holder.toml</h2>
+</div>
+
+<div style="display:flex;gap:48px;align-items:start">
+<div style="width:920px;background:#14213D;padding:36px;border-radius:16px"><p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;line-height:1.45;color:#E8ECF3;white-space:pre"><span style="color:#F0A060">[regions."prefrontal.buffer"]</span>
+gamma_m    = 0.75   <span style="color:#8FA3BF"># fade per write</span>
+slots      = 16     <span style="color:#8FA3BF"># positions</span>
+schedule   = "cycle" <span style="color:#8FA3BF"># rehearsal order</span>
+n_rehearse = 16
+
+<span style="color:#F0A060">[inputs]</span>
+"prefrontal.buffer.item"   = "camera"
+"prefrontal.buffer.recall" = "recall"
+"prefrontal.buffer.idle"   = "idle"
+"prefrontal.buffer.clear"  = "clear"</p></div>
+<div style="flex:1;display:flex;flex-direction:column;gap:26px">
+<p style="font-size:28px;line-height:1.45;color:#3A4458"><b style='color:#14213D'>camera</b>: the percepts, through the same codec as week 20.</p>
+<p style="font-size:28px;line-height:1.45;color:#3A4458"><b style='color:#14213D'>recall</b>: which position (0 = the oldest).</p>
+<p style="font-size:28px;line-height:1.45;color:#3A4458"><b style='color:#14213D'>idle</b>: a free moment: rehearse the next push by the schedule.</p>
+<p style="font-size:28px;line-height:1.45;color:#3A4458"><b style='color:#14213D'>clear</b>: the list ends.</p>
+</div>
+</div>
+<p style="position:absolute;left:128px;bottom:64px;width:1664px;font-size:24px;color:#6B7385">Holding a list · 12</p>
+<aside>The lab sets gamma_m and schedule from its flags. Schedules: none, cycle, oldest, newest, random (the newest/oldest schedules rehearse m = 3 pushes).</aside>
+</section>

@@ -1,0 +1,14 @@
+<section id="law" data-transition="fade" style="background:#F6F4EE;color:#14213D;font-family:'IBM Plex Sans', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:32px">
+<div style="display:flex;flex-direction:column;gap:16px">
+<p style="font-size:24px;font-weight:600;letter-spacing:3px;text-transform:uppercase;color:#B0521A">Part 1 · The striatum</p>
+<h2 style="font-size:64px;font-weight:700;line-height:1.1">One value per action, and a race</h2>
+</div>
+<div style="display:flex;flex-direction:column">
+<div style="display:flex;gap:32px;align-items:center;padding:18px 0;border-top:2px solid #D9D4C7"><p style="width:260px;font-size:30px;font-weight:600">Value</p><p style="width:480px;font-family:'JetBrains Mono', 'Courier New', monospace;font-size:32px;color:#2F6FB0">Q[s, a]</p><p style="flex:1;font-size:28px;color:#3A4458">how good action a has been in situation s (starts at q0 = 0.5)</p></div>
+<div style="display:flex;gap:32px;align-items:center;padding:18px 0;border-top:2px solid #D9D4C7"><p style="width:260px;font-size:30px;font-weight:600">Surprise</p><p style="width:480px;font-family:'JetBrains Mono', 'Courier New', monospace;font-size:32px;color:#2F6FB0">δ = r − Q[s, a]</p><p style="flex:1;font-size:28px;color:#3A4458">the reward prediction error: dopamine's signal</p></div>
+<div style="display:flex;gap:32px;align-items:center;padding:18px 0;border-top:2px solid #D9D4C7"><p style="width:260px;font-size:30px;font-weight:600">Learning</p><p style="width:480px;font-family:'JetBrains Mono', 'Courier New', monospace;font-size:32px;color:#2F6FB0">Q ← Q + η δ</p><p style="flex:1;font-size:28px;color:#3A4458">only the action taken learns; η is the learning rate</p></div>
+<div style="display:flex;gap:32px;align-items:center;padding:18px 0;border-top:2px solid #D9D4C7;border-bottom:2px solid #D9D4C7"><p style="width:260px;font-size:30px;font-weight:600">Choice</p><p style="width:480px;font-family:'JetBrains Mono', 'Courier New', monospace;font-size:32px;color:#2F6FB0">a race</p><p style="flex:1;font-size:28px;color:#3A4458">each action runs, faster the higher its value; the first to finish is done</p></div>
+</div><p style="font-size:30px;line-height:1.45;color:#3A4458">A race does not always pick the best action: a lower value only finishes first less often. With values near the payoffs, choice comes close to <b style='color:#14213D'>matching</b>: each action chosen in proportion to what it pays.</p>
+<p style="position:absolute;left:128px;bottom:64px;width:1664px;font-size:24px;color:#6B7385">Learning from reward · 4</p>
+<aside>The Go race is the striatum's own choice law (ubrain basal_ganglia.striatum). Matching (Herrnstein 1961) is what animals do on such schedules. The laptop bandit in class 2 shows it on three worlds before the robot: default world 0.624 earned against matching's 0.600 and the best 0.800.</aside>
+</section>

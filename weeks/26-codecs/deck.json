@@ -1,0 +1,52 @@
+{
+ "v": 4,
+ "title": "Plugging In a Trained Model",
+ "subtitle": "ubrain with CLIP: codecs, the cone, centring and the certificate, on words and the G1's gallery",
+ "cover": "cover",
+ "order": [
+  "cover",
+  "plan",
+  "codec",
+  "cone",
+  "cert",
+  "predict",
+  "measured",
+  "fig_capacity",
+  "breaks",
+  "compare",
+  "code",
+  "flags",
+  "demo",
+  "class2",
+  "questions",
+  "next"
+ ],
+ "sections": {
+  "s1": {
+   "description": "What the two classes are for",
+   "start": "cover"
+  },
+  "s2": {
+   "description": "Part 1: codes from a frozen model",
+   "start": "codec"
+  },
+  "s3": {
+   "description": "Part 2: measured",
+   "start": "predict"
+  },
+  "s4": {
+   "description": "Part 3: the code, the demo and the hands-on class",
+   "start": "code"
+  }
+ },
+ "faces": {
+  "ibm-plex-sans": {
+   "family": "IBM Plex Sans",
+   "href": "https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;600;700&display=swap"
+  },
+  "jetbrains-mono": {
+   "family": "JetBrains Mono",
+   "href": "https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&display=swap"
+  }
+ }
+}

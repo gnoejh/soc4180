@@ -1,0 +1,28 @@
+<section id="wiring" data-transition="fade" style="background:#F6F4EE;color:#14213D;font-family:'IBM Plex Sans', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:40px">
+<div style="display:flex;flex-direction:column;gap:16px">
+<p style="font-size:24px;font-weight:600;letter-spacing:3px;text-transform:uppercase;color:#B0521A">Part 4 · The code</p>
+<h2 style="font-size:64px;font-weight:700;line-height:1.1">The anatomy, as a file: observer.toml</h2>
+</div>
+
+<div style="display:flex;gap:48px;align-items:start">
+<div style="width:980px;background:#14213D;padding:36px;border-radius:16px"><p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;line-height:1.45;color:#E8ECF3;white-space:pre"><span style="color:#F0A060">[regions."hippocampus.episode"]</span>
+slots = 64       <span style="color:#8FA3BF"># the lab sets 32</span>
+
+<span style="color:#F0A060">[inputs]</span>
+"hippocampus.episode.item"     = "camera"
+"hippocampus.episode.recall"   = "recall"
+"hippocampus.episode.boundary" = "boundary"
+
+<span style="color:#F0A060">[outputs]</span>
+memory     = "hippocampus.episode.recalled"
+remembered = "hippocampus.episode.index"</p></div>
+<div style="flex:1;display:flex;flex-direction:column;gap:26px">
+<p style="font-size:28px;line-height:1.45;color:#3A4458"><b style='color:#14213D'>camera</b>: any sense, through a codec. Here the 8 directions, each a random code; next week a real camera through CLIP.</p>
+<p style="font-size:28px;line-height:1.45;color:#3A4458"><b style='color:#14213D'>recall</b>: an event, which slot.</p>
+<p style="font-size:28px;line-height:1.45;color:#3A4458"><b style='color:#14213D'>boundary</b>: the episode ends.</p>
+<p style="font-size:28px;line-height:1.45;color:#3A4458"><b style='color:#14213D'>remembered</b>: which item it was.</p>
+</div>
+</div>
+<p style="position:absolute;left:128px;bottom:64px;width:1664px;font-size:24px;color:#6B7385">One-shot memory · 13</p>
+<aside>The channel is called camera because the profile was made for one; any codec plugs in. Week 19's state file would record this codec's fingerprint and refuse another.</aside>
+</section>

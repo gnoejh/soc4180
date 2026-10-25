@@ -1,0 +1,112 @@
+{
+ "512": {
+  "2": {
+   "certificate": 1.0,
+   "measured": 1.0
+  },
+  "4": {
+   "certificate": 1.0,
+   "measured": 1.0
+  },
+  "8": {
+   "certificate": 1.0,
+   "measured": 1.0
+  },
+  "16": {
+   "certificate": 0.995,
+   "measured": 1.0
+  },
+  "32": {
+   "certificate": 0.881,
+   "measured": 0.863
+  }
+ },
+ "128": {
+  "2": {
+   "certificate": 1.0,
+   "measured": 1.0
+  },
+  "4": {
+   "certificate": 0.999,
+   "measured": 1.0
+  },
+  "8": {
+   "certificate": 0.909,
+   "measured": 0.931
+  },
+  "16": {
+   "certificate": 0.555,
+   "measured": 0.522
+  },
+  "32": {
+   "certificate": 0.263,
+   "measured": 0.272
+  }
+ },
+ "64": {
+  "2": {
+   "certificate": 1.0,
+   "measured": 1.0
+  },
+  "4": {
+   "certificate": 0.946,
+   "measured": 0.887
+  },
+  "8": {
+   "certificate": 0.583,
+   "measured": 0.512
+  },
+  "16": {
+   "certificate": 0.276,
+   "measured": 0.244
+  },
+  "32": {
+   "certificate": 0.115,
+   "measured": 0.117
+  }
+ },
+ "32": {
+  "2": {
+   "certificate": 0.987,
+   "measured": 0.975
+  },
+  "4": {
+   "certificate": 0.609,
+   "measured": 0.637
+  },
+  "8": {
+   "certificate": 0.272,
+   "measured": 0.25
+  },
+  "16": {
+   "certificate": 0.099,
+   "measured": 0.131
+  },
+  "32": {
+   "certificate": 0.052,
+   "measured": 0.061
+  }
+ },
+ "512 raw": {
+  "2": {
+   "certificate": 1.0,
+   "measured": 1.0
+  },
+  "4": {
+   "certificate": 1.0,
+   "measured": 1.0
+  },
+  "8": {
+   "certificate": 1.0,
+   "measured": 0.688
+  },
+  "16": {
+   "certificate": 0.995,
+   "measured": 0.509
+  },
+  "32": {
+   "certificate": 0.881,
+   "measured": 0.172
+  }
+ }
+}

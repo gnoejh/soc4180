@@ -1,0 +1,46 @@
+{
+ "robot": [
+  {
+   "pairs": 40,
+   "cortex": 0.95,
+   "law": 1.0
+  },
+  {
+   "pairs": 80,
+   "cortex": 0.863,
+   "law": 1.0
+  },
+  {
+   "pairs": 160,
+   "cortex": 0.625,
+   "law": 0.997
+  },
+  {
+   "pairs": 320,
+   "cortex": 0.409,
+   "law": 0.957
+  }
+ ],
+ "distinct": [
+  {
+   "pairs": 40,
+   "cortex": 1.0,
+   "law": 1.0
+  },
+  {
+   "pairs": 80,
+   "cortex": 1.0,
+   "law": 0.996
+  },
+  {
+   "pairs": 160,
+   "cortex": 0.938,
+   "law": 0.91
+  },
+  {
+   "pairs": 320,
+   "cortex": 0.562,
+   "law": 0.594
+  }
+ ]
+}

@@ -1,0 +1,26 @@
+{
+ "2": {
+  "written": 0.725,
+  "consolidated": 1.0,
+  "cortex": 0.77,
+  "executive": 0.714
+ },
+ "4": {
+  "written": 0.583,
+  "consolidated": 1.0,
+  "cortex": 0.814,
+  "executive": 0.714
+ },
+ "8": {
+  "written": 0.375,
+  "consolidated": 1.0,
+  "cortex": 0.978,
+  "executive": 0.625
+ },
+ "16": {
+  "written": 0.158,
+  "consolidated": 1.0,
+  "cortex": 0.947,
+  "executive": 0.268
+ }
+}

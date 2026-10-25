@@ -1,0 +1,19 @@
+<section id="code" data-transition="fade" style="background:#F6F4EE;color:#14213D;font-family:'IBM Plex Sans', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:40px">
+<div style="display:flex;flex-direction:column;gap:16px">
+<p style="font-size:24px;font-weight:600;letter-spacing:3px;text-transform:uppercase;color:#B0521A">Part 3 · The code</p>
+<h2 style="font-size:64px;font-weight:700;line-height:1.1">A burst, then rest</h2>
+</div>
+<div style="width:1660px;background:#14213D;padding:36px;border-radius:16px"><p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:26px;line-height:1.45;color:#E8ECF3;white-space:pre">for _ in range(6):                                  <span style="color:#8FA3BF"># a burst of pushes</span>
+    seen = robot.push(direction)                    <span style="color:#8FA3BF"># week 20's sense</span>
+    out = brain.tick({"camera": seen})
+    out["novel"]                                    <span style="color:#8FA3BF"># 1 written, 0 skipped</span>
+
+for _ in range(8):                                  <span style="color:#8FA3BF"># quiet walking</span>
+    robot.walk_for(50)                              <span style="color:#8FA3BF"># 1 s</span>
+    out = brain.tick({"camera": None})             <span style="color:#8FA3BF"># an idle moment</span>
+    out["mode"]                                     <span style="color:#8FA3BF"># 0 default: the episode is replayed</span>
+
+familiar_threshold(64, 8, 0.05)                     <span style="color:#8FA3BF"># 0.693: theta from alpha</span></p></div>
+<p style="position:absolute;left:128px;bottom:64px;width:1664px;font-size:24px;color:#6B7385">Noticing · 12</p>
+<aside>from ubrain.regions import familiar_threshold, spherical_tail.</aside>
+</section>

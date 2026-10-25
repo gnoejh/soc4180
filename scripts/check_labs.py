@@ -10,8 +10,9 @@ Each week's pipeline script (`stack.py`, `walk.py`, ...) runs with
 four seconds. A script passes if it exits 0 within its time limit. Failures
 print the tail of their output. The RL weeks (7 on) need `uv sync --extra rl`. Weeks 11-15's
 `lab_*.py` are graded games; their `--grade --problem N` runs one problem headless.
-Week 16 runs on ubrain from weeks/16-cerebellum/vendor/; its scripts are headless by
-default and run exactly as written.
+Weeks 16+ run on ubrain from vendor/ubrain/; their scripts are headless by
+default and run exactly as written. Weeks 26-27 need CLIP: run them as
+`uv run --extra vision scripts/check_labs.py --only 26 27` (a plain `uv run` drops torch).
 
 This is the smoke test behind the "every script passed" claims in CLAUDE.md;
 run it after touching the package.
@@ -57,6 +58,29 @@ PIPELINES = [
 AS_IS = [
     ("16", "weeks/16-cerebellum/lab_cerebellum.py --seconds 3 --name check_labs"),
     ("16", "weeks/16-cerebellum/lab_cerebellum_walk.py --headless --seconds 3"),
+    ("17", "weeks/17-adaptation/lab_adapt.py --blocks 1:0,2:15,1:0 --name check_labs"),
+    ("17", "weeks/17-adaptation/lab_adapt_walk.py --headless --seconds 3 --wind-at 1"),
+    ("18", "weeks/18-striatum/lab_striatum.py --trials 600 --name check_labs"),
+    ("18", "weeks/18-striatum/lab_choose.py --trials 4 --name check_labs"),
+    ("18", "weeks/18-striatum/lab_choose.py --map --phases 1"),
+    ("19", "weeks/19-brain-life/lab_life.py train --pushes 1 --save weeks/19-brain-life/brains/check.npz"),
+    ("19", "weeks/19-brain-life/lab_life.py test --pushes 1 --load weeks/19-brain-life/brains/check.npz"),
+    ("19", "weeks/19-brain-life/lab_life.py identical --ticks 60"),
+    ("19", "weeks/19-brain-life/lab_life.py sheet"),
+    ("20", "weeks/20-hippocampus/lab_remember.py --episodes 1 --pushes 3 --name check_labs"),
+    ("20", "weeks/20-hippocampus/lab_remember.py --certify"),
+    ("21", "weeks/21-working-memory/lab_hold.py --lists 1 --pushes 4 --name check_labs"),
+    ("21", "weeks/21-working-memory/lab_hold.py --law"),
+    ("22", "weeks/22-consolidation/lab_consolidate.py --episodes 1 --pushes 3 --name check_labs"),
+    ("22", "weeks/22-consolidation/lab_consolidate.py --distinct --episodes 2 --name check_labs"),
+    ("23", "weeks/23-attention/lab_notice.py --bursts 1 --burst 3 --quiet 2 --name check_labs"),
+    ("24", "weeks/24-memory-habit/lab_habit.py --trials 20 --seeds 2 --name check_labs"),
+    ("24", "weeks/24-memory-habit/lab_habit.py --bandit 4 --trials 100 --seeds 1 --name check_labs"),
+    ("25", "weeks/25-neuromodulators/lab_patience.py serotonin --tau 4 --trials 200"),
+    ("25", "weeks/25-neuromodulators/lab_patience.py noradrenaline --events 1200"),
+    ("26", "weeks/26-codecs/lab_codecs.py words"),
+    ("26", "weeks/26-codecs/lab_codecs.py capacity --d 128 --episodes 2"),
+    ("27", "weeks/27-explorer/lab_explore.py --seconds 12 --name check_labs"),
 ]
 
 LABS = [

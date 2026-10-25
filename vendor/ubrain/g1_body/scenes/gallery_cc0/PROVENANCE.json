@@ -1,0 +1,429 @@
+{
+ "what": "the gallery scene's pictures: one CC0 photo per everyday category",
+ "retrieved": "2026-10-17",
+ "via": "Openverse API, license=cc0",
+ "selection": "strictly CC0; raster, >= 400 px, aspect 0.6-1.7; CLIP zero-shot among 24 categories must name the photo's own category; photos built around identifiable people and weak exemplars left out by eye; one per category",
+ "license_note": "CC0 1.0: no rights reserved; credit is given here by courtesy",
+ "files": [
+  {
+   "file": "00_apple.png",
+   "category": "apple",
+   "sha256": "73799b92661a519fd4f052fcbf686bb45dd4b1ea07d2e66a3ff6fc1dfb091d4c",
+   "license": "CC0 1.0",
+   "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+   "title": "Apple",
+   "creator": "Open Grid Scheduler / Grid Engine",
+   "source": "flickr",
+   "landing": "https://www.flickr.com/photos/29155878@N03/24591388896",
+   "original_url": "https://live.staticflickr.com/1708/24591388896_bb7bec70c1_b.jpg",
+   "openverse_id": "cd73609a-6bb7-41ea-93e8-5156b91685ff",
+   "original_sha256": "39a11a7f97097712e073120d91ca7963515b73f324ddd3a2bfcdd0ba3d0c2e88",
+   "original_size": [
+    678,
+    1024
+   ],
+   "processing": "centre square crop, LANCZOS resize to 192x192, PNG",
+   "clip_zero_shot": "apple"
+  },
+  {
+   "file": "01_banana.png",
+   "category": "banana",
+   "sha256": "2ca77898c6e737d52379a262e7cc0875432152e16538b8069b7374f61943e5e8",
+   "license": "CC0 1.0",
+   "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+   "title": "Banana freckle Pohnpei",
+   "creator": "Plant pests and diseases",
+   "source": "flickr",
+   "landing": "https://www.flickr.com/photos/62295966@N07/5680832547",
+   "original_url": "https://live.staticflickr.com/5225/5680832547_24f457b2ba_b.jpg",
+   "openverse_id": "67178430-0f02-4dcd-b942-690d3b8e16db",
+   "original_sha256": "c9a9d1a44adeae1da3c7fc32e1755437667ba9ecca18558bf9c8a5fd0b367daa",
+   "original_size": [
+    1024,
+    768
+   ],
+   "processing": "centre square crop, LANCZOS resize to 192x192, PNG",
+   "clip_zero_shot": "banana"
+  },
+  {
+   "file": "02_chair.png",
+   "category": "chair",
+   "sha256": "20b5677413d9ab7e10ff12035c3a2d6f27ae15a419dcfce89043f6bafae6d275",
+   "license": "CC0 1.0",
+   "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+   "title": "David's Chair",
+   "creator": "cogdogblog",
+   "source": "flickr",
+   "landing": "https://www.flickr.com/photos/37996646802@N01/2274055016",
+   "original_url": "https://live.staticflickr.com/2371/2274055016_50b0798802_b.jpg",
+   "openverse_id": "892cc83b-de86-4f70-b2d0-ca45563193f2",
+   "original_sha256": "86b36bad0124f8af83a6f8b6f5bd598c13797dfb2bce38f3e50e5021859b6966",
+   "original_size": [
+    768,
+    1024
+   ],
+   "processing": "centre square crop, LANCZOS resize to 192x192, PNG",
+   "clip_zero_shot": "chair"
+  },
+  {
+   "file": "03_lamp.png",
+   "category": "lamp",
+   "sha256": "bb2ca42ed29485e192d6f6d9b033b1b4cbf8d9c23a7a97c53880f427c23ab3e7",
+   "license": "CC0 1.0",
+   "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+   "title": "Vintage Light Lamps",
+   "creator": "MyStockPhotos",
+   "source": "flickr",
+   "landing": "https://www.flickr.com/photos/136375272@N05/40300067903",
+   "original_url": "https://live.staticflickr.com/65535/40300067903_20f320c81b_b.jpg",
+   "openverse_id": "167b878f-5cbf-4263-a42a-b0789af46b5e",
+   "original_sha256": "5cf9336c962b7d163eaa1501b97a3ab6af85bc8fdd28a7b85df074766c5d7f23",
+   "original_size": [
+    1024,
+    684
+   ],
+   "processing": "centre square crop, LANCZOS resize to 192x192, PNG",
+   "clip_zero_shot": "lamp"
+  },
+  {
+   "file": "04_clock.png",
+   "category": "clock",
+   "sha256": "677dda6be8921cc3cdc7a85c1f21a3c3d045833460b844072bd4de6cf4d7893a",
+   "license": "CC0 1.0",
+   "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+   "title": "tictoc the clock",
+   "creator": "ani!",
+   "source": "flickr",
+   "landing": "https://www.flickr.com/photos/53018729@N00/217183023",
+   "original_url": "https://live.staticflickr.com/35/217183023_b3c20b9d5a_b.jpg",
+   "openverse_id": "a53298cb-18d2-46ce-b344-9ed63e2ab4ab",
+   "original_sha256": "a7d4747345387b1f8649f7af89ee931303fddc89a34364c4395f8097159c5aad",
+   "original_size": [
+    1024,
+    680
+   ],
+   "processing": "centre square crop, LANCZOS resize to 192x192, PNG",
+   "clip_zero_shot": "clock"
+  },
+  {
+   "file": "05_umbrella.png",
+   "category": "umbrella",
+   "sha256": "122362e3f6d7c94a3d0498c05687f58fce9de5e7b6530127426db563a736887a",
+   "license": "CC0 1.0",
+   "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+   "title": "Cooling down on a hot summer day, water drops on the window, open curtain, blue umbrella, patio table, chairs, Japanese lantern, lawn, garden, Seattle, Washington, USA",
+   "creator": "Wonderlane",
+   "source": "flickr",
+   "landing": "https://www.flickr.com/photos/71401718@N00/9179658055",
+   "original_url": "https://live.staticflickr.com/5332/9179658055_481aee0216_b.jpg",
+   "openverse_id": "0cdd0bbf-8c60-4439-a528-16c31c8585dd",
+   "original_sha256": "750fbff5ff86a8d39097fa0a63179a3cdada14fa122917b9839af1f9508f7aa8",
+   "original_size": [
+    1024,
+    681
+   ],
+   "processing": "centre square crop, LANCZOS resize to 192x192, PNG",
+   "clip_zero_shot": "umbrella"
+  },
+  {
+   "file": "06_guitar.png",
+   "category": "guitar",
+   "sha256": "2fdbaf808f3f87c15a07ca56a82f0f0207c41c2894b36590bbdbe5f753976b3f",
+   "license": "CC0 1.0",
+   "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+   "title": "While My Guitar Gently Sits",
+   "creator": "cogdogblog",
+   "source": "flickr",
+   "landing": "https://www.flickr.com/photos/37996646802@N01/4221463102",
+   "original_url": "https://live.staticflickr.com/4052/4221463102_5236b6302c_b.jpg",
+   "openverse_id": "269f5c05-7e6d-4c92-90d8-96a6776f6fe5",
+   "original_sha256": "3e8974d603cb5a169308a4fc97d448929f620e944262ed80c6867e4800d51fbf",
+   "original_size": [
+    683,
+    1024
+   ],
+   "processing": "centre square crop, LANCZOS resize to 192x192, PNG",
+   "clip_zero_shot": "guitar"
+  },
+  {
+   "file": "07_teapot.png",
+   "category": "teapot",
+   "sha256": "e0f6cee86423042170a1da6df122c5257eb21961cfb8817481cf80548b58cb5b",
+   "license": "CC0 1.0",
+   "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+   "title": "Black Ceramic Teapot",
+   "creator": "Image Catalog",
+   "source": "flickr",
+   "landing": "https://www.flickr.com/photos/132795455@N08/17106495329",
+   "original_url": "https://live.staticflickr.com/8773/17106495329_73fc76c54c_b.jpg",
+   "openverse_id": "1844b2ef-4248-45aa-81b9-bcf6b9d1edec",
+   "original_sha256": "a95c0cebf8c7e266ddd233969980565c31eaf5c1fd8292404a9558c08df0e659",
+   "original_size": [
+    1024,
+    683
+   ],
+   "processing": "centre square crop, LANCZOS resize to 192x192, PNG",
+   "clip_zero_shot": "teapot"
+  },
+  {
+   "file": "08_cup.png",
+   "category": "cup",
+   "sha256": "32d08ec3c882285dc2f907d1037f91c4b0f911322eb3f30d3af0869a55f5409b",
+   "license": "CC0 1.0",
+   "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+   "title": "Glass Cup of Beer",
+   "creator": "Image Catalog",
+   "source": "flickr",
+   "landing": "https://www.flickr.com/photos/132795455@N08/22305696820",
+   "original_url": "https://live.staticflickr.com/5665/22305696820_96ae9aee67_b.jpg",
+   "openverse_id": "fa66ecf0-70f7-4a9c-b527-1d6073bb6613",
+   "original_sha256": "72d8e46b469649660d4330446e5431c6cf2826c422b9030820357c63fde7d4a8",
+   "original_size": [
+    1024,
+    683
+   ],
+   "processing": "centre square crop, LANCZOS resize to 192x192, PNG",
+   "clip_zero_shot": "cup"
+  },
+  {
+   "file": "09_shoe.png",
+   "category": "shoe",
+   "sha256": "57ea4acc4aebb9bf658556d00c67b5511953656bf8d181813b898e026d932f28",
+   "license": "CC0 1.0",
+   "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+   "title": "Women Shoe Store",
+   "creator": "MyStockPhotos",
+   "source": "flickr",
+   "landing": "https://www.flickr.com/photos/136375272@N05/33389051828",
+   "original_url": "https://live.staticflickr.com/65535/33389051828_b0ac840e54_b.jpg",
+   "openverse_id": "1eb32445-8032-4d18-b47d-ffc58934ce72",
+   "original_sha256": "5b1065f74b2a7eaa8f0005bfd422d66b43ea63983dcb8606e61206b289370be3",
+   "original_size": [
+    1024,
+    684
+   ],
+   "processing": "centre square crop, LANCZOS resize to 192x192, PNG",
+   "clip_zero_shot": "shoe"
+  },
+  {
+   "file": "10_dog.png",
+   "category": "dog",
+   "sha256": "2e09aac363e1f16ac3f99469efde1b8330d43096bc11cf4063e326793c68d97c",
+   "license": "CC0 1.0",
+   "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+   "title": "my dogs",
+   "creator": "Andrea Pelizzaro - my amateur pics",
+   "source": "flickr",
+   "landing": "https://www.flickr.com/photos/160949630@N04/44980956602",
+   "original_url": "https://live.staticflickr.com/1966/44980956602_6380fb034c_b.jpg",
+   "openverse_id": "8f562c74-432f-47d0-bb68-fff2fdb07a16",
+   "original_sha256": "ec0a929ae8912ea32124abded650ebeae68ae088ff27b3c8e1e8c8040d512c67",
+   "original_size": [
+    1024,
+    683
+   ],
+   "processing": "centre square crop, LANCZOS resize to 192x192, PNG",
+   "clip_zero_shot": "dog"
+  },
+  {
+   "file": "11_cat.png",
+   "category": "cat",
+   "sha256": "30fdf18f97ae1f41b5d88554eb0fcd60166e5e1dfc0aa60d94862b4db2875702",
+   "license": "CC0 1.0",
+   "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+   "title": "Cat",
+   "creator": "Burnt Pineapple Productions",
+   "source": "flickr",
+   "landing": "https://www.flickr.com/photos/51686021@N07/42700002412",
+   "original_url": "https://live.staticflickr.com/1731/42700002412_c4e96ba054_b.jpg",
+   "openverse_id": "145e0b37-0577-416b-8d05-27c0b0bdde46",
+   "original_sha256": "7f45640a2c4b38f40557fd7b51c37cf3781c7fcf2998a896669eb0129735b436",
+   "original_size": [
+    1024,
+    683
+   ],
+   "processing": "centre square crop, LANCZOS resize to 192x192, PNG",
+   "clip_zero_shot": "cat"
+  },
+  {
+   "file": "12_horse.png",
+   "category": "horse",
+   "sha256": "3ef2960f52024fd1a806c4790c544f32eba8607f914d9871c21be1c7925e8d79",
+   "license": "CC0 1.0",
+   "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+   "title": "Horse",
+   "creator": "mnsc",
+   "source": "flickr",
+   "landing": "https://www.flickr.com/photos/49976053@N00/1053024318",
+   "original_url": "https://live.staticflickr.com/1410/1053024318_52377e9533_b.jpg",
+   "openverse_id": "22bc391b-384e-4663-9d66-69075919ec39",
+   "original_sha256": "60b27660652a7a0c1ac1851fd95a2a22167dd83b6983f6398fe39d24feb596a6",
+   "original_size": [
+    1024,
+    768
+   ],
+   "processing": "centre square crop, LANCZOS resize to 192x192, PNG",
+   "clip_zero_shot": "horse"
+  },
+  {
+   "file": "13_owl.png",
+   "category": "owl",
+   "sha256": "0900b4fd6c6a1dd7e50cace280074ad0f02922878111831fc1af6444266f1cab",
+   "license": "CC0 1.0",
+   "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+   "title": "Barred Owl",
+   "creator": "U.S. Geological Survey",
+   "source": "flickr",
+   "landing": "https://www.flickr.com/photos/27784370@N05/10924764524",
+   "original_url": "https://live.staticflickr.com/7403/10924764524_f53b7485b2_b.jpg",
+   "openverse_id": "872a91c7-89e8-4698-b857-1b830a62459d",
+   "original_sha256": "a47bca2cb3ab12cf2dc2cc280a8db02cb04ea32d156f36e1e3b5ab7c43b881f2",
+   "original_size": [
+    1024,
+    798
+   ],
+   "processing": "centre square crop, LANCZOS resize to 192x192, PNG",
+   "clip_zero_shot": "owl"
+  },
+  {
+   "file": "14_butterfly.png",
+   "category": "butterfly",
+   "sha256": "ae0d03904bce67564d00b04455c7f45f8cebfb4a38ae4b5b2aed1d1ad8d594be",
+   "license": "CC0 1.0",
+   "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+   "title": "Monarch butterfly on Cosmos.",
+   "creator": "Bernard Spragg",
+   "source": "flickr",
+   "landing": "https://www.flickr.com/photos/88123769@N02/13702029713",
+   "original_url": "https://live.staticflickr.com/3801/13702029713_a814ef231c_b.jpg",
+   "openverse_id": "e411beb7-d1cd-4e9e-ad47-deeefe06f519",
+   "original_sha256": "1c3a62ab2cd793f4818054ccafca112d417ea622379f87d0886aae4ad854af8a",
+   "original_size": [
+    1024,
+    771
+   ],
+   "processing": "centre square crop, LANCZOS resize to 192x192, PNG",
+   "clip_zero_shot": "butterfly"
+  },
+  {
+   "file": "15_laptop.png",
+   "category": "laptop",
+   "sha256": "9c92d41baf229ba2ba23ec0abe21f0bb5d1bb4c6e3c855530190f22a86dcd4e7",
+   "license": "CC0 1.0",
+   "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+   "title": "Asus laptop",
+   "creator": "cogdogblog",
+   "source": "flickr",
+   "landing": "https://www.flickr.com/photos/37996646802@N01/2193891309",
+   "original_url": "https://live.staticflickr.com/2307/2193891309_516400c479_b.jpg",
+   "openverse_id": "c2e47fe9-7123-4559-bed5-01b21ab8c6d1",
+   "original_sha256": "52fd13086d82cb25795eb5e7ada8ba5f6d8debb04197fb072a7f0bd71e14e8d4",
+   "original_size": [
+    1024,
+    768
+   ],
+   "processing": "centre square crop, LANCZOS resize to 192x192, PNG",
+   "clip_zero_shot": "laptop"
+  },
+  {
+   "file": "16_strawberry.png",
+   "category": "strawberry",
+   "sha256": "180105ae503883e6cb8a95f0b75dc0ac3b6fc578a3349a69fa28e4f013d079df",
+   "license": "CC0 1.0",
+   "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+   "title": "Three Strawberries",
+   "creator": "Image Catalog",
+   "source": "flickr",
+   "landing": "https://www.flickr.com/photos/132795455@N08/17876837688",
+   "original_url": "https://live.staticflickr.com/7698/17876837688_d4abc4ee51_b.jpg",
+   "openverse_id": "9a242bf8-8784-4297-8297-63c9a87ad53c",
+   "original_sha256": "53286d45f27a06406d2b5995746d90056108ebfcbd139f23ec5ee67f61ec33d7",
+   "original_size": [
+    1024,
+    768
+   ],
+   "processing": "centre square crop, LANCZOS resize to 192x192, PNG",
+   "clip_zero_shot": "strawberry"
+  },
+  {
+   "file": "17_bicycle.png",
+   "category": "bicycle",
+   "sha256": "259436d757f5cf63504a95a2a1967ae79829903ba18bb747f795873b83582cc6",
+   "license": "CC0 1.0",
+   "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+   "title": "The Red Bicycle.",
+   "creator": "Bernard Spragg",
+   "source": "flickr",
+   "landing": "https://www.flickr.com/photos/88123769@N02/15655615295",
+   "original_url": "https://live.staticflickr.com/3954/15655615295_3a46e83728_b.jpg",
+   "openverse_id": "a9e0bff3-3272-4c3a-bbd4-92e542e1f41a",
+   "original_sha256": "5eb3b98ae2a53bdb00e17a8215ae579df3302867df844d1407b4343bbefde511",
+   "original_size": [
+    1024,
+    728
+   ],
+   "processing": "centre square crop, LANCZOS resize to 192x192, PNG",
+   "clip_zero_shot": "bicycle"
+  },
+  {
+   "file": "18_airplane.png",
+   "category": "airplane",
+   "sha256": "774e3e1e7529b3a62c4d20843f5981131753b18100888b37b52962a6dd8d5bbd",
+   "license": "CC0 1.0",
+   "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+   "title": "Airplane wing in front of cumulus clouds",
+   "creator": "D Coetzee",
+   "source": "flickr",
+   "landing": "https://www.flickr.com/photos/29507259@N02/3527948344",
+   "original_url": "https://live.staticflickr.com/2404/3527948344_878499f824_b.jpg",
+   "openverse_id": "ef8bc7b4-70ce-425c-bbac-2e44ce1f7d42",
+   "original_sha256": "a415f9cae69cdace3c15f4011305af487a960e74ce17f1b900689d95b4af7837",
+   "original_size": [
+    1024,
+    768
+   ],
+   "processing": "centre square crop, LANCZOS resize to 192x192, PNG",
+   "clip_zero_shot": "airplane"
+  },
+  {
+   "file": "19_sailboat.png",
+   "category": "sailboat",
+   "sha256": "3895a335da9bb0eacb5b156c3928ae006b72db16fe2e382226171cf8b67b3a60",
+   "license": "CC0 1.0",
+   "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+   "title": "Sailboat in Viaduct Harbour in front of Sky Tower",
+   "creator": "D Coetzee",
+   "source": "flickr",
+   "landing": "https://www.flickr.com/photos/29507259@N02/7423076202",
+   "original_url": "https://live.staticflickr.com/8163/7423076202_d8022d68cc_b.jpg",
+   "openverse_id": "68e5239c-f322-4216-a51a-69e089f87c1a",
+   "original_sha256": "97bb549d7680258e563445596fce9f5fe86ae5ca158d9241006a911ff3386d0a",
+   "original_size": [
+    1024,
+    629
+   ],
+   "processing": "centre square crop, LANCZOS resize to 192x192, PNG",
+   "clip_zero_shot": "sailboat"
+  },
+  {
+   "file": "20_train.png",
+   "category": "train",
+   "sha256": "8ee98a70bd64931679872c8e0696cd753dc569cb5f199ca58c6c56aea787816e",
+   "license": "CC0 1.0",
+   "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+   "title": "2007.08 - 'Train is leaving the City'- Amsterdam photos, a view over the last excavation of Oosterdok / Docklands area full of ramming on the concrete pilings & the old caps of Central Station; Dutch city + geotag, Arjan Heijnsbroek, The Netherlands",
+   "creator": "Amsterdam free photos & pictures of the Dutch city",
+   "source": "flickr",
+   "landing": "https://www.flickr.com/photos/104736837@N03/11286238115",
+   "original_url": "https://live.staticflickr.com/5507/11286238115_45ddc13739_b.jpg",
+   "openverse_id": "5b27df71-6125-4cf4-bd04-44db4a8b393a",
+   "original_sha256": "740d7bc11db5827f17fdf16381001da4d608140c67c60e98fcb020ffcfb1429e",
+   "original_size": [
+    1024,
+    768
+   ],
+   "processing": "centre square crop, LANCZOS resize to 192x192, PNG",
+   "clip_zero_shot": "train"
+  }
+ ]
+}

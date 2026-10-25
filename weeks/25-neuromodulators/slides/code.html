@@ -1,0 +1,20 @@
+<section id="code" data-transition="fade" style="background:#F6F4EE;color:#14213D;font-family:'IBM Plex Sans', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:40px">
+<div style="display:flex;flex-direction:column;gap:16px">
+<p style="font-size:24px;font-weight:600;letter-spacing:3px;text-transform:uppercase;color:#B0521A">Part 3 · The code</p>
+<h2 style="font-size:64px;font-weight:700;line-height:1.1">Two regions, one wire between them</h2>
+</div>
+<div style="width:1660px;background:#14213D;padding:36px;border-radius:16px"><p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:25px;line-height:1.45;color:#E8ECF3;white-space:pre">Wiring("patient", "1.0",
+  regions={"neuromodulator.serotonin": {"tau": 4.0, "kappa": 0.02},
+           "basal_ganglia.striatum":   {"eta": 0.1, "q0": 0.5}},
+  inputs={"neuromodulator.serotonin.state": "situation",
+          "basal_ganglia.striatum.state":   "situation",
+          "basal_ganglia.striatum.reward":  "reward",
+          "basal_ganglia.striatum.patience": "neuromodulator.serotonin.patience"},
+  outputs={"action": "basal_ganglia.striatum.choice"})
+
+a = brain.tick({"situation": 0})["action"]     <span style="color:#8FA3BF"># 0 stop, 1 walk on</span>
+...                                            <span style="color:#8FA3BF"># empty moments until the outcome is due</span>
+brain.tick({"reward": r})                      <span style="color:#8FA3BF"># 0.4 after 2, or the G1's 0/1 after 8</span></p></div>
+<p style="position:absolute;left:128px;bottom:64px;width:1664px;font-size:24px;color:#6B7385">One number each · 11</p>
+<aside>Remove the patience wire and the striatum is week 18's again. The modulated profile wires the same port, plus the others.</aside>
+</section>

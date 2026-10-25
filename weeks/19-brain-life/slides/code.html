@@ -1,0 +1,19 @@
+<section id="code" data-transition="fade" style="background:#F6F4EE;color:#14213D;font-family:'IBM Plex Sans', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:40px">
+<div style="display:flex;flex-direction:column;gap:16px">
+<p style="font-size:24px;font-weight:600;letter-spacing:3px;text-transform:uppercase;color:#B0521A">Part 3 · The code</p>
+<h2 style="font-size:64px;font-weight:700;line-height:1.1">Four calls</h2>
+</div>
+<div style="width:1660px;background:#14213D;padding:36px;border-radius:16px"><p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:26px;line-height:1.45;color:#E8ECF3;white-space:pre">brain = Brain(profile("walker"), manifest)
+print(datasheet_text(brain))                 <span style="color:#8FA3BF"># figures before a single tick</span>
+
+...                                          <span style="color:#8FA3BF"># learn: the pushes, as week 16</span>
+brain.save("brains/brace.npz")
+
+<span style="color:#8FA3BF"># another day, another process</span>
+brain = Brain.load("brains/brace.npz", manifest)   <span style="color:#8FA3BF"># StateError if not this body</span>
+observe(brain)["cerebellum.brace"]            <span style="color:#8FA3BF"># {'trials': 12, 'peak_tick': 9, ...}</span>
+health(brain)                                <span style="color:#8FA3BF"># [{'region': 'cerebellum.forward', 'ok': True, ...}]</span>
+monitor(brain)                               <span style="color:#8FA3BF"># this tick's numbers, as channels</span></p></div>
+<p style="position:absolute;left:128px;bottom:64px;width:1664px;font-size:24px;color:#6B7385">A brain's life · 13</p>
+<aside>from ubrain.state import read_header, snapshot_bytes; from ubrain.datasheet import datasheet, datasheet_text; from ubrain.observe import health, monitor, monitor_manifest, observe. All of it is in lab_life.py, one function per step.</aside>
+</section>

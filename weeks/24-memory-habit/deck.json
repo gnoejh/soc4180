@@ -1,0 +1,52 @@
+{
+ "v": 4,
+ "title": "Memory First, Habit Later",
+ "subtitle": "ubrain on the G1: episodic control and the striatum on the braking task, and a hand-over between them",
+ "cover": "cover",
+ "order": [
+  "cover",
+  "plan",
+  "two",
+  "handover",
+  "world",
+  "predict",
+  "robot",
+  "fig_late",
+  "smallmem",
+  "wiring",
+  "code",
+  "flags",
+  "demo",
+  "class2",
+  "questions",
+  "next"
+ ],
+ "sections": {
+  "s1": {
+   "description": "What the two classes are for",
+   "start": "cover"
+  },
+  "s2": {
+   "description": "Part 1: two controllers and a hand-over",
+   "start": "two"
+  },
+  "s3": {
+   "description": "Part 2: measured",
+   "start": "predict"
+  },
+  "s4": {
+   "description": "Part 3: the code, the demo and the hands-on class",
+   "start": "wiring"
+  }
+ },
+ "faces": {
+  "ibm-plex-sans": {
+   "family": "IBM Plex Sans",
+   "href": "https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;600;700&display=swap"
+  },
+  "jetbrains-mono": {
+   "family": "JetBrains Mono",
+   "href": "https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&display=swap"
+  }
+ }
+}

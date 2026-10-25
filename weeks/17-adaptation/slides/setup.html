@@ -1,0 +1,27 @@
+<section id="setup" data-transition="fade" style="background:#F6F4EE;color:#14213D;font-family:'IBM Plex Sans', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:40px">
+<div style="display:flex;flex-direction:column;gap:16px">
+<p style="font-size:24px;font-weight:600;letter-spacing:3px;text-transform:uppercase;color:#B0521A">Part 1 · The experiment</p>
+<h2 style="font-size:64px;font-weight:700;line-height:1.1">What the brain feels, and what it can change</h2>
+</div>
+
+<div style="display:flex;gap:40px;align-items:stretch">
+<div style="flex:1;background:#FFFDF8;border-radius:16px;padding:36px;border-top:8px solid #E07A2F;display:flex;flex-direction:column;gap:14px">
+<h3 style="font-size:34px;font-weight:700">The wind (the world)</h3>
+<p style="font-size:28px;line-height:1.45;color:#3A4458">A force on the pelvis, sideways in the robot's own heading frame: it turns with the robot. The experimenter switches it on and off (protocol 0.4, a <i>field</i>).</p>
+<p style="font-size:28px;line-height:1.45;color:#3A4458"><b style='color:#14213D'>The brain is never told about it.</b></p>
+</div>
+<div style="flex:1;background:#FFFDF8;border-radius:16px;padding:36px;border-top:8px solid #2F6FB0;display:flex;flex-direction:column;gap:14px">
+<h3 style="font-size:34px;font-weight:700">The turn (the sense)</h3>
+<p style="font-size:28px;line-height:1.45;color:#3A4458">The torso gyroscope's z: the yaw rate, number 2 of the 70 body numbers. Positive is turning left.</p>
+<p style="font-size:28px;line-height:1.45;color:#3A4458">This is the teaching signal: the <b style='color:#14213D'>climbing fibre</b> of week 16.</p>
+</div>
+<div style="flex:1;background:#FFFDF8;border-radius:16px;padding:36px;border-top:8px solid #14213D;display:flex;flex-direction:column;gap:14px">
+<h3 style="font-size:34px;font-weight:700">The counter-turn (the act)</h3>
+<p style="font-size:28px;line-height:1.45;color:#3A4458">A yaw rate <span style='font-family:'JetBrains Mono', 'Courier New', monospace;color:#2F6FB0'>u</span> added to the walk command:</p>
+<p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:28px;color:#2F6FB0">walk = (vx, vy, wz + u)</p>
+<p style="font-size:28px;line-height:1.45;color:#3A4458">The walking policy turns it into 29 joint targets, as before.</p>
+</div>
+</div>
+<p style="position:absolute;left:128px;bottom:64px;width:1664px;font-size:24px;color:#6B7385">Walking in a side wind · 4</p>
+<aside>The same tick loop as week 16: 50 times a second, the body sends 70 numbers, the brain answers with a walk command. Only the anatomy changed: the profile is now adapter, which is the walker plus cerebellum.adapt.</aside>
+</section>

@@ -29,6 +29,16 @@ rl = [
     "stable-baselines3>=2.0",
     "torch>=2.4",
 ]
+# A trained model as the robot's sense (Part II, weeks 26-27): CLIP through ubrain's
+# vision codec (ubrain.extras.clip). torch comes from the same sources as `rl`. The model
+# weights (openai/clip-vit-base-patch32, about 600 MB) are fetched once into the
+# Hugging Face cache; they are not a package.
+vision = [
+    "torch>=2.4",
+    "transformers>=4.40",
+    "pillow>=10",
+    "huggingface-hub>=0.24",
+]
 # GPU-parallel training. Linux/Colab only: JAX has no Windows CUDA wheels.
 gpu = [
     "playground>=0.2.0",

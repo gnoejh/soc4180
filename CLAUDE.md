@@ -68,11 +68,11 @@ brain enters through ubrain in Part II. Decisions, from the papercode session of
   every number identical (error curve, all 14 push records, digest `4815eedf56d0`).
   ubrain is not public: the wheels are a local copy.
 - **Pushed 2026-10-25 at the author's instruction** ("update MD, commit/push"): weeks
-  17-27, `vendor/ubrain/`, `docs/ubrain_labs/` and the Part II references. Several labs
-  teach content of papers under double-blind review (codecs and consolidation: ICLR 2027,
-  until 16 Dec 2026; striatum, working memory, attention, memory-and-habit: IJCAI-27,
-  January to 21 April 2027); the author decides what is pushed, so ask before pushing
-  NEW Part II weeks that touch such content.
+  17-27, `vendor/ubrain/`, `docs/ubrain_labs/` and the Part II references. **The
+  classes are not paper content** (user, 2026-10-25: "This classes are not related with
+  paper"): an earlier note here said some labs taught papers under double-blind review;
+  that was wrong and is withdrawn. Part II weeks are pushed like any other week, when
+  the user asks.
 
 ## Syllabus
 
@@ -273,7 +273,7 @@ headless plus ~20 s to load CLIP.
 The ubrain examples named here live in the papercode repository (`ubrain/examples/`)
 and in the ubrain kit; a week copies its example in and adapts it to run on this
 repository's `uv sync` (week 16's `ubrain_local.py` pattern), as `lab_striatum.py` does.
-Before a new week is pushed, check the review-period note in "Part II" above.
+Commit and push a new week when the user asks.
 
 Capstone presentations occupy the final-exam slot. Weeks 0 and 1 share the first
 session — the stack lecture is short, the MuJoCo lab is hands-on. **That session

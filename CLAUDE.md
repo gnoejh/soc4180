@@ -1637,3 +1637,20 @@ locomotion video needs it — the robot leaves a fixed frame in about two second
 - G1 is a 29-DOF full humanoid. If training proves too slow, `berkeley_humanoid`
   (12 actuated DOF) and `robotis_op3` are the cheaper fallbacks and also have
   tuned `playground` locomotion envs.
+
+<!-- ubrain-feedback: begin -->
+## ubrain: the feedback channel (written by papercode's register_project.py; do not edit between the markers)
+
+This project uses ubrain and is registered as `soc4180code` in papercode's feedback register.
+- **At the start of every session, read the Bulletin**: https://github.com/untrained-brain/ubrain-dev/issues/37
+  (current and candidate ubrain releases, the release reports awaited, what this project is asked to do).
+- **File** every ubrain limitation, defect or missing capability when it happens, with the *Feedback on
+  ubrain* issue template in `untrained-brain/ubrain-dev`; search the issues for related items first.
+- **Reply** on the item's issue (`FB-NNNN: ...`). Never edit papercode's files or ubrain's code.
+- **The rules**: `W:\papercode\devnotes\feedback\PROTOCOL.md` -- evidence that runs on ubrain alone, an
+  acceptance test per item, one release report per wheel, `# ubrain-workaround: FB-NNNN` tags,
+  corrections filed at once.
+- **The token** for the API is `GITHUB_UBRAIN_TOKEN` in `C:\Users\hjeong\OneDrive\.env`; read it into a
+  variable, never print it. On this machine `python W:/papercode/devnotes/feedback/file_item.py --project
+  soc4180code item.json` is the local route.
+<!-- ubrain-feedback: end -->

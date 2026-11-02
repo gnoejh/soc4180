@@ -96,7 +96,7 @@ training; an LLM planner appears only as a non-executed code block).
 | 04 | Contact, balance, analytic walking (LIPM/ZMP) | `04` | built; `lab_walk.py` + `walk.py`; **not re-tested on Colab since 2026-09-20** |
 | 05 | Actuation, PD control, and CPG gaits | `05` | built; P/PD/PI/PID comparison slides added 2026-10-04; `lab_servo.py` + `servo.py`; **not re-tested on Colab since 2026-09-20** |
 | 06 | Sensing, state estimation, observation design | `06` | built; `lab_imu.py` + `imu.py`; **not re-tested on Colab since 2026-09-20** |
-| 07 | From control to learning: MDPs and environment design | `07` | built; `lab_env.py` (ankle strategy, push-measured) + `env_run.py`; **not re-tested on Colab since 2026-09-20** |
+| 07 | From control to learning: MDPs and environment design | `07` | built; `lab_env.py` (ankle strategy, push-measured) + `env_run.py`; deck shows its computing code since 2026-11-02 (50 slides, all fit 1280 x 800); **not re-tested on Colab since 2026-09-20** |
 | 08 | Policy gradients and PPO | `08` | built; `lab_train.py` + `train.py`; Pages-green since the OSMesa/triton fix (below); **not re-tested on Colab since 2026-09-20** |
 | 09 | Reward shaping and diagnosing failed runs | `09` | built; `lab_reward.py` + `shape.py`; Pages-green, same history as 08; **not re-tested on Colab since 2026-09-20** |
 | 10 | Scaling: GPU-parallel locomotion training | `10` | built; GPU training **runs on A100, untimed**; `lab_many.py` + `many.py`; renders locally only with `--extra gpu` synced and the machine quiet |
@@ -971,6 +971,17 @@ re-render. In particular do not use Colab's *Save a copy in GitHub* on these
 notebooks; it would commit executed outputs over the generated file.
 
 ### Verified Quarto behaviours (do not re-litigate)
+
+- **revealjs hides code by default (`echo: false`); ipynb shows it.** So a deck
+  prints a cell's output with none of the code behind it, while `lab.ipynb` has
+  everything -- reported for week 7 as "the slide is missing parts of lab.ipynb".
+  Week 7 (2026-11-02) is the pattern: `#| echo: true` on cells that compute a
+  number, drawing code left hidden (a note on the first figure slide says it is
+  in `lab.ipynb`), and a long cell split into "code + output" and "drawn"
+  slides. Showing code makes slides taller: measure every slide's
+  `scrollHeight` in headless Chrome (append a script to a copy of
+  `slides.html`, `--dump-dom`) and split anything over 800 px. Other decks still
+  hide their code.
 
 - `#| eval: false` **does** survive into `lab.ipynb` as a genuine unexecuted code
   cell. No post-render cell injector is needed.

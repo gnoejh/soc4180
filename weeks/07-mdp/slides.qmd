@@ -167,6 +167,9 @@ ax.text(5.2, 0.05, "one trip round the loop = one decision = 20 ms = 10 physics 
 fig.tight_layout(); plt.show()
 ```
 
+*Code on these slides:* cells that compute a number are shown; the drawing
+code for every figure is left out here and is in `lab.ipynb`, cell by cell.
+
 Everything in the red box is *ours to specify* and nothing inside it learns.
 The only thing an algorithm changes is the grey box. Note the **indexing**: the
 policy sends ${\color{#e8743b}{a_t}}$, and what comes back — the next
@@ -212,7 +215,11 @@ $${\color{#2a9d5c}{G_t}} \;=\; {\color{#2a9d5c}{r_{t+1}}} + {\color{#8e44ad}{\ga
 - ${\color{#8e44ad}{\gamma^k}}$ — its weight: 1, then $\gamma$, then $\gamma^2$, …
 - after the episode ends every reward is 0, so the sum is really finite
 
-Why discount at all? Three reasons, in order of importance for us:
+---
+
+## Why discount at all? {.smaller}
+
+Three reasons, in order of importance for us:
 
 1. **So the sum is finite.** A robot that stands for ever earns 1.55 per step
    for ever; without $\gamma < 1$ its return is infinite and cannot be compared.
@@ -255,13 +262,22 @@ $$H = \frac{1}{1-{\color{#8e44ad}{\gamma}}}\ \text{decisions} \qquad = \frac{\De
 - $\Delta t_{\text{control}}$ — the time between decisions, 0.02 s at 50 Hz
 
 **Worked example:** $\gamma = 0.99$ gives $H = 1/0.01 = 100$ decisions, and
-$100 \times 0.02\ \text{s} = 2$ s. The next slide computes the table for our env.
+$100 \times 0.02\ \text{s} = 2$ s. The next slide computes a table for our env,
+with two more columns:
+
+- **half-life** — the delay after which a reward counts half: solve
+  $\gamma^k = \tfrac12$, so $k = \ln\tfrac12 / \ln\gamma$.
+- **weight in first H** $= 1 - \gamma^H$ — the share of the total weight that
+  falls inside the horizon. It is **0.63 for every** $\gamma$ near 1 (it tends
+  to $1 - 1/e$), which is what makes $H$ a fair "horizon": about two-thirds of
+  what matters is inside it.
 
 ---
 
 ## The effective horizon, measured for our env {.smaller}
 
 ```{python}
+#| echo: true
 from soc4180.envs import G1WalkEnv, walker_actions
 from soc4180.walking import GaitParams
 
@@ -275,14 +291,6 @@ for g in (0.9, 0.95, 0.99, 0.995, 0.999):
     half = np.log(0.5) / np.log(g)          # steps until gamma^k = 1/2
     print(f"{g:6.3f} {H:12.0f} {H*dt:9.2f}s {H*dt/step_time:10.1f} {half*dt:9.2f}s {1 - g**H:18.3f}")
 ```
-
-- **H seconds** $= \Delta t / (1-\gamma)$ — how far ahead the robot effectively looks.
-- **half-life** — the delay after which a reward counts half: solve
-  $\gamma^k = \tfrac12$, so $k = \ln\tfrac12 / \ln\gamma$.
-- **weight in first H** $= 1 - \gamma^H$ — the share of the total weight that
-  falls inside the horizon. It is **0.63 for every** $\gamma$ near 1 (it tends
-  to $1 - 1/e$), which is what makes $H$ a fair "horizon": about two-thirds of
-  what matters is inside it.
 
 **Reading the 0.99 row:** the G1 plans about **2 s** ahead — **three
 footsteps** — and a reward 1.4 s away counts half. That is long enough to see
@@ -330,6 +338,7 @@ computed backwards with ${\color{#2a9d5c}{G_t}} = {\color{#2a9d5c}{r_{t+1}}} + {
 (the next slide derives that line):
 
 ```{python}
+#| echo: true
 gamma = 0.99
 obs, _ = env.reset(seed=0)
 rewards = []
@@ -350,6 +359,14 @@ print(f"discounted G_0              = {G[0]:8.2f}")
 print(f"formula  rbar (1-g^N)/(1-g) = {rbar*(1-gamma**N)/(1-gamma):8.2f}   (constant-reward estimate)")
 print(f"formula  rbar / (1-g)       = {rbar/(1-gamma):8.2f}   (the same, if it stood for ever)")
 ```
+
+---
+
+## Reading the episode's return {.smaller}
+
+The loop on the previous slide runs **backwards**: `G[N] = 0`, then each
+`G[t]` is that step's reward plus $\gamma$ times the return after it. One pass,
+no sum written out.
 
 - The reward is nearly constant (1.40 to 1.70), so the formula from the
   derivation predicts ${\color{#2a9d5c}{G_0}}$ to within about one percent.
@@ -381,7 +398,7 @@ trains a second network, the *critic*, to estimate exactly this.
 
 ---
 
-## Derivation: the Bellman equation {.smaller}
+## Derivation: the Bellman equation, steps 1–3 {.smaller}
 
 **Step 1 — split off the first reward.** Factor $\gamma$ out of everything
 after it:
@@ -393,6 +410,13 @@ $${\color{#b8860b}{V^\pi(s)}} = \mathbb{E}_\pi\big[\,{\color{#2a9d5c}{r_{t+1}}} 
 
 **Step 3 — the average of a sum is the sum of the averages:**
 $${\color{#b8860b}{V^\pi(s)}} = \mathbb{E}_\pi\big[{\color{#2a9d5c}{r_{t+1}}} \mid {\color{#3b7dd8}{s}}\big] + {\color{#8e44ad}{\gamma}}\,\mathbb{E}_\pi\big[{\color{#2a9d5c}{G_{t+1}}} \mid {\color{#3b7dd8}{s}}\big]$$
+
+The first term is the average next reward. The second still holds a return;
+steps 4 and 5 turn it back into a value.
+
+---
+
+## Derivation: the Bellman equation, steps 4–5 {.smaller}
 
 **Step 4 — use the Markov property.** Once you know where you land,
 ${\color{#3b7dd8}{s'}} = {\color{#3b7dd8}{s_{t+1}}}$, the future does not depend on how you got there,
@@ -449,23 +473,33 @@ $$y_t \;=\; {\color{#2a9d5c}{r_{t+1}}} \;+\; {\color{#8e44ad}{\gamma}}\,\big(1 -
 - truncated: **it does not appear in the formula at all.** The bracket is 1
   and the target still includes ${\color{#b8860b}{V(s_{t+1})}}$.
 
-**The classic bug** is writing `done = terminated or truncated` and using
-`1 - done`. Then the last standing step of every 10 s episode gets the target
-"1.55 and nothing after" — and the next slide shows how wrong that is.
-
 ---
 
 ## The bug, measured on the hold-the-crouch episode {.smaller}
 
+**The classic bug** is writing `done = terminated or truncated` and using
+`1 - done`. Then the last standing step of every 10 s episode gets the target
+"1.55 and nothing after". Both targets for that step, from the episode above:
+
 ```{python}
-#| fig-align: center
+#| echo: true
 V_est = rbar / (1 - gamma)                        # estimate: it keeps standing with the same mean reward
-y_right = rewards[-1] + gamma * V_est             # truncated: bootstrap
-y_wrong = rewards[-1]                             # truncated treated as terminated
+y_right = rewards[-1] + gamma * V_est             # truncated: bootstrap past the cut-off
+y_wrong = rewards[-1]                             # the bug: truncated treated as terminated
 print(f"last step, reward {rewards[-1]:.2f}")
 print(f"  target, bootstrapped (correct)       y = {y_right:7.2f}")
 print(f"  target, treated as a fall (the bug)  y = {y_wrong:7.2f}")
+```
 
+In code the whole fix is which flag goes into the bracket:
+`y = r + gamma * (1 - terminated) * V_next` — never `(1 - done)`.
+
+---
+
+## The bug, drawn {.smaller}
+
+```{python}
+#| fig-align: center
 tsec = np.arange(N) * dt
 fig, ax = plt.subplots(figsize=(10, 2.9))
 ax.plot(tsec, G[:N], color=GREEN, lw=2, label="$G_t$ if the 10 s cut-off were a real ending (the bug)")
@@ -499,6 +533,7 @@ $\sin\theta$ for a tilt $\theta$. So the test is $\sin\theta > 0.7$, i.e.
 $\theta > \arcsin 0.7$:
 
 ```{python}
+#| echo: true
 print(f"max_tilt = {env.max_tilt}  ->  terminate when tilt > arcsin(0.7) = {np.degrees(np.arcsin(env.max_tilt)):.1f} deg")
 print(f"(reading 0.7 as an angle in radians would give {np.degrees(env.max_tilt):.1f} deg -- not what the code does)")
 ```
@@ -582,6 +617,7 @@ commanded, and it is the cheapest memory there is.
 ## The environment {.smaller}
 
 ```{python}
+#| echo: true
 print(f"state       : {env.model.nq} + {env.model.nv} = {env.model.nq + env.model.nv} numbers (qpos + qvel)")
 print(f"observation : {env.observation_space.shape[0]} numbers")
 print(f"action      : {env.action_space.shape[0]} (the twelve leg joints only)")
@@ -634,7 +670,13 @@ Three plausible choices, and they are not equally good:
 | **Absolute joint angles** | Servos do the hard work; but every output must specify a whole posture |
 | **Residuals about a nominal pose** | The policy nudges a stance that already works |
 
-We use the third. For each of the twelve leg joints $j$:
+We use the third.
+
+---
+
+## Residual actions, written down {.smaller}
+
+For each of the twelve leg joints $j$:
 
 $$q^{\text{target}}_j \;=\; q^{\text{nom}}_j \;+\; \kappa\,\operatorname{clip}\big({\color{#e8743b}{a_j}},\,-1,\,1\big)$$
 
@@ -709,7 +751,8 @@ chases them.** The layered structure from Week 0 survives intact.
 
 The number of physics steps per decision is the **decimation** $N$:
 
-$$N = \operatorname{round}\!\Big(\frac{1}{f_{\text{control}}\;\Delta t_{\text{physics}}}\Big) = \operatorname{round}\!\Big(\frac{1}{50 \times 0.002}\Big) = 10, \qquad \Delta t_{\text{control}} = N\,\Delta t_{\text{physics}} = 20\ \text{ms}.$$
+$$N = \operatorname{round}\!\Big(\frac{1}{f_{\text{control}}\;\Delta t_{\text{physics}}}\Big) = \operatorname{round}\!\Big(\frac{1}{50 \times 0.002}\Big) = 10,$$
+$$\Delta t_{\text{control}} = N\,\Delta t_{\text{physics}} = 20\ \text{ms}.$$
 
 ```{python}
 #| fig-align: center
@@ -736,14 +779,14 @@ rates that divide 500 exactly come out as asked.
 
 ---
 
-## Inside one `env.step`, measured {.smaller}
+## Inside one `env.step`, written out {.smaller}
 
-What `env.step(a)` does, written out: set the servo targets once, then run
-physics $N$ times. Here with random actions, recording the left knee at every
-physics step:
+What `env.step(a)` does: set the servo targets once, then run physics $N$
+times. Here ten decisions with random actions, recording the left knee at
+every physics step:
 
 ```{python}
-#| fig-align: center
+#| echo: true
 env.reset(seed=0)
 rng = np.random.default_rng(1)
 knee = int(np.where(env.act_qpos == env.leg_qpos[3])[0][0])        # left knee's actuator
@@ -757,6 +800,20 @@ for decision in range(10):
         tq_target.append(env.data.time); target_hist.append(env.data.ctrl[knee])
         mujoco.mj_step(env.model, env.data)
         tq.append(env.data.time); angle_hist.append(env.data.qpos[env.leg_qpos[3]])
+print(f"{len(dec_t)} decisions x {env.decimation} physics steps = {len(tq)} mj_step calls")
+print(f"largest target jump between decisions: {np.max(np.abs(np.diff(target_hist))):.2f} rad"
+      f" (at most 2 x kappa = {2*env.action_scale:.1f})")
+```
+
+Line 3 finds the knee's actuator; line 7 is the formula from *Residual
+actions*; the inner `for` is the decimation loop.
+
+---
+
+## Inside one `env.step`, drawn {.smaller}
+
+```{python}
+#| fig-align: center
 tq, tq_target = np.array(tq) * 1000, np.array(tq_target) * 1000
 fig, ax = plt.subplots(figsize=(10, 2.9))
 ax.step(tq_target, target_hist, where="post", color=ORANGE, lw=2, label="servo target $q^{nom} + \\kappa a$ (changes every 20 ms)")
@@ -765,8 +822,6 @@ for d in dec_t:
     ax.axvline(d * 1000, color="0.8", lw=0.8, zorder=0)
 ax.set_xlabel("time (ms)"); ax.set_ylabel("left knee (rad)"); ax.grid(axis="y", alpha=0.3)
 ax.legend(fontsize=8, loc="upper right"); fig.tight_layout(); plt.show()
-print(f"largest target jump between decisions: {np.max(np.abs(np.diff(target_hist))):.2f} rad"
-      f" (at most 2 x kappa = {2*env.action_scale:.1f})")
 ```
 
 The orange staircase is the action — constant for 10 physics steps, then a
@@ -781,6 +836,8 @@ joint has only covered part of the jump anyway.
 Gymnasium ships a checker. Use it, every time.
 
 ```{python}
+#| echo: true
+#| warning: false
 from gymnasium.utils.env_checker import check_env
 check_env(env.unwrapped, skip_render_check=True)
 print("env_checker: PASSED")
@@ -789,6 +846,9 @@ print("env_checker: PASSED")
 It verifies the boring things that silently break training: shapes and dtypes
 matching the declared spaces, `reset` accepting a seed and returning
 `(obs, info)`, `step` returning five values, and determinism given a seed.
+It also warns (hidden here) that our observation box runs from $-\infty$ to
+$+\infty$ — true, since gyro rates and joint velocities have no hard bound,
+and harmless.
 
 A subtly non-conforming environment does not crash. **It trains badly, and you
 spend a week blaming the algorithm.**
@@ -798,6 +858,7 @@ spend a week blaming the algorithm.**
 ## Two baselines before any learning {.smaller}
 
 ```{python}
+#| echo: true
 def rollout(policy, seed=0):
     obs, _ = env.reset(seed=seed)
     total, steps = 0.0, 0
@@ -831,6 +892,7 @@ We already have a working controller. If the environment cannot represent it, no
 algorithm will find anything better.
 
 ```{python}
+#| echo: true
 from soc4180.walking import WalkingController
 
 def walker_in_env(action_scale=0.3, control_hz=50.0):
@@ -864,6 +926,7 @@ Two suspects: the action range is too narrow, and the control rate is too slow.
 Separate them.
 
 ```{python}
+#| echo: true
 grid = {}
 print(f"{'scale':>6} {'asked':>6} {'actual':>7} {'travel':>8} {'z':>7} {'clipped':>8}  outcome")
 for scale in (0.3, 0.6, 1.0):
@@ -940,6 +1003,7 @@ you have committed to.
 ## One trap in that table {.smaller}
 
 ```{python}
+#| echo: true
 for key in ((1.0, 100), (1.0, 200), (0.3, 50), (0.3, 200)):
     g_ = grid[key]
     print(f"kappa {key[0]}  {g_['hz']:4.0f} Hz: return {g_['ret']:7.1f}  in {g_['steps']:5d} steps"
@@ -963,6 +1027,7 @@ average velocity — alongside return. Week 9 leans on this hard.
 ## The reward, for now {.smaller}
 
 ```{python}
+#| echo: true
 env.reset()
 _, _, _, _, info = env.step(np.zeros(12, dtype=np.float32))
 for key, value in info.items():
@@ -1024,6 +1089,10 @@ policy: hold the crouch, uniform random, the week 4 walker as actions, and
 against `obs[0:3]`. On the robot: a white arrow for `obs[0:3]`, a reward bar
 above the head, yellow feet when airborne. Every episode ends with return,
 steps, and **terminated** or **truncated**.
+
+---
+
+## Lab class: `lab_env.py`, step by step {.smaller}
 
 | Step | Do | Right looks like |
 | --- | --- | --- |

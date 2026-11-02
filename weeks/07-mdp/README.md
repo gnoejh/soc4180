@@ -124,6 +124,10 @@ better; every hip-roll variant behaves like hold.
 
 ## Rebuild
 
+The deck shows the code of every cell that computes a number (`#| echo: true`;
+revealjs hides code otherwise); figure-drawing code appears only in
+`lab.ipynb`. After an edit, check that no slide is taller than 800 px.
+
 ```bash
 quarto render weeks/07-mdp/slides.qmd
 ```

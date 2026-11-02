@@ -96,7 +96,7 @@ training; an LLM planner appears only as a non-executed code block).
 | 04 | Contact, balance, analytic walking (LIPM/ZMP) | `04` | built; `lab_walk.py` + `walk.py`; **not re-tested on Colab since 2026-09-20** |
 | 05 | Actuation, PD control, and CPG gaits | `05` | built; P/PD/PI/PID comparison slides added 2026-10-04; `lab_servo.py` + `servo.py`; **not re-tested on Colab since 2026-09-20** |
 | 06 | Sensing, state estimation, observation design | `06` | built; `lab_imu.py` + `imu.py`; **not re-tested on Colab since 2026-09-20** |
-| 07 | From control to learning: MDPs and environment design | `07` | built; `lab_env.py` (ankle strategy, push-measured) + `env_run.py`; deck shows its computing code since 2026-11-02 (50 slides, all fit 1280 x 800); **not re-tested on Colab since 2026-09-20** |
+| 07 | From control to learning: MDPs and environment design | `07` | built; `lab_env.py` (ankle strategy, push-measured) + `env_run.py`; deck shows its computing code and the equation beside it since 2026-11-02 (50 slides, all fit 1280 x 800; equations render offline, MathJax embedded); **not re-tested on Colab since 2026-09-20** |
 | 08 | Policy gradients and PPO | `08` | built; `lab_train.py` + `train.py`; Pages-green since the OSMesa/triton fix (below); **not re-tested on Colab since 2026-09-20** |
 | 09 | Reward shaping and diagnosing failed runs | `09` | built; `lab_reward.py` + `shape.py`; Pages-green, same history as 08; **not re-tested on Colab since 2026-09-20** |
 | 10 | Scaling: GPU-parallel locomotion training | `10` | built; GPU training **runs on A100, untimed**; `lab_many.py` + `many.py`; renders locally only with `--extra gpu` synced and the machine quiet |
@@ -982,6 +982,20 @@ notebooks; it would commit executed outputs over the generated file.
   `scrollHeight` in headless Chrome (append a script to a copy of
   `slides.html`, `--dump-dom`) and split anything over 800 px. Other decks still
   hide their code.
+- **"Self-contained" decks are not, for maths.** `embed-resources` inlines
+  everything except MathJax: the reveal.js template's math plugin downloads
+  MathJax 2 from cdn.jsdelivr.net when the deck opens, so offline (or in a
+  preview that blocks outside scripts) every equation shows as raw TeX --
+  reported for week 7 as "html file is missing with equations". `mathml` is no
+  way out: pandoc cannot convert `\color{#hex}`, which the colour code needs.
+  The fix (week 7, 2026-11-02): `html-math-method: plain`, the Lua filter
+  `assets/mathjax/offline-math.lua` (writes `\( \)`/`\[ \]` spans, reveal.js
+  only), and `include-after-body: assets/mathjax/mathjax.html`, which inlines the
+  vendored MathJax 3.2.2 SVG build (`tex-svg-full.js`, Apache-2.0, +2.3 MB per
+  deck). Verified with Chrome's network blocked (`--proxy-server=127.0.0.1:9`).
+  MathJax 3 sets equations a little wider than 2 did: check widths on the
+  `mjx-container > svg`, not the container (which is slide-wide). Other decks
+  still use the CDN.
 
 - `#| eval: false` **does** survive into `lab.ipynb` as a genuine unexecuted code
   cell. No post-render cell injector is needed.

@@ -5,6 +5,14 @@ author: "Hong Jeong"
 format:
   revealjs:
     output-file: slides.html
+    # Equations without the network: Quarto's math plugin downloads MathJax
+    # from a CDN, so offline every equation showed as raw TeX. The filter
+    # writes the TeX out and an embedded MathJax 3 typesets it.
+    html-math-method: plain
+    filters:
+      - ../../assets/mathjax/offline-math.lua
+    include-after-body:
+      - ../../assets/mathjax/mathjax.html
   ipynb:
     output-file: lab.ipynb
 jupyter: python3
@@ -262,19 +270,24 @@ $$H = \frac{1}{1-{\color{#8e44ad}{\gamma}}}\ \text{decisions} \qquad = \frac{\De
 - $\Delta t_{\text{control}}$ — the time between decisions, 0.02 s at 50 Hz
 
 **Worked example:** $\gamma = 0.99$ gives $H = 1/0.01 = 100$ decisions, and
-$100 \times 0.02\ \text{s} = 2$ s. The next slide computes a table for our env,
-with two more columns:
+$100 \times 0.02\ \text{s} = 2$ s. The next slide computes the table for our env.
 
-- **half-life** — the delay after which a reward counts half: solve
-  $\gamma^k = \tfrac12$, so $k = \ln\tfrac12 / \ln\gamma$.
-- **weight in first H** $= 1 - \gamma^H$ — the share of the total weight that
-  falls inside the horizon. It is **0.63 for every** $\gamma$ near 1 (it tends
-  to $1 - 1/e$), which is what makes $H$ a fair "horizon": about two-thirds of
-  what matters is inside it.
+Two more quantities go in that table:
+
+- **half-life** $k_{1/2}$ — the delay after which a reward counts half: solve
+  ${\color{#8e44ad}{\gamma^{k}}} = \tfrac12$, so $k_{1/2} = \ln\tfrac12 / \ln{\color{#8e44ad}{\gamma}}$.
+- **weight in first H** $= 1 - {\color{#8e44ad}{\gamma^H}}$ — the share of the total weight that
+  falls inside the horizon. It is **0.63 for every** $\gamma$ near 1:
+  $\gamma = 1 - \tfrac1H$, and $(1-\tfrac1H)^H \to 1/e$, so $w_H \to 1 - 1/e$ —
+  about two-thirds of what matters is inside $H$.
 
 ---
 
 ## The effective horizon, measured for our env {.smaller}
+
+One formula per column ($\Delta t = 0.02$ s, a footstep $T_{\text{step}} = 0.65$ s):
+
+$$H = \frac{1}{1-{\color{#8e44ad}{\gamma}}}, \qquad H_{\text{s}} = H\,\Delta t, \qquad \text{footsteps} = \frac{H\,\Delta t}{T_{\text{step}}}, \qquad k_{1/2}\,\Delta t = \frac{\ln\tfrac12}{\ln{\color{#8e44ad}{\gamma}}}\,\Delta t, \qquad w_H = 1 - {\color{#8e44ad}{\gamma^{H}}}$$
 
 ```{python}
 #| echo: true
@@ -335,7 +348,7 @@ reason the control rate below is a design decision and not a detail.
 
 "Hold the crouch" (action = 0 every step) for one 10 s episode, then the return
 computed backwards with ${\color{#2a9d5c}{G_t}} = {\color{#2a9d5c}{r_{t+1}}} + {\color{#8e44ad}{\gamma}}\,{\color{#2a9d5c}{G_{t+1}}}$
-(the next slide derives that line):
+(the Bellman slides derive that line):
 
 ```{python}
 #| echo: true
@@ -364,10 +377,15 @@ print(f"formula  rbar / (1-g)       = {rbar/(1-gamma):8.2f}   (the same, if it s
 
 ## Reading the episode's return {.smaller}
 
-The loop on the previous slide runs **backwards**: `G[N] = 0`, then each
-`G[t]` is that step's reward plus $\gamma$ times the return after it. One pass,
-no sum written out.
+The loop on the previous slide runs **backwards**, one pass, no sum written out:
 
+$${\color{#2a9d5c}{G_N}} = 0, \qquad {\color{#2a9d5c}{G_t}} = {\color{#2a9d5c}{r_{t+1}}} + {\color{#8e44ad}{\gamma}}\,{\color{#2a9d5c}{G_{t+1}}} \quad (t = N-1, \dots, 0)$$
+
+and the last four printed lines are, in order:
+
+$$\sum_{t} {\color{#2a9d5c}{r_{t+1}}} = 774.09, \qquad {\color{#2a9d5c}{G_0}} = 152.51, \qquad \bar r\,\frac{1-{\color{#8e44ad}{\gamma^N}}}{1-{\color{#8e44ad}{\gamma}}} = 153.80, \qquad \frac{\bar r}{1-{\color{#8e44ad}{\gamma}}} = 154.82$$
+
+- $\bar r$ — the mean reward per step, 1.548; $N = 500$ decisions
 - The reward is nearly constant (1.40 to 1.70), so the formula from the
   derivation predicts ${\color{#2a9d5c}{G_0}}$ to within about one percent.
 - $\gamma^{500} = 0.0066$, so an episode ten times the horizon long is, to the
@@ -490,6 +508,11 @@ print(f"last step, reward {rewards[-1]:.2f}")
 print(f"  target, bootstrapped (correct)       y = {y_right:7.2f}")
 print(f"  target, treated as a fall (the bug)  y = {y_wrong:7.2f}")
 ```
+
+The two lines `y_right` and `y_wrong`, with the cell's stand-in value
+$\hat V = \bar r/(1-\gamma)$ for "keeps standing":
+
+$$y^{\text{right}} = {\color{#2a9d5c}{r_N}} + {\color{#8e44ad}{\gamma}}\,\big(1 - \underbrace{{\color{#c0392b}{\text{terminated}}}}_{0}\big)\,{\color{#b8860b}{\hat V}}, \qquad y^{\text{wrong}} = {\color{#2a9d5c}{r_N}} + {\color{#8e44ad}{\gamma}}\,\big(1 - \underbrace{{\color{#c0392b}{\text{done}}}}_{1}\big)\,{\color{#b8860b}{\hat V}} = {\color{#2a9d5c}{r_N}}$$
 
 In code the whole fix is which flag goes into the bracket:
 `y = r + gamma * (1 - terminated) * V_next` — never `(1 - done)`.
@@ -625,6 +648,8 @@ print(f"control     : {1/env.control_dt:.0f} Hz over {1/env.model.opt.timestep:.
       f"  (hold each action {env.decimation} steps)")
 print(f"episode     : {env.max_steps} decisions = {env.max_steps*env.control_dt:.0f} s")
 ```
+
+$$\dim {\color{#3b7dd8}{s}} = n_q + n_v = 36 + 35 = 71, \qquad \dim {\color{#3b7dd8}{o}} = \underbrace{3}_{\text{gravity}} + \underbrace{3}_{\text{gyro}} + \underbrace{12}_{\text{angles}} + \underbrace{12}_{\text{velocities}} + \underbrace{12}_{\text{prev. action}} = 42$$
 
 Forty-two observations: gravity (3), gyroscope (3), and for each of twelve joints
 its angle, velocity, and last commanded residual. **Arms and waist are frozen** —
@@ -805,8 +830,9 @@ print(f"largest target jump between decisions: {np.max(np.abs(np.diff(target_his
       f" (at most 2 x kappa = {2*env.action_scale:.1f})")
 ```
 
-Line 3 finds the knee's actuator; line 7 is the formula from *Residual
-actions*; the inner `for` is the decimation loop.
+Line 7 is the residual formula, and the inner `for` holds it for $N$ steps:
+
+$$q^{\text{target}} = q^{\text{nom}} + \kappa\,{\color{#e8743b}{a_t}} \quad\text{held for } \mathtt{mj\_step} \times N, \qquad |\Delta q^{\text{target}}| \le \kappa\,\big(1 - (-1)\big) = 2\kappa = 0.6\ \text{rad}$$
 
 ---
 
@@ -881,8 +907,9 @@ for name, pol in (("do nothing (hold the crouch)", zero), ("uniform random", ran
 **Always measure these first.** "Do nothing" is the number a policy must beat to
 have learned anything at all; random is the number it must beat to be a policy.
 Both are the *undiscounted* sum — the number the labs print. Uniform random
-falls in 0.66 s: it earns about half as much per step (25.78 / 33 = 0.78,
-against 1.55 for holding) *and* gets 15× fewer steps.
+falls in 0.66 s: it earns about half as much per step *and* gets 15× fewer steps:
+
+$$R = \sum_{t=0}^{n-1} {\color{#2a9d5c}{r_{t+1}}} = n\,\bar r: \qquad 774.09 = 500 \times 1.55, \qquad 25.78 = 33 \times 0.78$$
 
 ---
 
@@ -1015,7 +1042,9 @@ The two walks go the same 1.05 m in the same 12 s, and the 250 Hz one scores
 after the same ~0.24 m, and the 250 Hz one scores **5×** more.
 
 Nothing got better. **A 250 Hz episode has 2.5× as many steps as a 100 Hz one,
-and 5× as many as a 50 Hz one**, and each step adds reward.
+and 5× as many as a 50 Hz one**, and each step adds reward:
+
+$$R \approx \bar r \cdot n = \bar r \cdot T\,f_{\text{control}} \qquad\Longrightarrow\qquad \frac{R_{250\,\text{Hz}}}{R_{100\,\text{Hz}}} \approx \frac{250}{100} = 2.5 \quad\text{for the same } \bar r \text{ and duration } T$$
 
 > Return is only comparable between runs that share an episode structure.
 

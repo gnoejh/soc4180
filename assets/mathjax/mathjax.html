@@ -1,0 +1,22 @@
+<script>
+  // MathJax 3, SVG output: fonts are drawn as paths, so the file needs
+  // nothing from the network. embed-resources inlines the script below.
+  window.MathJax = {
+    tex: {
+      inlineMath: [["\\(", "\\)"]],
+      displayMath: [["\\[", "\\]"]],
+      processEscapes: false
+    },
+    svg: { fontCache: "global" },
+    options: { skipHtmlTags: ["script", "noscript", "style", "textarea", "pre", "code"] },
+    startup: {
+      pageReady: function () {
+        return MathJax.startup.defaultPageReady().then(function () {
+          // equations change slide heights: let reveal.js lay out again
+          if (window.Reveal && Reveal.isReady && Reveal.isReady()) Reveal.layout();
+        });
+      }
+    }
+  };
+</script>
+<script src="../../assets/mathjax/tex-svg-full.js"></script>

@@ -72,7 +72,8 @@ uv run --extra rl weeks/07b-tabular/lab_tables.py --grade --no-viewer
 problem trains a table **live in the MuJoCo window** (the arrows are the
 table's best action and change as it learns), plays what it learned, and grades
 it. `G` grades all six; the score and a 4-letter scorer code stay on screen.
-As shipped every answer is `...` and the file scores 0 / 6.
+As shipped `tables.py` holds the reference answers and scores 6 / 6;
+students change an answer and watch what breaks (a `...` blanks one again).
 
 | # | Problem | Students choose | Passes when | Right looks like |
 | --- | --- | --- | --- | --- |

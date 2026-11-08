@@ -1,6 +1,13 @@
 name: Publish course site
 
-# Renders every week's deck and publishes them to GitHub Pages.
+# Renders week decks and publishes them to GitHub Pages.
+#
+# A PUSH renders only the weeks whose folder the push changed; every other deck
+# is copied from the live site. A full render of all weeks takes hours (weeks
+# 8-10 train), so it is never triggered by a push: run the workflow by hand
+# with "weeks" empty for that, or with the weeks named, after a change to
+# src/, uv.lock or assets/ that should reach decks whose slides.qmd did not change.
+# HTML decks (deck.json, week 16 on) are assembled by build_site.py every run.
 #
 # slides.html is a gitignored build artifact (3-5 MB each, resources inlined),
 # so Pages is where the decks actually become shareable. The artifact deploy
@@ -20,7 +27,7 @@ on:
   workflow_dispatch:
     inputs:
       weeks:
-        description: "Only render these week folders (space-separated, e.g. 05-actuation); the other decks are copied from the live site. Empty = every week."
+        description: "Only render these week folders (space-separated, e.g. 05-actuation); the other decks are copied from the live site. Empty = every week (hours)."
         required: false
         default: ""
 
@@ -46,6 +53,32 @@ jobs:
       failed: ${{ steps.render.outputs.failed }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0               # the push's own commits, to see which weeks changed
+
+      - name: Choose the weeks to render
+        id: pick
+        # mode=all: every week; mode=some: only "list"; nothing else re-renders.
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            list="${{ inputs.weeks }}"
+            if [ -z "$list" ]; then mode=all; else mode=some; fi
+          else
+            before="${{ github.event.before }}"
+            if git cat-file -e "$before^{commit}" 2>/dev/null; then
+              range="$before ${{ github.sha }}"
+            else
+              range="${{ github.sha }}~1 ${{ github.sha }}"   # first push of a branch, or a force push
+            fi
+            # A deck reads only its slides.qmd (plus the package and assets/), so a
+            # change to a lab script, README or instructor/ file does not re-render it.
+            list=$(git diff --name-only --diff-filter=d $range -- 'weeks/*/slides.qmd' \
+                   | cut -d/ -f2 | sort -u | tr '\n' ' ')
+            mode=some
+          fi
+          echo "mode=$mode" >> "$GITHUB_OUTPUT"
+          echo "list=$list" >> "$GITHUB_OUTPUT"
+          echo "render: $mode ${list:-(no Quarto week changed: every deck comes from the live site)}"
 
       - name: Install a software renderer
         # The runner has no GPU, so soc4180._gl selects osmesa -- but only if
@@ -98,10 +131,11 @@ jobs:
         # are reported by a later job, so the decks that did render still ship.
         run: |
           failed=""
-          only="${{ inputs.weeks }}"
+          mode="${{ steps.pick.outputs.mode }}"
+          only="${{ steps.pick.outputs.list }}"
           for qmd in weeks/*/slides.qmd; do
             slug=$(basename "$(dirname "$qmd")")
-            if [ -n "$only" ] && ! echo " $only " | grep -q " $slug "; then
+            if [ "$mode" != all ] && ! echo " $only " | grep -q " $slug "; then
               # Not selected: keep the deck that is already published, so the
               # artifact deploy does not drop it from the site.
               curl -fsSL -o "weeks/$slug/slides.html"                 "https://gnoejh.github.io/soc4180/$slug/slides.html"                 && echo "kept live deck: $slug" || echo "no live deck for $slug"

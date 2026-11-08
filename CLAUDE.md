@@ -97,7 +97,7 @@ training; an LLM planner appears only as a non-executed code block).
 | 05 | Actuation, PD control, and CPG gaits | `05` | built; P/PD/PI/PID comparison slides added 2026-10-04; `lab_servo.py` + `servo.py`; **not re-tested on Colab since 2026-09-20** |
 | 06 | Sensing, state estimation, observation design | `06` | built; `lab_imu.py` + `imu.py`; **not re-tested on Colab since 2026-09-20** |
 | 07 | From control to learning: MDPs and environment design | `07` | built; `lab_env.py` (ankle strategy, push-measured) + `env_run.py` + `mdp.py` (an explicit MDP solved by value iteration, 2026-11-08); deck shows its computing code and the equation beside it since 2026-11-02 (50 slides, all fit 1280 x 800; equations render offline, MathJax embedded); **not re-tested on Colab since 2026-09-20** |
-| 07b | Learning a table from experience: Q-learning, SARSA, binning, why tables stop | `07b` | built 2026-11-08 (user: students not ready for 08; Atari proposed, tabular RL + inverted pendulum chosen); game `lab_tables.py` + `tables.py` (ref 6/6, shipped 0/6, wrong answers 0/6, scorer code 119A; reference in `instructor/tables_solution.py`, published), `qlearn.py`; package `tabular.py`; deck ~32 slides; **not Pages- or Colab-tested** |
+| 07b | Learning a table from experience: Q-learning, SARSA, binning, why tables stop | `07b` | built 2026-11-08 (user: students not ready for 08; Atari proposed, tabular RL + inverted pendulum chosen); game `lab_tables.py` + `tables.py` (ref 6/6, wrong answers 0/6, scorer code 119A; reference in `instructor/tables_solution.py`, published; **`tables.py` ships filled with the reference answers, 6/6**, user 2026-11-08), `qlearn.py`; package `tabular.py`; deck ~32 slides; **not Pages- or Colab-tested** |
 | 08 | Policy gradients and PPO | `08` | built; `lab_train.py` + `train.py`; REINFORCE on week 7's balance MDP against its exact 72.12, computing code shown, equations offline (2026-11-08); Pages-green since the OSMesa/triton fix (below); **not re-tested on Colab since 2026-09-20** |
 | 09 | Reward shaping and diagnosing failed runs | `09` | built; `lab_reward.py` + `shape.py`; Pages-green, same history as 08; **not re-tested on Colab since 2026-09-20** |
 | 10 | Scaling: GPU-parallel locomotion training | `10` | built; GPU training **runs on A100, untimed**; `lab_many.py` + `many.py`; renders locally only with `--extra gpu` synced and the machine quiet |
@@ -366,7 +366,15 @@ checks the greedy table every 250 episodes and keeps the best: 10 of 10 seeds ba
 10 held-out starts. Angle only: 7-35 steps (not Markov); all four numbers: 43-77 (rows multiply);
 the angle cut only at 0 + 6 velocity bins passes (12 rows); +-3 N with no zero fails (94-120).
 Balance from samples (100k episodes, J over the second half of 8 checks): 5 / 11 / 21 / 41 / 81 bins
-19.1 / 51.1 / 65.5 / 66.1 / 53.3 against VI's 72.12 -- an inverted U. Every graded number repeats
+19.1 / 51.1 / 65.5 / 66.1 / 53.3 against VI's 72.12 -- an inverted U. **Open defect (found 2026-11-08,
+not fixed):** `BalanceLearner.advance` updates with `np.add.at`, so the batch's episodes that share a
+(row, action) in one tick each add alpha * delta from the same old Q -- measured up to 31-36 copies
+(median ~25), an effective step of 2.5-3.6 instead of alpha 0.1. Averaging the copies (one alpha step
+per entry per tick, same random draws) gives 20.0 / 54.6 / 63.7 / 66.2 / **63.3**: the coarse end
+holds, but 81 bins' 53.3 is mostly the defect, and 81 would pass problem 6 (>= 60). The deck's "too
+fine: slow and stuck" and the README's "81 bins fails" rest on it. Fixing it means re-measuring
+problem 6, the deck's sweep, both docstrings and the README (and a docstring edit in
+`lab_tables.py` moves the scorer code off 119A). Every graded number repeats
 exactly on one machine (toy-text is pure numpy; MuJoCo stepping is deterministic). **The deck's
 Colab guard is wrapped in try/except**: `importlib.util.find_spec("google.colab")` RAISES
 `ModuleNotFoundError` when no `google` package exists at all (a venv without protobuf, i.e. without
@@ -946,6 +954,14 @@ deliberately — teaching sometimes happens with no machine but a browser, and t
 site must be rebuildable from the Actions tab.
 
 Decisions in that workflow, each with a reason:
+
+- **A push renders only the weeks whose `slides.qmd` it changed** (2026-11-08); every
+  other deck is copied from the live site. A full render of ~30 weeks outgrew the
+  120-minute job limit: every run from 2026-11-02 to 2026-11-08 was cancelled, and a
+  cancelled run never saves `_freeze`, so each retry started from zero and nothing
+  deployed (week 7b never appeared). A full render is now manual only (Run workflow,
+  `weeks` empty). After a change to `src/`, `uv.lock` or `assets/` that must reach
+  decks, run it by hand with those weeks named: a push will not re-render them.
 
 - **One `quarto render` per week, in a loop**, not one project-level render. A
   project render is all-or-nothing: week 10 alone failing would publish nothing.

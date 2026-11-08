@@ -1,4 +1,4 @@
-"""Reference answers for lab_tables.py (instructor only; gitignored, sealed by scripts/instructor.py)."""
+"""Reference answers for lab_tables.py (published, like every week's answers; tables.py ships with the same values)."""
 
 NAME = "Reference"
 

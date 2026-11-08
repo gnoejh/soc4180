@@ -36,7 +36,12 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    # 120 was too short once there were 28 weeks: every run from 2026-11-02 on was
+    # cancelled at 2 h, and since _freeze is cached only by a run that FINISHES,
+    # each run re-executed every week and timed out again. A full re-execution
+    # needs the room once; after it, unchanged weeks come from the cache.
+    # (GitHub-hosted runners stop any job at 360 minutes.)
+    timeout-minutes: 350
     outputs:
       failed: ${{ steps.render.outputs.failed }}
     steps:

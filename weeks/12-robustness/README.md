@@ -70,7 +70,7 @@ uv run weeks/12-robustness/lab_robust.py --grade --no-viewer
 **The robustness audit.** Students measure with `robust.py` and write answers in
 `audit.py`; the referee re-measures each one live at 3× speed. A limit L passes if the
 controller survives ≥ 7/10 at L and < 7/10 at L + 20. As shipped 0 / 5; the reference
-(`instructor/audit_solution.py`, sealed) 5 / 5; claiming 70 N for hold fails (0/10),
+(`instructor/audit_solution.py`) 5 / 5; claiming 70 N for hold fails (0/10),
 shipping the nominal policy fails (14 of 20).
 
 | # | Question | Reference |

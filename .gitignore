@@ -238,12 +238,8 @@ _site/
 # lab.ipynb itself is generated and committed; a personal copy is not.
 weeks/**/lab_*work*.ipynb
 
-# Instructor answers, any week: never published in the clear. They are pushed
-# only as instructor.tar.gz.gpg, via scripts/instructor.py seal.
-weeks/*/instructor/
-# Part II (week 16 on): measured reference answers are published, not sealed (user, 2026-10-25)
-!weeks/1[6-9]-*/instructor/
-!weeks/2[0-9]-*/instructor/
+# Instructor answers (weeks/*/instructor/) are published in the clear for every week:
+# "All solutions must visible to students" (user, 2026-11-08). Nothing is sealed.
 
 # MuJoCo writes this on warnings (week 1 triggers BADQACC on purpose)
 MUJOCO_LOG.TXT

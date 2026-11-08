@@ -59,7 +59,7 @@ problem's cost (`height`, `upright`, `over_feet`, `over_right`, `lift_left`,
 `plant_right`, `still`, `fall`), two settings (`height_target`, `lift`) and the
 planner's `samples`, `horizon`, `sigma`, `temperature`. `costs.py` is parsed as data,
 never run; `...` is a blank and each problem names its blank lines. As shipped it
-scores 0 / 6; the reference (`instructor/costs_solution.py`, sealed) scores 6 / 6.
+scores 0 / 6; the reference (`instructor/costs_solution.py`) scores 6 / 6.
 
 | # | Problem | Pass |
 | --- | --- | --- |

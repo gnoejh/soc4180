@@ -96,9 +96,8 @@ pushed back while the hips bend. The boss needs the robot to stand up *before*
 lowering its arms. One-foot balance is left out on purpose: 72 open-loop
 attempts all fell.
 
-Reference answers (10/10) are in `instructor/moves_solution.py`, which is
-gitignored and reaches the repository only encrypted, inside
-`instructor.tar.gz.gpg` (`uv run scripts/instructor.py open` restores it). Check them with
+Reference answers (10/10) are in `instructor/moves_solution.py`, published
+like every week's answers. Check them with
 `--grade --moves weeks/03-inverse-kinematics/instructor/moves_solution.py`.
 
 ## Rebuild

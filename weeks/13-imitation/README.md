@@ -59,7 +59,7 @@ uv run weeks/13-imitation/lab_imitate.py --grade --no-viewer
 Students edit only `students.py`: each student's features, history, number of
 demonstrations and DAgger rounds. The referee trains the student (the window freezes
 10–60 s) and plays the test at 5×. As shipped 0 / 4; the reference
-(`instructor/students_solution.py`, sealed) 4 / 4 in about 2.5 minutes.
+(`instructor/students_solution.py`) 4 / 4 in about 2.5 minutes.
 
 | # | Problem | Pass | Reference |
 | --- | --- | --- | --- |

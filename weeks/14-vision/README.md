@@ -47,7 +47,7 @@ Students edit only `eyes.py`: a training recipe per problem (`pictures`, `epochs
 `colour` "red"/"random", `light` [low, high]) and `GAIN`. The referee renders,
 trains (15–20 s, cached per recipe) and tests on 500 new pictures live, with the head
 camera in the corner (white + truth, yellow + the network). As shipped 0 / 5; the
-reference (`instructor/eyes_solution.py`, sealed) 5 / 5.
+reference (`instructor/eyes_solution.py`) 5 / 5.
 
 | # | Problem | Pass | Reference |
 | --- | --- | --- | --- |

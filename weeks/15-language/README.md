@@ -50,7 +50,7 @@ uv run weeks/15-language/lab_agent.py --say "look at the red ball and raise your
 Students edit only `instructions.py`: `SYNONYMS` (word → a word the robot knows),
 `PROGRAMS` (phrase → a plan), `SEARCH` (`step_deg`, `tries`) and `LOOK_GAIN`. Each
 instruction is parsed, run under physics with checks, then played back. As shipped
-0 / 5; the reference (`instructor/instructions_solution.py`, sealed) 5 / 5 in seconds.
+0 / 5; the reference (`instructor/instructions_solution.py`) 5 / 5 in seconds.
 
 | # | Instruction | Reference |
 | --- | --- | --- |

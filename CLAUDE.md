@@ -96,8 +96,8 @@ training; an LLM planner appears only as a non-executed code block).
 | 04 | Contact, balance, analytic walking (LIPM/ZMP) | `04` | built; `lab_walk.py` + `walk.py`; **not re-tested on Colab since 2026-09-20** |
 | 05 | Actuation, PD control, and CPG gaits | `05` | built; P/PD/PI/PID comparison slides added 2026-10-04; `lab_servo.py` + `servo.py`; **not re-tested on Colab since 2026-09-20** |
 | 06 | Sensing, state estimation, observation design | `06` | built; `lab_imu.py` + `imu.py`; **not re-tested on Colab since 2026-09-20** |
-| 07 | From control to learning: MDPs and environment design | `07` | built; `lab_env.py` (ankle strategy, push-measured) + `env_run.py`; deck shows its computing code and the equation beside it since 2026-11-02 (50 slides, all fit 1280 x 800; equations render offline, MathJax embedded); **not re-tested on Colab since 2026-09-20** |
-| 08 | Policy gradients and PPO | `08` | built; `lab_train.py` + `train.py`; Pages-green since the OSMesa/triton fix (below); **not re-tested on Colab since 2026-09-20** |
+| 07 | From control to learning: MDPs and environment design | `07` | built; `lab_env.py` (ankle strategy, push-measured) + `env_run.py` + `mdp.py` (an explicit MDP solved by value iteration, 2026-11-08); deck shows its computing code and the equation beside it since 2026-11-02 (50 slides, all fit 1280 x 800; equations render offline, MathJax embedded); **not re-tested on Colab since 2026-09-20** |
+| 08 | Policy gradients and PPO | `08` | built; `lab_train.py` + `train.py`; REINFORCE on week 7's balance MDP against its exact 72.12, computing code shown, equations offline (2026-11-08); Pages-green since the OSMesa/triton fix (below); **not re-tested on Colab since 2026-09-20** |
 | 09 | Reward shaping and diagnosing failed runs | `09` | built; `lab_reward.py` + `shape.py`; Pages-green, same history as 08; **not re-tested on Colab since 2026-09-20** |
 | 10 | Scaling: GPU-parallel locomotion training | `10` | built; GPU training **runs on A100, untimed**; `lab_many.py` + `many.py`; renders locally only with `--extra gpu` synced and the machine quiet |
 | 11 | Planning at run time: MPC by sampling (MPPI), MuJoCo as the model | `11` | built 2026-09-27; game `lab_plan.py` + `costs.py` (ref 6/6), `plan.py`; package `planning.py`; **not Pages- or Colab-tested** |
@@ -311,6 +311,20 @@ week depends on a learned walker: 11 planning, 12 robustness, 13 imitation,
 `soc4180.game` machinery. See *Weeks 11–15* below for what was measured,
 including three designs that failed and why.
 
+**Week 7: the MDP solved, not only simulated (2026-11-08, user: "This project defined reward
+but not used in mdp policy").** `G1WalkEnv` is a simulator (samples, not P and R tables), and
+nothing in weeks 0-7 used R to choose an action -- `my_policy` is hand-designed. `mdp.py` and
+ten deck slides after *Bellman, steps 4-5* close that: the G1's sagittal balance as the
+LIPM (CoM 0.661 m, foot -0.05..+0.12 m about the ankle, measured at the settled crouch; 50 Hz),
+81 x 81 (x, v) grid + FALLEN, 7 CoP actions, P bilinear (4 non-zeros per row), R = alive -
+upright (x/0.1)^2 - effort (p/0.1)^2, value iteration. Measured: 1376 sweeps, error ratio
+0.9900 = gamma; **pi* saves exactly the capture-point set** (32.3 % = 32.3 %, agree 100.0 %;
+pushes -0.19..+0.46 vs -0.193..+0.462); J(pi*) 72.12 by rollouts vs 71.97 on the grid; the
+lean-only rule p = 2x is undamped here (pushes +-0.03-0.04 only; falls at 3.62 s after 0.1 m/s);
+gamma 0.9 / 0.8 / 0.7 / 0.5 save 31.8 / 20.6 / 0.7 / 0.0 %; alive 0 saves 26.1 % (falling ends
+the penalties), effort 3 28.7 %. pi* is optimal for the grid MDP, not exactly the pendulum
+(--upright 0: damped 77.59 vs 77.56). The deck's cells are self-contained (Colab has no `mdp.py`).
+
 **Week 8 facts, measured.** REINFORCE from scratch on CartPole: 60 -> 489 in
 173 s, using a **batch of 8 episodes per update** — with one episode per update
 identical code reached 260 and 88 on two runs, so batching is required for the
@@ -334,7 +348,21 @@ to ~180 and the same 30k run then scores 776 instead of 95.
 Even fixed, it only matches the standing baseline — it has learned not to fall,
 not to walk (which is worth 1250). 30k steps is 0.02% of a real run.
 
-Week 8 is ~6 min; it trains four times.
+**Week 8: the policy gradient on week 7's MDP (2026-11-08).** Five slides after CartPole run
+REINFORCE on week 7's balance MDP from episodes only (no P table), so a learner can be checked
+against an exact answer: Gaussian around p = theta . (x/0.1, v/0.5), sigma 0.02 m, gradient
+written out ((a - mu)/sigma^2 = eps/sigma, no autograd), `A = (G - b) * M` named as the one
+line where R reaches theta. Measured (seed 0, 300 updates x 32 episodes): J 12.66 (hold) ->
+**70.84**, rule p = 2.14 x + 0.38 v (week 7's hand rule 2x + 0.5v: 70.80); the best straight
+line on a gain grid 71.04 (3.75 x + 0.70 v), so the last ~1.1 to 72.12 is the policy class
+(pi* is nearly bang-bang), not the optimiser. Five seeds: advantage scaled by its batch std
+(lr 0.01) end 68.5-70.8, slow (J ~12-16 at update 25); raw advantage (lr 0.005) reaches the
+plateau by update 25 in most seeds but one collapses to 13.0 at 300 -- PPO's clip is the
+motivation. The deck now follows week 7's form: `#| echo: true` on computing cells, offline
+MathJax, every slide <= 800 px (the first measurement found 13 over, Steps 4-5 split).
+
+Week 8's render took 24 min with a 32-worker job on the machine (no quiet timing since
+the balance slides were added); it trains four PPO runs plus the balance learner.
 
 **Week 9 facts, measured.** The reward's *ranking* is correct — walking at target
 1250, slow walk 1023, standing 776, lunge-and-fall 51. But the planned six-way
@@ -980,8 +1008,9 @@ notebooks; it would commit executed outputs over the generated file.
   in `lab.ipynb`), and a long cell split into "code + output" and "drawn"
   slides. Showing code makes slides taller: measure every slide's
   `scrollHeight` in headless Chrome (append a script to a copy of
-  `slides.html`, `--dump-dom`) and split anything over 800 px. Other decks still
-  hide their code.
+  `slides.html`, `--dump-dom`) and split anything over 800 px. Week 8 followed (2026-11-08);
+  other decks still hide their code. Converting a deck pushed 13 of week 8's
+  slides over 800 px, including untouched ones: measure the whole deck.
 - **"Self-contained" decks are not, for maths.** `embed-resources` inlines
   everything except MathJax: the reveal.js template's math plugin downloads
   MathJax 2 from cdn.jsdelivr.net when the deck opens, so offline (or in a
@@ -994,8 +1023,8 @@ notebooks; it would commit executed outputs over the generated file.
   vendored MathJax 3.2.2 SVG build (`tex-svg-full.js`, Apache-2.0, +2.3 MB per
   deck). Verified with Chrome's network blocked (`--proxy-server=127.0.0.1:9`).
   MathJax 3 sets equations a little wider than 2 did: check widths on the
-  `mjx-container > svg`, not the container (which is slide-wide). Other decks
-  still use the CDN.
+  `mjx-container > svg`, not the container (which is slide-wide). Weeks 7 and 8
+  embed it; other decks still use the CDN.
 
 - `#| eval: false` **does** survive into `lab.ipynb` as a genuine unexecuted code
   cell. No post-render cell injector is needed.

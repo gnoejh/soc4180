@@ -54,10 +54,12 @@ week 8 the controller in that layer is *learned* rather than derived.
 2. **Return and discount** — what the algorithm adds up, and why $\gamma = 0.99$
    means "about two seconds" for our robot.
 3. **Value and the Bellman equation** — derived in five steps from the return.
-4. **Terminated vs truncated** — one formula, and the bug it prevents.
-5. **Three design decisions** for the G1: what it sees, what it commands, how
+4. **Solving an MDP you can write down** — value iteration on the G1's balance:
+   where the reward actually chooses the policy.
+5. **Terminated vs truncated** — one formula, and the bug it prevents.
+6. **Three design decisions** for the G1: what it sees, what it commands, how
    often it decides.
-6. **Test the environment** — can it express the week 4 walker? (It cannot, at
+7. **Test the environment** — can it express the week 4 walker? (It cannot, at
    first. Finding out why is the week's main lesson.)
 
 ---
@@ -446,6 +448,246 @@ $$\boxed{\;{\color{#b8860b}{V^\pi(s)}} = \mathbb{E}_{{\color{#e8743b}{a}}\sim\pi
 
 **Read it:** *the value of here = the reward for the next step + the discounted
 value of where that step lands you.* One step of experience relates two values.
+
+---
+
+## Where does R choose the policy? {.smaller}
+
+Look back at everything so far: `G1WalkEnv` returns a reward, and **nothing
+uses it to pick an action**. `lab_env.py`'s `my_policy` is designed by hand;
+$r$ is only added up and printed. Two different things are both called "the MDP":
+
+| | a **simulator** (`G1WalkEnv`) | **tables** (next slides) |
+| --- | --- | --- |
+| ${\color{#c0392b}{P}}$ | hidden: one sample ${\color{#3b7dd8}{s'}}$ per call | an array you can print |
+| ${\color{#2a9d5c}{R}}$ | one number per step | an array, every $(s, a)$ at once |
+| state | 71 numbers (the policy sees 42) | 2 numbers on a grid |
+| solved by | sampling and learning (weeks 8–10) | **value iteration**, exactly |
+
+The tables let us do what the simulator cannot: **solve** the MDP, and watch
+${\color{#2a9d5c}{R}}$ and ${\color{#8e44ad}{\gamma}}$ decide the policy. The
+problem is small on purpose — the G1 standing still, seen from the side.
+
+---
+
+## The optimality equation: replace the average with a max {.smaller}
+
+${\color{#b8860b}{V^\pi}}$ scores one policy. The **best** value takes the best
+action at every step instead of averaging over $\pi$:
+
+$${\color{#b8860b}{Q^*(s,a)}} = {\color{#2a9d5c}{R(s,a)}} + {\color{#8e44ad}{\gamma}} \sum_{s'} {\color{#c0392b}{P(s'\mid s,a)}}\,{\color{#b8860b}{V^*(s')}}, \qquad {\color{#b8860b}{V^*(s)}} = \max_{{\color{#e8743b}{a}}} {\color{#b8860b}{Q^*(s,a)}}$$
+
+$$\boxed{\;\pi^*(s) = \arg\max_{{\color{#e8743b}{a}}}\, {\color{#b8860b}{Q^*(s,a)}}\;}$$
+
+- ${\color{#b8860b}{Q^*(s,a)}}$ — the return of doing ${\color{#e8743b}{a}}$ now and acting perfectly after
+- the sum — Bellman's expectation over landing states, now written with ${\color{#c0392b}{P}}$ as a table
+- **the argmax is where ${\color{#2a9d5c}{R}}$ picks the action**: change ${\color{#2a9d5c}{R}}$ or ${\color{#8e44ad}{\gamma}}$, and $\pi^*$ changes
+
+**Value iteration:** start from ${\color{#b8860b}{V}} = 0$ and apply the
+right-hand side again and again. Each sweep shrinks the error by a factor
+${\color{#8e44ad}{\gamma}}$ (a *contraction*), so it always converges.
+
+---
+
+## A balance MDP small enough to write down {.smaller}
+
+Week 4's inverted pendulum, with the G1's numbers measured at `G1WalkEnv`'s
+settled crouch: CoM ${h = 0.661}$ m, foot from 0.05 m behind the ankle to
+0.12 m in front, one decision every 0.02 s.
+
+$$\ddot x = \omega^2 (x - {\color{#e8743b}{p}}), \qquad \omega = \sqrt{g/h} = 3.85\ \text{s}^{-1}$$
+
+| | |
+| --- | --- |
+| ${\color{#3b7dd8}{s}} = (x, v)$ | CoM ahead of the ankle (m) and its speed (m/s): an 81 × 81 grid, plus **FALLEN** |
+| ${\color{#e8743b}{a}} = p$ | centre of pressure under the foot, 7 values heel to toe (ankle torque $\tau = mgp$ moves it) |
+| ${\color{#c0392b}{P}}$ | the pendulum for 0.02 s, solved exactly; landing between grid points, its probability is split over the 4 around it |
+| ${\color{#2a9d5c}{R}}$ | $1 - (x/0.1)^2 - 0.1\,(p/0.1)^2$: the env's alive, upright and effort terms |
+| FALLEN | CoM 5 cm past heel or toe; absorbing, ${\color{#b8860b}{V}} = 0$ (*terminated*) |
+
+---
+
+## S, A, P, R as arrays {.smaller}
+
+```{python}
+#| echo: true
+import math
+h, dt, HEEL, TOE = 0.661, 0.02, -0.05, 0.12        # the G1: CoM height, decision, foot (m)
+w = math.sqrt(9.81 / h)
+xs, vs = np.linspace(HEEL - .05, TOE + .05, 81), np.linspace(-1, 1, 81)   # S: x and v
+ps = np.linspace(HEEL, TOE, 7)                                             # A: 7 CoP positions
+X, Vel = [a.ravel() for a in np.meshgrid(xs, vs, indexing="ij")]
+nS, FALLEN = X.size + 1, X.size                   # the grid + one absorbing FALLEN state
+
+def step(x, v, p):                                # x'' = w^2 (x - p), exactly, over dt
+    c, s = math.cosh(w * dt), math.sinh(w * dt)
+    return p + (x - p) * c + v * s / w, (x - p) * w * s + v * c
+
+def reward(x, p, alive=1.0, upright=1.0, effort=0.1):
+    return alive - upright * (x / 0.1) ** 2 - effort * (p / 0.1) ** 2
+
+def inside(x, v):                                 # outside the grid = FALLEN
+    return (x >= xs[0]) & (x <= xs[-1]) & (np.abs(v) <= 1)
+```
+
+$x$ runs from 5 cm behind the heel to 5 cm past the toe; beyond that the CoM
+is too far out for any ankle torque to bring back, and the state is FALLEN.
+
+---
+
+## P as a table: where the pendulum lands {.smaller}
+
+One step from a grid state lands **between** grid points. ${\color{#c0392b}{P}}$
+splits the probability over the four around the landing point, by how near each
+one is (bilinear weights) — so each row of ${\color{#c0392b}{P}}$ has four
+non-zero numbers summing to 1, and the grid's coarseness becomes a little
+randomness in ${\color{#c0392b}{P}}$.
+
+```{python}
+#| echo: true
+def corners(x, v):                                # 4 grid neighbours, bilinear weights
+    fx, fv = (x - xs[0]) / (xs[1] - xs[0]), (v - vs[0]) / (vs[1] - vs[0])
+    i, j = np.clip(fx.astype(int), 0, 79), np.clip(fv.astype(int), 0, 79)
+    tx, tv = fx - i, fv - j
+    idx = np.stack([i * 81 + j, (i + 1) * 81 + j, i * 81 + j + 1, (i + 1) * 81 + j + 1], -1)
+    return idx, np.stack([(1 - tx) * (1 - tv), tx * (1 - tv), (1 - tx) * tv, tx * tv], -1)
+
+def build(**weights):                             # P as (next state, probability) x 4, and R
+    nxt, prob = np.full((nS, 7, 4), FALLEN), np.zeros((nS, 7, 4)); prob[..., 0] = 1
+    R = np.zeros((nS, 7))
+    for a, p in enumerate(ps):
+        R[:FALLEN, a] = reward(X, p, **weights)
+        x2, v2 = step(X, Vel, p)
+        ok = inside(x2, v2)                       # off the grid: FALLEN with probability 1
+        nxt[:FALLEN][ok, a], prob[:FALLEN][ok, a] = corners(x2[ok], v2[ok])
+    return nxt, prob, R
+
+nxt, prob, R = build()
+print(f"S {nS}, A {len(ps)}, P as a full table {nS * 7 * nS:,} numbers (at most 4 non-zero per row), "
+      f"rows sum to 1 within {abs(prob.sum(-1) - 1).max():.0e};  R from {R[:FALLEN].min():.2f} to {R.max():.2f}")
+```
+
+---
+
+## Value iteration: the optimality equation, iterated {.smaller}
+
+```{python}
+#| echo: true
+def value_iteration(nxt, prob, R, gamma=0.99, tol=1e-6):
+    V, errs = np.zeros(nS), []
+    while True:
+        Q = R + gamma * (prob * V[nxt]).sum(-1)    # Q(s,a) = R(s,a) + gamma sum_s' P(s'|s,a) V(s')
+        V_new = Q.max(axis=1)                      # V(s) = max_a Q(s,a)
+        V_new[FALLEN] = 0.0                        # a fallen robot's future is worth nothing
+        errs.append(np.abs(V_new - V).max()); V = V_new
+        if errs[-1] < tol:
+            return V, Q.argmax(axis=1), errs       # pi*(s) = argmax_a Q(s,a)
+
+Vstar, pistar, errs = value_iteration(nxt, prob, R)
+print(f"{len(errs)} sweeps; largest change per sweep: " + ", ".join(f"{errs[k]:.3g}" for k in (0, 9, 99, 999))
+      + f";  ratio of the last two {errs[-1] / errs[-2]:.4f} = gamma")
+idx, wts = corners(np.array([0.0]), np.array([0.0]))          # rest: x = 0, v = 0 (between grid points)
+print(f"V* at rest {(wts * Vstar[idx]).sum():.2f}   (standing still for ever earns 1 / (1 - 0.99) = 100)")
+```
+
+The ratio is ${\color{#8e44ad}{\gamma}}$ exactly: each sweep multiplies the
+remaining error by ${\color{#8e44ad}{\gamma}}$. With ${\color{#8e44ad}{\gamma}}
+= 0.99$ that is slow (the horizon is 100 decisions); with 0.9 it takes about
+130 sweeps instead of about 1,400.
+
+---
+
+## π* drawn: value iteration rediscovers the capture point {.smaller}
+
+```{python}
+#| echo: true
+def value_at(V, x, v):                            # V between grid points, same weights as P
+    out, ok = np.zeros_like(x), inside(x, v)
+    idx, wts = corners(x[ok], v[ok]); out[ok] = (wts * V[idx]).sum(-1)
+    return out
+
+def greedy(V, gamma=0.99, **weights):             # act on the real pendulum: argmax_a Q
+    return lambda x, v: ps[np.argmax([reward(x, p, **weights) + gamma * value_at(V, *step(x, v, p))
+                                      for p in ps], axis=0)]
+
+def survives(pi, x, v, seconds=10.0):             # every start at once, for 10 s
+    x, v = np.array(x, float), np.array(v, float); up = inside(x, v)
+    for _ in range(int(seconds / dt)):
+        x, v = step(x, v, pi(x, v)); up &= inside(x, v)
+    return up
+
+saved = survives(greedy(Vstar), X, Vel)
+capture = (X + Vel / w >= HEEL) & (X + Vel / w <= TOE)   # week 4: capture point on the foot
+print(f"pi* saves {saved.mean():.1%} of the grid; capture point on the foot: {capture.mean():.1%}; "
+      f"they agree on {(saved == capture).mean():.1%} of states")
+```
+
+`greedy` is how a value function becomes a controller: at the real (off-grid)
+state, try all seven actions one step ahead and keep the best. `survives` runs
+that controller from all 6,561 grid states at once for 10 s.
+
+---
+
+## π* drawn {.smaller}
+
+```{python}
+#| fig-align: center
+fig, ax = plt.subplots(figsize=(9.5, 4.4))
+img = np.where(saved, ps[pistar[:FALLEN]] * 100, np.nan).reshape(81, 81)
+cm = plt.get_cmap("coolwarm").copy(); cm.set_bad("0.88")
+m = ax.imshow(img.T, origin="lower", aspect="auto", cmap=cm, extent=[xs[0], xs[-1], vs[0], vs[-1]])
+ax.plot(xs, w * (HEEL - xs), color=PURPLE, lw=2, ls="--", label="capture point x + v/ω at the heel")
+ax.plot(xs, w * (TOE - xs), color=PURPLE, lw=2, label="capture point x + v/ω at the toe")
+ax.legend(loc="lower left", fontsize=9, framealpha=0.95)
+ax.set_xlim(xs[0], xs[-1]); ax.set_ylim(-1, 1)
+ax.set_xlabel("x: CoM ahead of the ankle (m)"); ax.set_ylabel("v: CoM speed (m/s)")
+fig.colorbar(m, ax=ax, label="π*: CoP (cm ahead of ankle)"); fig.tight_layout(); plt.show()
+```
+
+Grey: falls whatever it does. Nobody told value iteration about week 4; the
+saved band is exactly the capture region between the purple lines. π* is
+almost bang-bang: heel (blue) or toe (red), rarely between.
+
+---
+
+## R and γ choose the policy, measured {.smaller}
+
+```{python}
+#| echo: true
+pushes = np.round(np.arange(-0.30, 0.601, 0.01), 2)      # start at rest, pushed at v0
+print(f"{'variant':>22} {'saved':>7}  pushes survived (capture limits {-w * -HEEL:+.2f} .. {w * TOE:+.2f} m/s)")
+for label, gamma, wts in (("gamma 0.99 (default)", 0.99, {}), ("gamma 0.8", 0.8, {}),
+                          ("gamma 0.7", 0.7, {}), ("alive 0", 0.99, {"alive": 0.0}),
+                          ("effort 3", 0.99, {"effort": 3.0})):
+    V, _, _ = value_iteration(*build(**wts), gamma=gamma)
+    pi = greedy(V, gamma, **wts)
+    ok = pushes[survives(pi, np.zeros_like(pushes), pushes)]
+    rng = f"{ok.min():+.2f} .. {ok.max():+.2f}" if len(ok) else "none"
+    print(f"{label:>22} {survives(pi, X, Vel).mean():7.1%}  {rng}")
+```
+
+- **${\color{#8e44ad}{\gamma}}$ is how far ahead it looks.** At 0.8 the horizon is 0.1 s, shorter than the
+  pendulum's 0.26 s time constant: a fall that comes later barely counts. At 0.7 it saves almost nothing.
+- **${\color{#2a9d5c}{R}}$ is what it is worth saving.** With only penalties (alive 0), falling *ends*
+  the penalties, so π* lets saveable states go. An expensive ankle (effort 3) gives up on hard pushes.
+
+---
+
+## Why weeks 8–10 cannot do this {.smaller}
+
+Value iteration needs two things the G1 does not give us:
+
+1. **${\color{#c0392b}{P}}$ as a table.** `G1WalkEnv` only *samples* it, one
+   `env.step` at a time.
+2. **A state small enough to grid.** 81 points on each of the G1's 71 state
+   numbers is $81^{71} \approx 10^{135}$ states; our pendulum has two.
+
+So the learning weeks keep the Bellman equation and drop the table: they
+estimate ${\color{#b8860b}{V}}$ from **samples** with a network, one step at a
+time. That is the next slide.
+
+`uv run weeks/07-mdp/mdp.py` is this section as a script: the same MDP, the
+policies compared by return, and a push replayed in the viewer.
 
 ---
 
@@ -1110,6 +1352,7 @@ worth 776 and walking 1250, next week's two numbers.
 
 ```bash
 uv run weeks/07-mdp/lab_env.py
+uv run weeks/07-mdp/mdp.py            # the balance MDP solved; numpy only
 ```
 
 `G1WalkEnv`, stepping at 50 Hz in real time in the viewer. Keys `1`–`4` pick a
@@ -1173,6 +1416,10 @@ return by term: tracking +274.2, upright +249.9, effort +0.0, smooth +0.0, alive
 4. **Find the rate limit.** Bisect the control rate between 50 and 100 Hz at
    $\kappa = 1.0$. Where exactly does the walker start surviving? (Remember the
    decimation is rounded: list which rates you can actually get.)
+---
+
+## Exercises, continued {.smaller}
+
 5. **Fair comparison.** Design a metric that compares 50 Hz and 200 Hz runs
    honestly. Show it ranks the runs differently from raw return.
 6. **Truncation bug.** Explain what a policy would learn if truncation were
@@ -1180,6 +1427,10 @@ return by term: tracking +274.2, upright +249.9, effort +0.0, smooth +0.0, alive
 7. **Horizon by hand.** For $\gamma = 0.98$ at 50 Hz, compute $H$ in decisions
    and in seconds, and the half-life. Then say what $\gamma$ gives the *same*
    2 s horizon at 100 Hz.
+8. **Let R decide.** With `mdp.py`, find the smallest $\gamma$ that still
+   saves 30 % of the grid, and an `--effort` at which $\pi^*$ stops saving
+   the 0.30 m/s push. Then give `--ankle-gain KX KV` values that save as much
+   as $\pi^*$, and say what $J$ still tells them apart.
 
 ---
 

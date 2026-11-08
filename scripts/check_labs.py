@@ -39,6 +39,7 @@ PIPELINES = [
     ("05", "weeks/05-actuation/servo.py --seconds 0.3"),
     ("06", "weeks/06-sensing/imu.py --seconds 1"),
     ("07", "weeks/07-mdp/env_run.py --policy hold"),
+    ("07", "weeks/07-mdp/mdp.py --grid 41"),
     ("08", "weeks/08-ppo/train.py --steps 0 --episodes 1"),
     ("09", "weeks/09-reward/shape.py --steps 2048 --episodes 1"),
     ("10", "weeks/10-scaling/many.py --robots 1 2 --procs 1 --seconds 0.5"),

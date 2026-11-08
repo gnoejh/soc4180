@@ -27,6 +27,26 @@
 | REINFORCE, CartPole (from scratch) | 60 → **489** (max 500) | 173 s |
 | PPO, InvertedPendulum-v5 | 26 → **1000** (solved) | 99 s |
 | PPO, `G1WalkEnv`, 30k steps | 774 → **95** | 69 s |
+| REINFORCE, week 7's balance MDP (linear Gaussian, no autograd) | 12.66 → **70.84** (value iteration's exact 72.12) | 7 s |
+
+## The bridge from week 7: the same reward, solved by sampling
+
+Week 7 solved the G1's balance MDP with tables (value iteration, J(π\*) = 72.12)
+— the first time the reward chose a policy. The walking G1 has no table, so
+the deck runs REINFORCE on **that same MDP** with episodes only: a Gaussian
+around `p = θ · (x/0.1, v/0.5)`, the gradient written out from the deck's
+formula `(a − μ)/σ²`, and the line `A = (G - b) * M` named as the one place the
+reward reaches θ. Measured:
+
+- From hold (θ = 0, J 12.66), 300 updates of 32 episodes (seed 0) reach
+  **J 70.84** with `p = 2.14 x + 0.38 v` — week 7's hand-designed damped rule
+  (`2x + 0.5v`, 70.80), found by gradient ascent.
+- The best straight-line rule on a gain grid scores **71.04**; the last ~1.1
+  to 72.12 is the policy class (π\* is nearly bang-bang), not the optimiser.
+- Five seeds: with the advantage scaled by its batch std (lr 0.01) every seed
+  ends 68.5–70.8; with raw advantages (lr 0.005) learning is faster but one
+  seed collapses to 13.0 — nothing in REINFORCE stops a bad step, which is
+  what PPO's clip is for.
 
 ## The two results that carry the week
 
@@ -132,5 +152,15 @@ learns not to fall — and only that.
 ## Rebuild
 
 ```bash
-quarto render weeks/08-ppo/slides.qmd     # ~6 minutes; it trains
+quarto render weeks/08-ppo/slides.qmd     # it trains: 24 min measured with a 32-worker job running
 ```
+
+The render trains CartPole, InvertedPendulum and the G1 (four PPO runs), plus
+the balance learner's eleven REINFORCE runs and its gain grid (about a minute).
+Every number reproduces bit-identically on this machine (`device="cpu"`, fixed
+seeds); only the seconds a cell prints about itself move with the load.
+
+The deck shows the code of every cell that computes a number (`#| echo: true`);
+figure-drawing code is only in `lab.ipynb`. Equations are typeset by the
+embedded MathJax 3 (`assets/mathjax/`), so the deck works offline. After an
+edit, check that no slide is taller than 800 px.

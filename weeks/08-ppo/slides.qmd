@@ -5,6 +5,13 @@ author: "Hong Jeong"
 format:
   revealjs:
     output-file: slides.html
+    # Equations without the network (week 7's fix): the filter writes the TeX
+    # out and an embedded MathJax 3 typesets it, so the deck works offline.
+    html-math-method: plain
+    filters:
+      - ../../assets/mathjax/offline-math.lua
+    include-after-body:
+      - ../../assets/mathjax/mathjax.html
   ipynb:
     output-file: lab.ipynb
 jupyter: python3
@@ -23,7 +30,7 @@ jupyter: python3
 This lab **trains** and takes a few minutes to run. That is normal.
 :::
 
-## Today we finally train something
+## Today we finally train something {.smaller}
 
 Last week we wrote the problem. Today we search it.
 
@@ -33,11 +40,36 @@ you can diagnose a sick one.
 
 1. The **policy gradient**: derived, step by step, from one line of calculus.
 2. The **Gaussian policy**: what "the log-probability of an action" is, written out.
-3. **Baselines and advantage**: why subtracting a number changes nothing and helps a lot.
-4. **PPO**: the probability ratio, and why it is clipped — derived and drawn.
-5. The G1: PPO makes it **worse**. We find out why, with numbers.
+3. **REINFORCE** on CartPole, then on **last week's balance MDP**, against its exact answer.
+4. **Baselines and advantage**: why subtracting a number changes nothing and helps a lot.
+5. **PPO**: the probability ratio, and why it is clipped — derived and drawn.
+6. The G1: PPO makes it **worse**. We find out why, with numbers.
 
 This is **Layer 5** — learning — for the first time doing the job itself.
+
+---
+
+## Last week's answer, and why we cannot use it here {.smaller}
+
+Week 7 ended with ${\color{#2a9d5c}{R}}$ choosing a policy for the first time. On
+the G1's balance, written as tables, value iteration solved
+
+$$\pi^*(s) = \arg\max_{{\color{#e8743b}{a}}}\Big[R(s,{\color{#e8743b}{a}}) + \gamma\sum_{s'} P(s'\mid s,{\color{#e8743b}{a}})\,V^*(s')\Big]
+\qquad J(\pi^*) = 72.12$$
+
+That needed ${\color{#c0392b}{P}}$ as a table and a state small enough to grid.
+The walking G1 has neither: `env.step` only *samples* ${\color{#c0392b}{P}}$, and
+71 state numbers cannot be gridded.
+
+**Today the table goes and the gradient comes in.** The policy becomes a
+function with parameters ${\color{#3b7dd8}{\theta}}$, and ${\color{#2a9d5c}{R}}$
+reaches ${\color{#3b7dd8}{\theta}}$ through the returns of episodes we run (mid-deck we check it against 72.12):
+
+| | week 7: value iteration | today: policy gradient |
+| --- | --- | --- |
+| needs | ${\color{#c0392b}{P}}$ and ${\color{#2a9d5c}{R}}$ as tables | only episodes: `env.step` |
+| ${\color{#2a9d5c}{R}}$ chooses by | $\arg\max$ over every action, in every state | nudging ${\color{#3b7dd8}{\theta}}$ toward actions followed by high return |
+| answer | exact, on the grid | approximate, from samples |
 
 ---
 
@@ -46,18 +78,15 @@ This is **Layer 5** — learning — for the first time doing the job itself.
 The same colours mean the same things in every equation and every drawing:
 
 | symbol | meaning | colour |
-| --- | --- | --- |
+| ---- | -------------------- | --- |
 | ${\color{#3b7dd8}{\theta}}$, ${\color{#3b7dd8}{\pi_\theta}}$ | the **policy**: its parameters (network weights) and the distribution they define — *the only thing learning changes* | <span style="color:#3b7dd8">blue</span> |
 | ${\color{#e8743b}{a_t}}$ | the **action** taken at step $t$ (sampled from ${\color{#3b7dd8}{\pi_\theta}}$) | <span style="color:#e8743b">orange</span> |
 | ${\color{#2a9d5c}{G_t}}$, ${\color{#2a9d5c}{A_t}}$ | the **score**: return from step $t$ on, and advantage (return minus what was expected) | <span style="color:#2a9d5c">green</span> |
 | ${\color{#c0392b}{b(s)}}$, ${\color{#c0392b}{V(s)}}$ | the **baseline** / **value**: what return we *expected* from state $s$ | <span style="color:#c0392b">red</span> |
-| ${\color{#8e44ad}{\rho_t}}$, ${\color{#8e44ad}{\epsilon}}$ | PPO's **probability ratio** new/old, and its clip width | <span style="color:#8e44ad">purple</span> |
+| ${\color{#8e44ad}{\rho_t}}$, ${\color{#8e44ad}{\epsilon}}$ | PPO's **probability ratio** new/old (the PPO paper calls it $r_t$; here $r_t$ is the reward) and its clip width | <span style="color:#8e44ad">purple</span> |
 
-Plain black: $s_t$ the state (observation), $r_t$ the one-step reward, $\gamma$
-the discount (week 7), $\tau$ a whole trajectory $(s_0, a_0, r_0, s_1, a_1, r_1, \dots)$.
-
-Week 7's return: ${\color{#2a9d5c}{G_t}} = r_t + \gamma r_{t+1} + \gamma^2 r_{t+2} + \dots = \sum_{k\ge 0}\gamma^k r_{t+k}$.
-**Careful:** the PPO paper writes the ratio as $r_t$. We use ${\color{#8e44ad}{\rho_t}}$ so it cannot be confused with the reward.
+Plain black: $s_t$ the state, $r_t$ the one-step reward, $\gamma$ the discount, $\tau$ a whole trajectory
+$(s_0, a_0, r_0, s_1, \dots)$; week 7's return ${\color{#2a9d5c}{G_t}} = \sum_{k\ge 0}\gamma^k r_{t+k}$.
 
 ---
 
@@ -98,7 +127,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.patches import FancyBboxPatch
 
-fig, ax = plt.subplots(figsize=(10, 2.6)); ax.axis("off"); ax.set_xlim(0, 10.4); ax.set_ylim(0, 2.6)
+fig, ax = plt.subplots(figsize=(10, 2.2)); ax.axis("off"); ax.set_xlim(0, 10.4); ax.set_ylim(0, 2.6)
 def node(x, text, col):
     ax.add_patch(FancyBboxPatch((x, 1.0), 1.1, 0.7, boxstyle="round,pad=0.08", color=col, alpha=0.95))
     ax.text(x + 0.55, 1.35, text, ha="center", va="center", fontsize=10, color="w")
@@ -126,6 +155,8 @@ $$p_{\color{#3b7dd8}{\theta}}(\tau) = p(s_0)\;\prod_{t} {\color{#3b7dd8}{\pi_\th
 - $P(s_{t+1}\mid s_t,{\color{#e8743b}{a_t}})$ — the chance MuJoCo lands in this next state (week 7's transition)
 
 The probability of a sequence of independent-given-the-past choices is the **product** of each choice's probability.
+
+*Every cell that computes a number shows its code on the slide; the code that only draws a figure is in `lab.ipynb`.*
 
 ---
 
@@ -155,7 +186,7 @@ It is an average again — so **run episodes, compute the bracket for each, aver
 
 ---
 
-## Deriving the policy gradient: Steps 4–5 {.smaller}
+## Deriving the policy gradient: Step 4 {.smaller}
 
 **Step 4 — the simulator drops out.** Take the log of the product (the log of a product is the sum of the logs):
 
@@ -166,6 +197,10 @@ The first and last sums contain no ${\color{#3b7dd8}{\theta}}$, so their gradien
 $$\nabla_{\color{#3b7dd8}{\theta}} \log p_{\color{#3b7dd8}{\theta}}(\tau) = \sum_t \nabla_{\color{#3b7dd8}{\theta}} \log {\color{#3b7dd8}{\pi_\theta}}({\color{#e8743b}{a_t}}\mid s_t).$$
 
 **MuJoCo's $P$ has vanished.** We never need its formula, only its samples. That is why RL works on a physics engine.
+
+---
+
+## Deriving the policy gradient: Step 5 {.smaller}
 
 **Step 5 — an action cannot change the past.** Rewards collected *before* step $t$
 are already fixed when ${\color{#e8743b}{a_t}}$ is chosen; their product with $\nabla\log{\color{#3b7dd8}{\pi_\theta}}({\color{#e8743b}{a_t}}\mid s_t)$ averages to
@@ -185,20 +220,24 @@ score ${\color{#2a9d5c}{G(a)}} = 10 - (a-1)^2$. Then $J(\mu) = 10 - (\mu-1)^2 - 
 $dJ/d\mu = -2(\mu - 1) = 2$ at $\mu=0$. The estimator only sees samples and their scores:
 
 ```{python}
-#| fig-align: center
+#| echo: true
 rng = np.random.default_rng(0)
 mu0, sd0 = 0.0, 0.5                 # a toy policy: mean and std
 score = lambda a: 10 - (a - 1.0) ** 2
 exact = -2 * (mu0 - 1.0)
 Ns = np.unique(np.logspace(1, 5, 25).astype(int))
 est = [np.mean((a - mu0) / sd0**2 * score(a)) for a in (rng.normal(mu0, sd0, n) for n in Ns)]
-fig, ax = plt.subplots(figsize=(8.5, 2.9))
+for n, e in list(zip(Ns, est))[::12]:
+    print(f"  {n:6d} samples: estimate {e:6.3f}   (exact {exact:.1f})")
+```
+
+```{python}
+#| fig-align: center
+fig, ax = plt.subplots(figsize=(8.5, 1.9))
 ax.semilogx(Ns, est, "o-", color="#3b7dd8", ms=4, label=r"estimate: mean of $\nabla_\mu\log\pi(a)\cdot G(a)$")
 ax.axhline(exact, color="#2a9d5c", lw=2, label=f"exact derivative = {exact:.1f}")
 ax.set_xlabel("samples used"); ax.set_ylabel(r"$dJ/d\mu$"); ax.grid(alpha=0.3); ax.legend(fontsize=8)
 fig.tight_layout(); plt.show()
-for n, e in list(zip(Ns, est))[::12]:
-    print(f"  {n:6d} samples: estimate {e:6.3f}   (exact {exact:.1f})")
 ```
 
 It converges to the true derivative — **without ever differentiating ${\color{#2a9d5c}{G}}$**. But look how
@@ -234,8 +273,8 @@ away (widen), negative inside one ${\color{#3b7dd8}{\sigma}}$ (narrow). Multipli
 The same numbers, from the PPO policy we will train on the G1 — its action distribution is exactly this formula:
 
 ```{python}
-import warnings
-warnings.filterwarnings("ignore")
+#| echo: true
+import warnings; warnings.filterwarnings("ignore")
 from stable_baselines3 import PPO
 from soc4180.envs import G1WalkEnv
 
@@ -250,15 +289,13 @@ print(f"action dimension     : {a.numel()}   (twelve leg joints)")
 print(f"initial std          : {std.mean().item():.3f}   (log_std_init = 0 -> e^0 = 1)")
 print(f"log pi, SB3          : {dist.log_prob(a[None]).item():+.6f}")
 print(f"log pi, by the slide : {by_hand.item():+.6f}")
-
 mu_ = torch.zeros(12, requires_grad=True); ell = torch.zeros(12, requires_grad=True)
 torch.distributions.Normal(mu_, ell.exp()).log_prob(a).sum().backward()
 print(f"autograd d/dmu  vs (a-mu)/sigma^2       : max diff {(mu_.grad - a).abs().max().item():.1e}")
 print(f"autograd d/dell vs (a-mu)^2/sigma^2 - 1 : max diff {(ell.grad - (a**2 - 1)).abs().max().item():.1e}")
 ```
 
-The last two lines check the two derivatives at ${\color{#3b7dd8}{\mu}}=0,\ {\color{#3b7dd8}{\sigma}}=1$ against PyTorch's automatic differentiation.
-In PPO nobody writes these derivatives by hand — `loss.backward()` does it — but this is what it computes.
+The last two lines check both derivatives (at ${\color{#3b7dd8}{\mu}}=0,\ {\color{#3b7dd8}{\sigma}}=1$) against PyTorch's autograd: what `loss.backward()` computes in PPO.
 
 ---
 
@@ -302,6 +339,7 @@ No derivative of $R$ was taken. The environment only *scored* the samples. (0.6 
 That boxed equation is about twenty lines of code.
 
 ```{python}
+#| echo: true
 import time
 import torch.nn as nn
 import gymnasium as gym
@@ -353,6 +391,7 @@ ${\color{#2a9d5c}{G_t}} = r_t + \gamma\,(r_{t+1} + \gamma r_{t+2} + \dots) = r_t
 ## Training it {.smaller}
 
 ```{python}
+#| echo: true
 env.reset(seed=0); env.action_space.seed(0)
 t0 = time.time(); history = []
 
@@ -402,6 +441,134 @@ algorithm is correct; the estimator is just terrible.
 
 ---
 
+## Back to week 7's balance: a learner with an exact answer {.smaller}
+
+CartPole has no known best return; week 7's balance MDP has one, ${J(\pi^*) = 72.12}$. Same pendulum, ${\color{#2a9d5c}{R}}$
+and starts (at rest, pushed at $-0.30 \dots +0.60$ m/s), but **no tables**, only episodes, and a Gaussian around a linear rule:
+
+$${\color{#e8743b}{p}} = {\color{#3b7dd8}{\theta}}\cdot f(s) + \sigma\varepsilon, \qquad f(s) = \big(x/0.1,\ v/0.5\big), \qquad \varepsilon\sim\mathcal N(0,1),\ \sigma = 0.02\ \text{m}$$
+
+```{python}
+#| echo: true
+import math; h, dt, HEEL, TOE, gamma = 0.661, 0.02, -0.05, 0.12, 0.99      # week 7's G1 balance
+w = math.sqrt(9.81 / h); ch, sh = math.cosh(w * dt), math.sinh(w * dt)
+pushes = np.round(np.arange(-0.30, 0.601, 0.01), 2)            # rho0: at rest, pushed at v0
+
+def episodes(theta, v0, sigma, rng=None, T=500):
+    """len(v0) episodes at once under the policy p = theta . f(s) + sigma * eps."""
+    x, v = np.zeros(len(v0)), np.array(v0, float)
+    up, rec = np.ones(len(v0), bool), []
+    for _ in range(T):
+        f = np.stack([x / 0.1, v / 0.5], -1)                   # two features, each about 1
+        eps = rng.standard_normal(len(v0)) if sigma else np.zeros(len(v0))
+        p = np.clip(f @ theta + sigma * eps, HEEL, TOE)         # the CoP the foot can make
+        r = np.where(up, 1 - (x / 0.1) ** 2 - 0.1 * (p / 0.1) ** 2, 0.0)   # week 7's R
+        rec.append((f, eps, r, up.copy()))
+        x, v = p + (x - p) * ch + v * sh / w, (x - p) * w * sh + v * ch
+        up &= (x >= HEEL - .05) & (x <= TOE + .05) & (np.abs(v) <= 1)
+    return [np.array(z) for z in zip(*rec)]                    # F, E, R, M: one row per step
+def J(theta):                                                  # mean discounted return, no noise
+    R = episodes(theta, pushes, 0.0)[2]
+    return float((gamma ** np.arange(len(R)) @ R).mean())
+```
+
+---
+
+## The update: this is where R chooses the policy {.smaller}
+
+The boxed gradient, with the Gaussian's derivative from earlier,
+$\partial\log\pi/\partial\mu = ({\color{#e8743b}{a}}-\mu)/\sigma^2 = \varepsilon/\sigma$, and $\partial\mu/\partial{\color{#3b7dd8}{\theta}} = f(s)$. No autograd; `A = (G - b) * M` is the only line where ${\color{#2a9d5c}{R}}$ touches ${\color{#3b7dd8}{\theta}}$:
+
+```{python}
+#| echo: true
+def reinforce(seed, updates=300, batch=32, sigma=0.02, lr=0.01, scale=True):
+    rng, theta, curve = np.random.default_rng(seed), np.zeros(2), []
+    for u in range(updates + 1):
+        if u % 25 == 0:
+            curve.append(J(theta))
+        if u == updates:
+            return theta, curve
+        F, E, R, M = episodes(theta, rng.choice(pushes, batch), sigma, rng)
+        G = np.zeros_like(R); G[-1] = R[-1]
+        for t in reversed(range(len(R) - 1)):                  # G_t = r_t + gamma G_{t+1}
+            G[t] = R[t] + gamma * G[t + 1]
+        b = (G * M).sum(1, keepdims=True) / M.sum(1, keepdims=True).clip(1)   # baseline
+        A = (G - b) * M                                        # advantage: HERE R enters
+        if scale:
+            A = A / (A[M].std() + 1e-8)
+        grad_logpi = (E / sigma)[..., None] * F                # (a - mu)/sigma^2 * f
+        theta = theta + lr * (A[..., None] * grad_logpi).sum((0, 1)) / M.sum()
+
+theta, curve = reinforce(seed=0)
+print("update   " + " ".join(f"{u:6d}" for u in range(0, 301, 50)))
+print("J(theta) " + " ".join(f"{j:6.2f}" for j in curve[::2]))
+print(f"learned rule: p = {theta[0] / 0.1:.2f} x + {theta[1] / 0.5:.2f} v   (9,600 episodes)")
+print(f"hold (theta = 0) {J(np.zeros(2)):.2f};  week 7's hand rule p = 2 x + 0.5 v: {J(np.array([0.2, 0.25])):.2f};"
+      f"  value iteration's pi*: 72.12")
+```
+
+
+---
+
+## What it learned, read {.smaller}
+
+How good can a straight-line rule be at all? Try every pair of gains on a grid:
+
+```{python}
+#| echo: true
+best = max((J(np.array([kx * 0.1, kv * 0.5])), kx, kv)
+           for kx in np.arange(0, 8.01, 0.25) for kv in np.arange(0, 1.51, 0.05))
+print(f"best straight-line rule on the grid: J {best[0]:.2f} at p = {best[1]:.2f} x + {best[2]:.2f} v")
+```
+
+- **It started from "hold"** (${\color{#3b7dd8}{\theta}} = 0$, the CoP stays under the ankle, $J = 12.66$) and climbed, from episodes alone — no ${\color{#c0392b}{P}}$, no grid, no $\arg\max$ — to within a few tenths of the best any straight line can do.
+- **It found week 7's hand-designed rule by itself**: about $2x$ plus a velocity term, the damped ankle strategy.
+- **The last point or so is the policy class, not the optimiser.** Value iteration's ${\pi^*}$ chooses one action per grid cell and is nearly bang-bang; no rule ${\color{#3b7dd8}{\theta}}\cdot f(s)$ matches it. A learner can only find the best policy *its class* can express.
+- **The climb is not smooth.** For many updates $J$ barely moves, then jumps. On a plateau the true gradient is small and the estimate is noisy.
+
+---
+
+## Five seeds: why the advantage is scaled {.smaller}
+
+The line `A = A / A.std()` is the CartPole cell's return standardisation. Remove it (and halve the
+learning rate, or it diverges at once) and run five seeds of each:
+
+```{python}
+#| echo: true
+runs = {name: np.array([reinforce(s, lr=lr, scale=scale)[1] for s in range(5)])
+        for name, lr, scale in (("scaled A, lr 0.01", 0.01, True), ("raw A, lr 0.005", 0.005, False))}
+for name, c in runs.items():
+    print(f"{name:18s} J at update 25: {' '.join(f'{j:5.1f}' for j in c[:, 1])}")
+    print(f"{'':18s} J at update 300: {' '.join(f'{j:5.1f}' for j in c[:, -1])}"
+          f"   lowest along the way: {' '.join(f'{j:5.1f}' for j in c[:, 1:].min(1))}")
+```
+
+```{python}
+#| fig-align: center
+fig, axs = plt.subplots(1, 2, figsize=(10, 2.6), sharey=True)
+for ax, (name, c) in zip(axs, runs.items()):
+    for k, run in enumerate(c):
+        ax.plot(np.arange(0, 301, 25), run, "o-", ms=3, lw=1.5, color=plt.cm.viridis(k / 5))
+    ax.axhline(72.12, color="#2a9d5c", ls="--", lw=1.5); ax.text(5, 73.5, "value iteration 72.12", color="#2a9d5c", fontsize=8)
+    ax.axhline(12.66, color="0.5", ls=":", lw=1); ax.text(5, 15, "hold 12.66", color="0.4", fontsize=8)
+    ax.set_title(name + ", five seeds", fontsize=9); ax.set_xlabel("update (32 episodes each)"); ax.grid(alpha=0.3)
+axs[0].set_ylabel("J(θ), no noise"); axs[0].set_ylim(0, 80); fig.tight_layout(); plt.show()
+```
+
+---
+
+## Five seeds, read {.smaller}
+
+- **Raw advantages move fast and break.** The raw $G - b$ is tens of points; one batch's estimate is a large, noisy step. Most seeds reach the plateau within 25 updates, and some of them later fall off it, back to "hold" or worse. Nothing in REINFORCE stops a bad step.
+- **Scaled advantages are slow and steady.** Dividing by the batch's spread makes every update the same size, whatever the return's units. Every seed ends near 70, and none falls far below where it started.
+- **Neither reaches 72.12**, for the reason on the previous slide: the policy class, not the optimiser.
+
+Scaling fixes the *size* of a step but not its *direction*: one batch can still point the wrong way.
+The next section shrinks the noise in the direction (baselines, advantage); PPO then limits how far
+one batch may move the policy.
+
+---
+
 ## Reducing the variance {.smaller}
 
 Three fixes, in the order the field found them:
@@ -448,7 +615,7 @@ times from batches of **8** samples, with and without a baseline. Each sample's 
 *other seven* (the batch mean would include the sample itself and shrink the estimate by $7/8$).
 
 ```{python}
-#| fig-align: center
+#| echo: true
 rng = np.random.default_rng(1)
 plain, based = [], []
 for _ in range(20000):
@@ -457,6 +624,10 @@ for _ in range(20000):
     plain.append(np.mean((a - mu0) / sd0**2 * g))
     based.append(np.mean((a - mu0) / sd0**2 * (g - b)))
 plain, based = np.array(plain), np.array(based)
+```
+
+```{python}
+#| fig-align: center
 fig, ax = plt.subplots(figsize=(8.5, 2.8))
 bins = np.linspace(-20, 24, 89)
 ax.hist(plain, bins, color="0.6", alpha=0.7, label="no baseline")
@@ -471,6 +642,7 @@ fig.tight_layout(); plt.show()
 ## The baseline, read {.smaller}
 
 ```{python}
+#| echo: true
 for name, est_ in (("no baseline  ", plain), ("with baseline", based)):
     print(f"{name}: mean {est_.mean():5.2f} +- {2 * est_.std() / np.sqrt(len(est_)):.2f} (sampling noise),"
           f"  spread (std) {est_.std():5.2f}")
@@ -533,7 +705,7 @@ $${\color{#2a9d5c}{\hat A_t}} = \sum_{l\ge 0} (\gamma\lambda)^l\,\delta_{t+l},
 ## GAE, checked and drawn {.smaller}
 
 ```{python}
-#| fig-align: center
+#| echo: true
 import inspect
 rng = np.random.default_rng(2)
 T, gamma = 60, 0.99
@@ -551,15 +723,18 @@ defaults = {k: v.default for k, v in inspect.signature(PPO.__init__).parameters.
 g_l = gamma * defaults["gae_lambda"]
 print(f"SB3 PPO default: gamma = {defaults['gamma']}, lambda = {defaults['gae_lambda']}  ->  weight halves every "
       f"{np.log(0.5) / np.log(g_l):.1f} steps = {np.log(0.5) / np.log(g_l) / 50:.2f} s at 50 Hz")
-fig, ax = plt.subplots(figsize=(8.5, 1.9)); l = np.arange(60)
+```
+
+```{python}
+#| fig-align: center
+fig, ax = plt.subplots(figsize=(8.5, 1.5)); l = np.arange(60)
 for lam_, col in ((0.0, "#c0392b"), (defaults["gae_lambda"], "#2a9d5c"), (1.0, "0.5")):
     ax.plot(l, (gamma * lam_) ** l, "o-", ms=2.5, color=col, label=rf"$\lambda = {lam_:g}$")
 ax.set_xlabel(r"$l$: how many steps ahead the TD error $\delta_{t+l}$ is"); ax.set_ylabel("weight")
 ax.legend(fontsize=8, ncol=3); ax.grid(alpha=0.3); fig.tight_layout(); plt.show()
 ```
 
-Random numbers, not a robot: both limits hold to rounding error, which checks Step 1. SB3's default
-$\lambda$ halves a TD error's weight about every quarter-second at the G1's 50 Hz, then trusts the critic.
+Random numbers, not a robot: both limits hold to rounding error. SB3's $\lambda$ halves a TD error's weight every ~0.23 s.
 
 ---
 
@@ -640,7 +815,7 @@ The one-action problem again: 64 samples from ${\color{#3b7dd8}{\pi_{\text{old}}
 $\mu'$ and compare what the old batch *predicts* with the exact improvement $J(\mu') - J(0) = 1 - (\mu'-1)^2$:
 
 ```{python}
-#| fig-align: center
+#| echo: true
 rng = np.random.default_rng(0); eps = 0.2
 logp = lambda x, m: -(x - m) ** 2 / (2 * sd0**2)            # + terms that cancel in the ratio
 def surrogate(a, A, m_new, m_old, clipped):
@@ -651,6 +826,10 @@ mus = np.linspace(-0.5, 3.0, 351)
 plain_s = np.array([surrogate(a, A, m, 0.0, False) for m in mus])
 clip_s = np.array([surrogate(a, A, m, 0.0, True) for m in mus])
 truth = 1.0 - (mus - 1.0) ** 2
+```
+
+```{python}
+#| fig-align: center
 fig, ax = plt.subplots(figsize=(9, 3.0))
 ax.plot(mus, truth, color="#2a9d5c", lw=2, label=r"truth: $J(\mu')-J(0)$")
 ax.plot(mus, plain_s, color="0.5", lw=2, ls="--", label=r"plain surrogate $\mathrm{mean}(\rho A)$")
@@ -665,6 +844,7 @@ fig.tight_layout(); plt.show()
 ## The surrogate, read {.smaller}
 
 ```{python}
+#| echo: true
 h = 1e-6
 print(f"slope at mu'=0: plain {(surrogate(a, A, h, 0, False) - surrogate(a, A, -h, 0, False)) / 2 / h:.4f}, "
       f"clipped {(surrogate(a, A, h, 0, True) - surrogate(a, A, -h, 0, True)) / 2 / h:.4f}, "
@@ -689,18 +869,22 @@ Repeat the one-action experiment as PPO does: collect 64 samples from the curren
 the **maximum of the clipped surrogate**, collect again.
 
 ```{python}
-#| fig-align: center
+#| echo: true
 rng = np.random.default_rng(1); m, path = 0.0, [0.0]
 grid = np.linspace(-0.5, 3.0, 701)
 for _ in range(12):
-    a = rng.normal(m, sd0, 64); A = score(a) - score(a).mean()
-    m = grid[np.argmax([surrogate(a, A, x, m, True) for x in grid])]
+    a = rng.normal(m, sd0, 64); A = score(a) - score(a).mean()      # collect, score
+    m = grid[np.argmax([surrogate(a, A, x, m, True) for x in grid])]  # maximise L^CLIP
     path.append(m)
+print("mean after each round:", " ".join(f"{p:.2f}" for p in path))
+```
+
+```{python}
+#| fig-align: center
 fig, ax = plt.subplots(figsize=(8.5, 2.6))
 ax.plot(path, "o-", color="#8e44ad", lw=2); ax.axhline(1.0, color="#2a9d5c", ls=":", label="best action")
 ax.set_xlabel("round (collect 64 samples, maximise the clipped surrogate)"); ax.set_ylabel(r"policy mean $\mu$")
 ax.grid(alpha=0.3); ax.legend(fontsize=8); fig.tight_layout(); plt.show()
-print("mean after each round:", " ".join(f"{p:.2f}" for p in path))
 ```
 
 Each round moves only as far as the clip allows, and the steps shrink as the policy nears the best action,
@@ -712,6 +896,7 @@ the sampling noise of 64 samples.
 ## PPO, the whole loop {.smaller}
 
 ```{python}
+#| echo: true
 for k in ("n_steps", "batch_size", "n_epochs", "gamma", "gae_lambda", "clip_range", "learning_rate", "ent_coef"):
     print(f"  {k:14s} = {defaults[k]}")
 per_batch = defaults["n_steps"] // defaults["batch_size"] * defaults["n_epochs"]
@@ -734,6 +919,7 @@ CartPole has two discrete actions. A robot has twelve continuous ones, so let us
 move to a continuous problem — still trivial, but the right shape.
 
 ```{python}
+#| echo: true
 from stable_baselines3.common.evaluation import evaluate_policy
 
 t0 = time.time()
@@ -756,6 +942,7 @@ minute and a half. **Remember this feeling.**
 Same algorithm, same defaults, our environment from last week.
 
 ```{python}
+#| echo: true
 env_g1 = G1WalkEnv()
 t0 = time.time()
 agent = PPO("MlpPolicy", env_g1, verbose=0, seed=0, device="cpu")
@@ -793,6 +980,7 @@ score 774 is to do nothing at all.
 the untrained one.** Look at what it actually does:
 
 ```{python}
+#| echo: true
 obs, _ = env_g1.reset(seed=0); steps = 0
 while True:
     action, _ = agent.predict(obs, deterministic=True)
@@ -821,6 +1009,7 @@ it.** Per step the reward is $1.5\,e^{-(v-0.5)^2/0.25} + 0.5\cdot\text{upright} 
 Evaluate it by hand, taking upright = 1 (vertical):
 
 ```{python}
+#| echo: true
 def per_step_reward(v, target=0.5):
     return 1.5*np.exp(-((v-target)**2)/0.25) + 0.5*1.0 + 0.5   # upright + alive
 
@@ -844,6 +1033,7 @@ Evaluation uses the mean action. **Training samples around it** — and PPO star
 with a standard deviation of 1.0 on an action space of $[-1, 1]$.
 
 ```{python}
+#| echo: true
 agent2 = PPO("MlpPolicy", G1WalkEnv(), verbose=0, seed=0, device="cpu")
 print(f"initial action std = {np.exp(agent2.policy.log_std.detach().numpy()).mean():.3f}"
       f"   on an action range of +-1")
@@ -872,6 +1062,7 @@ print(f"untrained, stochastic    (what we train on) : {survival(agent2, probe, F
 The env turns an action into a joint target: $q_{\text{target}} = q_{\text{crouch}} + \kappa\,{\color{#e8743b}{a}}$, with ${\color{#e8743b}{a}}$ clipped to $[-1, 1]$.
 
 ```{python}
+#| echo: true
 from math import erf, sqrt
 kappa = probe.action_scale
 for s in (1.0, np.exp(-2.0)):
@@ -893,10 +1084,15 @@ With σ = 0.135 the typical offset is about 2°.
 ## Survival against noise, no training at all {.smaller}
 
 ```{python}
-#| fig-align: center
+#| echo: true
 log_stds = (0.0, -1.0, -2.0, -3.0)
 stoch = [survival(PPO("MlpPolicy", probe, verbose=0, seed=0, device="cpu",
                       policy_kwargs=dict(log_std_init=s)), probe, False) for s in log_stds]
+print("steps survived, sampled actions: " + ", ".join(f"std {np.exp(s):.3f}: {k:.0f}" for s, k in zip(log_stds, stoch)))
+```
+
+```{python}
+#| fig-align: center
 fig, ax = plt.subplots(figsize=(8, 3.2))
 ax.bar([f"log_std_init = {s:.0f}\nstd = {np.exp(s):.3f}" for s in log_stds], stoch, color="#e8743b",
        label="stochastic policy (what training sees)")
@@ -927,6 +1123,7 @@ the wreckage: the advantages it computes compare one way of falling with another
 Turn the noise down and the failure disappears:
 
 ```{python}
+#| echo: true
 t0 = time.time()
 quiet_env = G1WalkEnv()
 quiet = PPO("MlpPolicy", quiet_env, verbose=0, seed=0, device="cpu",
@@ -944,14 +1141,7 @@ print(f"after 30k steps         : {after_quiet:7.1f}   (was {after:.1f} with the
 The policy survives training now. It scores around the standing baseline — which
 means it has learned **not to fall over**, and nothing more.
 
-Walking is worth 1250. We are at roughly 780.
-
-| | return |
-| --- | --- |
-| lunging policy (default noise) | ~95 |
-| standing still | 774 |
-| **not falling, after the fix** | ~780 |
-| **walking at the target velocity** | **1250** |
+Returns: lunging (default noise) ~95, standing still 774, **not falling, after the fix ~780**, walking at the target velocity **1250**.
 
 Thirty thousand steps is **0.02%** of a real locomotion run; the literature uses
 150–200 million. We have removed a bug, not solved the problem.
@@ -973,13 +1163,11 @@ Thirty thousand steps is **0.02%** of a real locomotion run; the literature uses
 uv run weeks/08-ppo/lab_train.py          # torch + SB3: uv sync --extra rl
 ```
 
-`G1WalkEnv` under a PPO policy from `CONFIGS`; `T` trains it in the background
-(70 s for 30k steps) while the window keeps playing; `D` switches the mean
-action for a sampled one; `ENTER` prints the action std. **The code is
-complete**: `choose_action` is PPO's own sampling, explained.
+`T` trains a policy from `CONFIGS` in the background (70 s for 30k steps) while the window plays; `D` switches
+the mean action for a sampled one; `ENTER` prints the std. **Complete code**: `choose_action` is PPO's sampling, explained.
 
 | Step | Do | Right looks like |
-| --- | --- | --- |
+| -- | ---------- | ---------------- |
 | 1 | `ENTER` | std 1.0; the deterministic robot stands 500 steps, return 774 |
 | 2 | `D`; break `choose_action` | ~42 steps survived; the mean makes `D` do nothing; std × 3 falls at once |
 | 3 | `T`, then `D` | trained on std 1.0 the deterministic robot is *worse*: 94, 47 steps |
@@ -1014,8 +1202,7 @@ Evaluates the untrained policy both ways, trains with a progress line every
 
 ## Exercises {.smaller}
 
-1. **No baseline.** Delete the return standardisation from REINFORCE. How much
-   worse is it? Explain via variance rather than bias.
+1. **No baseline.** Delete REINFORCE's return standardisation. How much worse? Explain via variance, not bias.
 2. **Discount.** Set $\gamma = 0.9$ and $\gamma = 0.999$ on CartPole. Which
    trains faster and which reaches a better final policy?
 3. **Clipping is not the fix.** Train the humanoid with `clip_range=0.05`. It
@@ -1024,12 +1211,14 @@ Evaluates the untrained policy both ways, trains with a progress line every
 4. **Sweep the noise.** Train with `log_std_init` of 0, -1, -2 and -3. Plot
    initial stochastic episode length against the return after training. Where is
    the cliff?
-5. **Alive bonus.** Sweep the bonus from 0 to 2. Find the value at which standing
-   still beats every attempt to walk. What does that say about shaping?
+5. **Alive bonus.** Sweep it from 0 to 2: at what value does standing beat every attempt to walk?
 6. **Honest baselines.** Report untrained return, hold-the-crouch return, and
    trained return for three seeds. Is the difference between them significant?
 7. **On paper.** Derive $\partial\log\pi/\partial\ell$ for the Gaussian (with $\sigma = e^{\ell}$) and check it
    against the slide. Then explain in one sentence why a *good* sample two σ from the mean makes PPO widen σ.
+8. **The balance learner.** In `reinforce`, change `sigma` to 0.005 and to 0.05. Which learns faster,
+   and why does the gradient line `E / sigma` not simply make small σ better? Then add a third feature
+   (a constant 1) and say whether the best straight-line $J$ can move toward 72.12.
 
 ---
 

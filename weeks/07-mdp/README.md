@@ -122,6 +122,44 @@ walker 356.6 and a fall at 4.34 s; walker at scale 1.0 and 100 Hz 1804.6 and
 falls at 70; ankle gains (2, 2) survive 75, fall at 80; gains of 1 or 4 do no
 better; every hip-roll variant behaves like hold.
 
+### `mdp.py`: an MDP written down and solved
+
+```bash
+uv run weeks/07-mdp/mdp.py                           # numpy only; no extra needed
+uv run weeks/07-mdp/mdp.py --policy ankle --push 0.1
+uv run weeks/07-mdp/mdp.py --gamma 0.8 --no-viewer
+uv run weeks/07-mdp/mdp.py --alive 0 --no-viewer
+```
+
+`G1WalkEnv` is a simulator: it returns one sample (s′, r) per (s, a), so
+nothing in `lab_env.py` or `env_run.py` *solves* the MDP — the policy there is
+designed by hand and the reward only grades it. `mdp.py` closes that gap on a
+problem small enough to write down: the G1's forward balance as week 4's
+inverted pendulum (G1 numbers: CoM 0.661 m, foot −0.05 … +0.12 m about the
+ankle, 50 Hz). The state is (CoM offset, speed) on an 81 × 81 grid, the action
+one of 7 centre-of-pressure positions, P a table (bilinear weights over the
+grid, every row summing to 1), R the env's alive / upright / effort terms, and
+a FALLEN state worth 0. Value iteration iterates the Bellman optimality
+equation until it holds, and π* is read off as the argmax — **here R chooses
+the policy**.
+
+| Step | Does |
+| --- | --- |
+| 1 | the dynamics: one decision of the pendulum, solved exactly |
+| 2 | S, A, P, R as arrays |
+| 3 | value iteration (optimality) and policy evaluation (expectation) |
+| 4 | policies on the real pendulum: π* (greedy on V*), two hand rules, hold |
+| 5 | print, then replay one push in the viewer (CoM blue, CoP orange, capture point purple) |
+
+Measured (all in the docstring): 1376 sweeps in 3 s, the error shrinking by
+exactly γ per sweep. **π* rediscovers week 4's capture point**: the states it
+saves and the states whose capture point lies on the foot agree on 100.0 % of
+the grid, and it survives pushes of −0.19 … +0.46 m/s against the capture
+limits −0.193 … +0.462. The lean-only rule p = 2x (`lab_env.py`'s idea) is an
+undamped spring here and survives only ±0.03–0.04 m/s. γ sets the look-ahead:
+0.9 still saves 31.8 % of the grid, 0.8 20.6 %, 0.7 0.7 %, 0.5 nothing. With
+`--alive 0` (penalties only) π* lets saveable states fall (26.1 % saved).
+
 ## Rebuild
 
 The deck shows the code of every cell that computes a number (`#| echo: true`;

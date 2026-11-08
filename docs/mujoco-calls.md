@@ -86,6 +86,9 @@ Two conventions run through everything:
 | --- | --- | --- |
 | The MDP as a simulator (samples, not tables) | `soc4180.envs.G1WalkEnv(action_scale, control_hz, reward_weights)`; `observation_space`, `action_space`, `reward_weights`, `max_steps`, `control_dt` | 07 `env_run.py` |
 | The MDP written down and solved | numpy arrays for S, A, P, R; value iteration; no MuJoCo call except the replay's `mjv_initGeom` / `mjv_connector` markers | 07 `mdp.py` |
+| A table learned from samples | `soc4180.tabular.Learner(env, algo="q" or "sarsa")`: `env.reset(seed)`, `env.step(a)` only, never `P`; `value_iteration(env.unwrapped.P, ...)` for the exact answer on toy-text | 07b `qlearn.py`, `lab_tables.py` |
+| A MuJoCo env through gymnasium | `gym.make("InvertedPendulum-v5")`; its `unwrapped.model` / `unwrapped.data` go straight into `launch_viewer(passive=True)`, so ctrl + right-drag pushes the pole the table is balancing | 07b |
+| A grid world drawn in MuJoCo | MJCF built as a string (one box geom per tile, a `mocap` body for the agent); move it with `data.mocap_pos`, then `mj_forward` before drawing | 07b `lab_tables.py` |
 | One decision | `obs, r, terminated, truncated, info = env.step(a)`; `info` carries every reward term | 07, 08, 09 |
 | The week 4 walker as actions | `soc4180.envs.walker_actions(env, controller, t)` | 07 |
 | A policy and its sampling | `PPO("MlpPolicy", env, policy_kwargs=dict(log_std_init=…))`, `predict(obs, deterministic=True)`, `policy.log_std`; a sample is `mean + exp(log_std) · N(0, 1)`, clipped | 08 `train.py`, `lab_train.py` |

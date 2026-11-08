@@ -11,7 +11,7 @@ begins. No learning code appears — only the problem definition.
 | **Wall clock** | ~1 min |
 | **Convergence risk** | None. Nothing is trained. |
 | **Needs** | `soc4180[env]` — gymnasium. Lighter than `[rl]`: no torch, no SB3. |
-| **Feeds** | Weeks 8–12, which all train in this environment |
+| **Feeds** | Week 7b (the balance MDP, learned from samples); weeks 8–12, which all train in this environment |
 
 ## Objectives
 

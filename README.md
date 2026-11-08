@@ -24,6 +24,7 @@ result. Every deck is readable in a browser at
 | [05](weeks/05-actuation/) | Actuation, PD control, and rhythm | [deck](https://gnoejh.github.io/soc4180/05-actuation/slides.html) | [![Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gnoejh/soc4180/blob/main/weeks/05-actuation/lab.ipynb) | [`lab_servo.py`](weeks/05-actuation/lab_servo.py), [`servo.py`](weeks/05-actuation/servo.py) | GPU (render) |
 | [06](weeks/06-sensing/) | Sensing and state estimation | [deck](https://gnoejh.github.io/soc4180/06-sensing/slides.html) | [![Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gnoejh/soc4180/blob/main/weeks/06-sensing/lab.ipynb) | [`lab_imu.py`](weeks/06-sensing/lab_imu.py), [`imu.py`](weeks/06-sensing/imu.py) | GPU (render) |
 | [07](weeks/07-mdp/) | From control to learning: MDPs and env design | [deck](https://gnoejh.github.io/soc4180/07-mdp/slides.html) | [![Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gnoejh/soc4180/blob/main/weeks/07-mdp/lab.ipynb) | [`lab_env.py`](weeks/07-mdp/lab_env.py), [`env_run.py`](weeks/07-mdp/env_run.py), [`mdp.py`](weeks/07-mdp/mdp.py) | GPU (render) |
+| [07b](weeks/07b-tabular/) | Learning a table from experience: Q-learning, SARSA | [deck](https://gnoejh.github.io/soc4180/07b-tabular/slides.html) | [![Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gnoejh/soc4180/blob/main/weeks/07b-tabular/lab.ipynb) | [`lab_tables.py`](weeks/07b-tabular/lab_tables.py), [`qlearn.py`](weeks/07b-tabular/qlearn.py) | CPU |
 | [08](weeks/08-ppo/) | Policy gradients and PPO | [deck](https://gnoejh.github.io/soc4180/08-ppo/slides.html) | [![Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gnoejh/soc4180/blob/main/weeks/08-ppo/lab.ipynb) | [`lab_train.py`](weeks/08-ppo/lab_train.py), [`train.py`](weeks/08-ppo/train.py) | GPU (render) |
 | [09](weeks/09-reward/) | Reward shaping | [deck](https://gnoejh.github.io/soc4180/09-reward/slides.html) | [![Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gnoejh/soc4180/blob/main/weeks/09-reward/lab.ipynb) | [`lab_reward.py`](weeks/09-reward/lab_reward.py), [`shape.py`](weeks/09-reward/shape.py) | GPU (render) |
 | [10](weeks/10-scaling/) | Scaling: GPU-parallel training | [deck](https://gnoejh.github.io/soc4180/10-scaling/slides.html) | [![Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gnoejh/soc4180/blob/main/weeks/10-scaling/lab.ipynb) | [`lab_many.py`](weeks/10-scaling/lab_many.py), [`many.py`](weeks/10-scaling/many.py) | **GPU (training)** |
@@ -177,18 +178,11 @@ uv run scripts/check_notebook.py images weeks/04-walking/lab.ipynb _figs   # dum
 
 ### Answer files
 
-Reference answers live in `weeks/*/instructor/`, which is gitignored: this
-repository is public. They are pushed only encrypted, as
-`instructor.tar.gz.gpg`:
-
-```bash
-uv run scripts/instructor.py open    # passphrase -> restores weeks/*/instructor/
-uv run scripts/instructor.py seal    # after editing an answer; then commit the .gpg
-```
-
-`open` refuses to overwrite a local answer file that differs from the archive
-(`--force` to override). The passphrase is kept outside the repository; without
-it the archive cannot be opened.
+Reference answers live in `weeks/*/instructor/` and are published in the
+clear, for every week: students may read every solution. Each graded game's
+`--grade --<answers> weeks/NN-*/instructor/<file>` scores the reference.
+`instructor.tar.gz.gpg` and `scripts/instructor.py` (seal / open) are from
+when Part I answers were encrypted; they are no longer used.
 
 ### Prerequisite
 
@@ -294,8 +288,8 @@ src/soc4180/     shared helpers, installed as a package
   checkpoints.py pre-trained policy loading (the RL-week safety net)
 weeks/NN-*/     slides.qmd (source) -> slides.html + lab.ipynb; lab_*.py (laptop lab)
 scripts/         view.py (viewer), check_notebook.py (execute / compile / dump figures), build_site.py,
-                 check_labs.py (run every lab script), instructor.py (seal / open the answers)
-instructor.tar.gz.gpg   the encrypted weeks/*/instructor/ answers
+                 check_labs.py (run every lab script), instructor.py (no longer used: answers are published)
+instructor.tar.gz.gpg   no longer used: an old encrypted copy of weeks/*/instructor/
 _quarto.yml      shared deck theme and execution settings
 ```
 

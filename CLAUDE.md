@@ -97,6 +97,7 @@ training; an LLM planner appears only as a non-executed code block).
 | 05 | Actuation, PD control, and CPG gaits | `05` | built; P/PD/PI/PID comparison slides added 2026-10-04; `lab_servo.py` + `servo.py`; **not re-tested on Colab since 2026-09-20** |
 | 06 | Sensing, state estimation, observation design | `06` | built; `lab_imu.py` + `imu.py`; **not re-tested on Colab since 2026-09-20** |
 | 07 | From control to learning: MDPs and environment design | `07` | built; `lab_env.py` (ankle strategy, push-measured) + `env_run.py` + `mdp.py` (an explicit MDP solved by value iteration, 2026-11-08); deck shows its computing code and the equation beside it since 2026-11-02 (50 slides, all fit 1280 x 800; equations render offline, MathJax embedded); **not re-tested on Colab since 2026-09-20** |
+| 07b | Learning a table from experience: Q-learning, SARSA, binning, why tables stop | `07b` | built 2026-11-08 (user: students not ready for 08; Atari proposed, tabular RL + inverted pendulum chosen); game `lab_tables.py` + `tables.py` (ref 6/6, shipped 0/6, wrong answers 0/6, scorer code 119A; reference in `instructor/tables_solution.py`, published), `qlearn.py`; package `tabular.py`; deck ~32 slides; **not Pages- or Colab-tested** |
 | 08 | Policy gradients and PPO | `08` | built; `lab_train.py` + `train.py`; REINFORCE on week 7's balance MDP against its exact 72.12, computing code shown, equations offline (2026-11-08); Pages-green since the OSMesa/triton fix (below); **not re-tested on Colab since 2026-09-20** |
 | 09 | Reward shaping and diagnosing failed runs | `09` | built; `lab_reward.py` + `shape.py`; Pages-green, same history as 08; **not re-tested on Colab since 2026-09-20** |
 | 10 | Scaling: GPU-parallel locomotion training | `10` | built; GPU training **runs on A100, untimed**; `lab_many.py` + `many.py`; renders locally only with `--extra gpu` synced and the machine quiet |
@@ -348,6 +349,32 @@ to ~180 and the same 30k run then scores 776 instead of 95.
 Even fixed, it only matches the standing baseline — it has learned not to fall,
 not to walk (which is worth 1250). 30k steps is 0.02% of a real run.
 
+**Week 7b: tabular RL (2026-11-08, user: "Students are not ready for 08 ... teach RL with atari
+games"; then "how about including inverted pendulum?").** Atari was rejected (DQN needs hours of GPU,
+pixels/CNN are week 14's, `ale-py` not locked, off the G1 spine); the week is gymnasium toy-text +
+MuJoCo's `InvertedPendulum-v5` + week 7's balance, all on `soc4180.tabular` (no torch, no pygame:
+grids are drawn as MuJoCo tiles with a mocap agent). Measured: FrozenLake (slippery) value iteration
+571 sweeps, pi* 0.737; Q-learning (alpha 0.05, eps 1 -> x0.9995, floor 0.05) 0.737 at 5000 episodes,
+same action as pi* on every reachable tile. gamma: VI 0.465 / 0.442 / 0.730 / 0.730 / 0.737 at 0.5 /
+0.8 / 0.9 / 0.95 / 0.99, Q-learning (3 seeds) ~0.07 at 0.5, noisy at 0.9-0.95 (0.51-0.73), 0.737 at
+0.99 and 1.0 -- samples need the route values far apart. Acting at random (eps 1): Q-learning's greedy
+table 0.730 / 0.747 / 0.646, SARSA's 0.308 / 0.607 / 0.128. Cliff (eps 0.1, alpha 0.5, 500 ep):
+SARSA falls in 11 / 7 / 14 of the last 200 episodes, path 17-19; Q-learning 51 / 49 / 47, path 13.
+Pendulum (forces -3/0/+3, angle + angular velocity, 6 x 6 = 36 rows, 3000 episodes, 25-40 s): **a
+coarse table learns and forgets** (seeds 1 and 2 reach 1000 and lose it by 3000), so `KeepBest`
+checks the greedy table every 250 episodes and keeps the best: 10 of 10 seeds balance 1000 steps from
+10 held-out starts. Angle only: 7-35 steps (not Markov); all four numbers: 43-77 (rows multiply);
+the angle cut only at 0 + 6 velocity bins passes (12 rows); +-3 N with no zero fails (94-120).
+Balance from samples (100k episodes, J over the second half of 8 checks): 5 / 11 / 21 / 41 / 81 bins
+19.1 / 51.1 / 65.5 / 66.1 / 53.3 against VI's 72.12 -- an inverted U. Every graded number repeats
+exactly on one machine (toy-text is pure numpy; MuJoCo stepping is deterministic). **The deck's
+Colab guard is wrapped in try/except**: `importlib.util.find_spec("google.colab")` RAISES
+`ModuleNotFoundError` when no `google` package exists at all (a venv without protobuf, i.e. without
+the gpu/vision extras) -- weeks 2b and 11 use the bare form and would fail locally in a lean env.
+**Never `uv run --extra rl` on this machine**: it re-synced the venv to rl alone and removed gpu and
+vision (jax, transformers, protobuf); restore with `uv sync --extra rl --extra gpu --extra env --extra
+vision`, and call `.venv/Scripts/python.exe` directly.
+
 **Week 8: the policy gradient on week 7's MDP (2026-11-08).** Five slides after CartPole run
 REINFORCE on week 7's balance MDP from episodes only (no P table), so a learner can be checked
 against an exact answer: Gaussian around p = theta . (x/0.1, v/0.5), sigma 0.02 m, gradient
@@ -463,7 +490,7 @@ uv run python -c "import soc4180"              # smoke test
 uv run scripts/view.py --walk                  # interactive viewer (laptop/desktop)
 quarto render weeks/01-intro/slides.qmd        # -> slides.html + lab.ipynb
 uv run python scripts/build_site.py            # rendered decks -> _site/ for Pages
-uv run scripts/instructor.py open|seal         # encrypted answers <-> weeks/*/instructor/
+# (scripts/instructor.py open|seal is no longer used: answers are published in weeks/*/instructor/)
 ```
 
 There is no test suite or linter configured. Add the tooling before inventing
@@ -487,6 +514,7 @@ one-fill-in-returning-`None` convention is gone. What replaced it:
 | 05 | `lab_servo.py` (`torque_from_pd` complete, `H` hands over, `L`/`--law` cycles P/PD/PI/PID/D) | `servo.py --joint --kp-scale --kv-scale --limit --walk` | ζ from `mj_fullM`, rise time, overshoot, peak torque; sag and falls |
 | 06 | `lab_imu.py` (`my_filter` complete) | `imu.py --walk --noise --alpha --sweep` | three estimators' error per second; the α sweep |
 | 07 | `lab_env.py` (`my_policy` = the ankle strategy) | `env_run.py --policy --push --weights --hz --action-scale` | reward per second by term; pushes survived |
+| 07b | `lab_tables.py` (graded game; students edit `tables.py`) | `qlearn.py --task frozen\|cliff\|pendulum\|balance` | lake success vs value iteration; cliff falls and paths; pendulum kept-table steps; balance J by table size |
 | 08 | `lab_train.py` (`choose_action` complete) | `train.py --log-std --steps` | deterministic vs stochastic, before and after |
 | 09 | `lab_reward.py` (`extra_reward` complete, `EXTRA` picks) | `shape.py --variant --extra` | scored on its reward AND the original |
 | 10 | `lab_many.py` (`predict_rate` complete, `COST_EXPONENT`) | `many.py --robots --procs --randomise` | physics-only vs walking robot-steps/s; processes |
@@ -515,16 +543,13 @@ own blanks and names their lines. Do not go back to a numeric placeholder:
 360 m IK request. **Any edit to `lab_connected.py` changes the scorer code**
 (a hash of the file) that the instructor writes on the board.
 
-**Instructor answers are pushed only encrypted -- in Part I.** Part II (weeks 16 on) publishes its measured references in plain `weeks/NN-*/instructor/reference.md` (user, 2026-10-25: "no need hide answer"; `.gitignore` re-includes `weeks/1[6-9]-*/instructor/` and `weeks/2[0-9]-*/instructor/`). For Part I: The repo is public, so
-`weeks/*/instructor/` is gitignored and `scripts/instructor.py seal` packs
-every such folder into `instructor.tar.gz.gpg` (gpg symmetric AES-256, the
-gpg that ships with Git for Windows; no new dependency, so `uv.lock` is
-untouched). `open` restores them and refuses to overwrite a local file that
-differs unless `--force` is given. The passphrase lives only with the
-instructor. Never `git add -f` a plain answer file, and re-seal after
-editing one. **The archive is committed** (`53b7eee`, week 3's
-`moves_solution.py`); Claude cannot seal, because it cannot type the
-passphrase, so sealing is always the instructor's step.
+**Every week's answers are published in plain text** (user, 2026-11-08: "No need seal. All
+solutions must visible to students"). `weeks/*/instructor/` is no longer gitignored, for Part I
+as for Part II (whose `reference.md` files were published from 2026-10-25). Commit an answer file
+like any other file; nothing is sealed. `instructor.tar.gz.gpg` and `scripts/instructor.py`
+(seal / open) are left from the encrypted period and are no longer used. The midterm is
+different: `weeks/exam_midterm/*` (exam paper, answer key, cover) stays gitignored -- the
+2026-11-08 instruction was about lab solutions; ask before publishing an exam.
 
 Measured while building the pipeline scripts (2026-09-20), beyond the
 per-week READMEs:
@@ -750,9 +775,9 @@ NAME)` refuses a blank and names its lines, `Problem(title, text, make)`,
 play, `G` grades, the scorer code is a hash of the lab file; the viewer reopens
 when an attempt brings a different model; `set_images` draws a picture in the
 corner). Week 3 keeps its own copy — its scorer code must not move. Reference
-answers live in each week's `instructor/` (gitignored; **the instructor must
-re-seal**: 11 `costs_solution.py`, 12 `audit_solution.py`, 13
-`students_solution.py`, 14 `eyes_solution.py`, 15 `instructions_solution.py`).
+answers live in each week's `instructor/`, published (11 `costs_solution.py`,
+12 `audit_solution.py`, 13 `students_solution.py`, 14 `eyes_solution.py`, 15
+`instructions_solution.py`).
 
 **Grade by margins, never on a knife edge.** Several first-draft problems
 were one weight wide (week 11's hop-free CRANE passed at `plant_right` 1000

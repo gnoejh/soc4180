@@ -1436,9 +1436,9 @@ return by term: tracking +274.2, upright +249.9, effort +0.0, smooth +0.0, alive
 
 ## Next week
 
-**08 — policy gradients and PPO.** The environment is written and checked,
-the baselines are measured, and we know what it can and cannot express.
+**07b — learning a table from experience.** Value iteration needed ${\color{#c0392b}{P}}$;
+`env.step` never gives it. Next, an agent learns from `(s, a, r, s')` alone — Q-learning
+and SARSA on a frozen lake, a cliff, MuJoCo's inverted pendulum, and this week's balance
+against its exact 72.12 — and we find out why tables stop working.
 
-Now we let an algorithm search it — starting on something far easier than a
-humanoid, so that when PPO meets the hard problem you already know what a
-healthy learning curve looks like.
+**08 — policy gradients and PPO** then drops the table, and searches the walking G1.

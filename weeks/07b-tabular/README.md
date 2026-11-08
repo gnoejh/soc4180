@@ -42,6 +42,20 @@ working, which is where week 8's policy gradient begins.
 | Inverted pendulum, all four numbers (324 rows) | 43–77 steps: too many rows for the samples |
 | G1 balance from samples, 100,000 episodes, bins 5 / 11 / 21 / 41 / 81 | J 19.1 / 51.1 / **65.5** / **66.1** / 53.3 (hold 12.66; value iteration 72.12) |
 
+## Who needs P, and on- versus off-policy
+
+Two slides put the three update rules side by side:
+
+| | needs P? | uses | on / off-policy | learns |
+| --- | --- | --- | --- | --- |
+| value iteration (week 7) | yes (model-based) | the whole table of P | neither: it never acts | Q\* |
+| Q-learning | no (model-free) | (s, a, r, s′) | **off**: a′ in the target is the greedy argmax, perhaps never taken | Q\* |
+| SARSA | no (model-free) | (s, a, r, s′, a′) | **on**: a′ is the ε-greedy action it will take next | Q of the ε-greedy policy |
+
+The test for on/off-policy is whether the a′ inside the target comes from the
+same policy that chose a (the behaviour policy, ε-greedy for both). At ε = 0
+the two targets coincide.
+
 ## The three lessons
 
 **The table can be learned from samples, and it costs samples.** Q-learning

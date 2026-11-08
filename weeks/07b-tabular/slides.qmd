@@ -143,8 +143,8 @@ a hole ends the episode. Here ${\color{#c0392b}{P}}$ is printed — so week 7's 
 ```{python}
 #| echo: true
 Vstar, Qstar, sweeps = tabular.value_iteration(P, 16, 4, gamma=0.99)
-win = tabular.run_greedy(lake, Qstar, 2000, 10**6)[0].mean()       # 2000 tries of pi*
-print(f"{sweeps} sweeps;  V*(start) = {Vstar[0]:.3f};  pi* reaches the goal {win:.3f} of the time")
+pi_win = tabular.run_greedy(lake, Qstar, 2000, 10**6)[0].mean()    # 2000 tries of pi*
+print(f"{sweeps} sweeps;  V*(start) = {Vstar[0]:.3f};  pi* reaches the goal {pi_win:.3f} of the time")
 ```
 
 ```{python}
@@ -219,10 +219,10 @@ print("episodes  success   max |max_a Q - V*|   same action as pi*")
 for upto in (100, 500, 1000, 2000, 5000):
     L.train(upto - L.episodes)
     snap[upto] = L.Q.copy()
-    win = tabular.run_greedy(lake, L.Q, 2000, 10**6)[0].mean()
+    ql_win = tabular.run_greedy(lake, L.Q, 2000, 10**6)[0].mean()
     gap = np.abs(L.Q.max(1) - Vstar)[reach].max()
     same = (L.Q.argmax(1) == Qstar.argmax(1))[reach].mean()
-    print(f"{upto:8d}  {win:7.3f}   {gap:18.3f}   {same:8.0%}")
+    print(f"{upto:8d}  {ql_win:7.3f}   {gap:18.3f}   {same:8.0%}")
 ```
 
 From samples alone, the table reaches value iteration's answer: same success, the same action on every
@@ -284,6 +284,25 @@ costs $-100$ and sends you back to S. ${\color{#8e44ad}{\varepsilon}} = 0.1$ thr
 
 ---
 
+## On-policy or off-policy: who picks ${\color{#e8743b}{a'}}$? {.smaller}
+
+Two policies: the **behaviour policy** *acts* and makes the data (ε-greedy, for both rules); the **target policy** is
+the one whose value the table learns. The test is the ${\color{#e8743b}{a'}}$ inside the target ${\color{#2a9d5c}{y}}$: **is it chosen by the same policy that chose ${\color{#e8743b}{a}}$?**
+
+| | ${\color{#e8743b}{a}}$, taken now | ${\color{#e8743b}{a'}}$, in the target | same policy? | the table learns |
+| --- | --- | --- | --- | --- |
+| **SARSA** | ε-greedy | ε-greedy: the action it **will** take next | **yes → on-policy** | ${\color{#3b7dd8}{Q^{\pi_\varepsilon}}}$: the value of acting ε-greedily |
+| **Q-learning** | ε-greedy | greedy ($\arg\max$): perhaps **never** taken | **no → off-policy** | ${\color{#3b7dd8}{Q^*}}$: the value of acting best |
+
+So SARSA solves a different Bellman equation from (3) — the one for **its own** policy:
+
+$$\text{(4)}\quad {\color{#3b7dd8}{Q^{\pi}(s,{\color{#e8743b}{a}})}} \;=\; \mathbb{E}_{s'\sim {\color{#c0392b}{P}},\ {\color{#e8743b}{a'}}\sim\pi}\Big[{\color{#2a9d5c}{r}} + {\color{#8e44ad}{\gamma}}\,{\color{#3b7dd8}{Q^{\pi}(s',{\color{#e8743b}{a'}})}}\Big]$$
+
+In `Learner.episode`: SARSA picks `a2` *before* the update and values `Q[s2, a2]`; Q-learning values `Q[s2].max()`.
+At ${\color{#8e44ad}{\varepsilon}} = 0$ the behaviour policy *is* the greedy one, and the two targets coincide.
+
+---
+
 ## The cliff, measured {.smaller}
 
 ```{python}
@@ -338,11 +357,12 @@ Back on the lake, with ${\color{#8e44ad}{\varepsilon}} = 1$ for all 5000 episode
 
 ```{python}
 #| echo: true
+rand_wins = {}
 for algo in ("q", "sarsa"):
-    wins = [tabular.run_greedy(lake, tabular.Learner(lake, 16, 4, algo=algo, alpha=0.05, gamma=0.99,
+    rand_wins[algo] = wins = [tabular.run_greedy(lake, tabular.Learner(lake, 16, 4, algo=algo, alpha=0.05, gamma=0.99,
                                epsilon=1.0, seed=s).train(5000).Q, 2000, 10**6)[0].mean() for s in range(3)]
     print(f"{algo:5s}: its greedy table reaches the goal {' / '.join(f'{w:.3f}' for w in wins)}"
-          f"   (pi* {win:.3f})")
+          f"   (pi* {pi_win:.3f})")
 ```
 
 - **Q-learning still learns the good table.** Its target asks "what if I acted *best* from $s'$?", whatever it actually did.
@@ -350,6 +370,32 @@ for algo in ("q", "sarsa"):
 
 **For a robot:** off-policy learning can use experience someone *else* collected — an old controller,
 a human, a log. On-policy learning is safer while it learns, because it accounts for its own mistakes.
+
+---
+
+## Who needs ${\color{#c0392b}{P}}$? Three rules for one table {.smaller}
+
+$$\begin{aligned}
+&\textbf{value iteration:} && {\color{#3b7dd8}{Q(s,{\color{#e8743b}{a}})}} \leftarrow \textstyle\sum_{s'} {\color{#c0392b}{P(s'\mid s,{\color{#e8743b}{a}})}}\big[{\color{#2a9d5c}{r}} + {\color{#8e44ad}{\gamma}}\max_{{\color{#e8743b}{a'}}}{\color{#3b7dd8}{Q(s',{\color{#e8743b}{a'}})}}\big] && \text{every } (s,{\color{#e8743b}{a}}), \text{ every sweep}\\
+&\textbf{Q-learning:} && {\color{#3b7dd8}{Q(s,{\color{#e8743b}{a}})}} \mathrel{+}= {\color{#8e44ad}{\alpha}}\big[{\color{#2a9d5c}{r}} + {\color{#8e44ad}{\gamma}}\max_{{\color{#e8743b}{a'}}}{\color{#3b7dd8}{Q(s',{\color{#e8743b}{a'}})}} - {\color{#3b7dd8}{Q(s,{\color{#e8743b}{a}})}}\big] && \text{one sampled } s'\\
+&\textbf{SARSA:} && {\color{#3b7dd8}{Q(s,{\color{#e8743b}{a}})}} \mathrel{+}= {\color{#8e44ad}{\alpha}}\big[{\color{#2a9d5c}{r}} + {\color{#8e44ad}{\gamma}}\,{\color{#3b7dd8}{Q(s',{\color{#e8743b}{a'}})}} - {\color{#3b7dd8}{Q(s,{\color{#e8743b}{a}})}}\big] && \text{one sampled } s' \text{ and } {\color{#e8743b}{a'}}
+\end{aligned}$$
+
+| | needs ${\color{#c0392b}{P}}$? | uses | on / off-policy | learns |
+| --- | --- | --- | --- | --- |
+| **value iteration** (week 7) | **yes** — model-based | the whole table of ${\color{#c0392b}{P}}$ | neither: it never acts | ${\color{#3b7dd8}{Q^*}}$ |
+| **Q-learning** | no — model-free | $(s, {\color{#e8743b}{a}}, {\color{#2a9d5c}{r}}, s')$ | **off** | ${\color{#3b7dd8}{Q^*}}$ |
+| **SARSA** | no — model-free | $(s, {\color{#e8743b}{a}}, {\color{#2a9d5c}{r}}, s', {\color{#e8743b}{a'}})$ | **on** | ${\color{#3b7dd8}{Q^{\pi_\varepsilon}}}$ |
+
+```{python}
+#| echo: true
+print(f"value iteration, knows P : {sweeps} sweeps, no episodes      -> pi* reaches G {pi_win:.3f}")
+print(f"Q-learning, eps 1 -> 0.05: 5000 episodes, no P            -> greedy table    {ql_win:.3f}")
+print("acting at random, eps = 1: Q-learning " + " / ".join(f"{w:.3f}" for w in rand_wins["q"])
+      + ",  SARSA " + " / ".join(f"{w:.3f}" for w in rand_wins["sarsa"]))
+```
+
+**Value iteration:** know ${\color{#c0392b}{P}}$. **Q-learning:** don't know ${\color{#c0392b}{P}}$; learn the *best* policy. **SARSA:** don't know ${\color{#c0392b}{P}}$; learn the policy *you follow*.
 
 ---
 
@@ -538,7 +584,7 @@ state carries over to similar ones — and the gradient replaces the table updat
 
 | idea | where you saw it | the number |
 | --- | --- | --- |
-| a table can be learned from samples alone | lake | 0.737 = value iteration's 0.737, after 5000 episodes |
+| a table can be learned from samples alone, no ${\color{#c0392b}{P}}$ | lake | 0.737 = value iteration's 0.737: 5000 episodes against 571 sweeps with ${\color{#c0392b}{P}}$ |
 | ${\color{#8e44ad}{\gamma}}$ sets how far it looks | lake | γ 0.5: 0.07; γ 0.99: 0.737 |
 | off-policy learns the best table while doing anything | lake, ε = 1 | Q-learning about 0.7, SARSA about 0.35 |
 | on-policy accounts for its own exploration | cliff | SARSA falls far less often; Q-learning's path is shorter |

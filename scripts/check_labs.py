@@ -84,6 +84,10 @@ AS_IS = [
     ("26", "weeks/26-codecs/lab_codecs.py words"),
     ("26", "weeks/26-codecs/lab_codecs.py capacity --d 128 --episodes 2"),
     ("27", "weeks/27-explorer/lab_explore.py --seconds 12 --name check_labs"),
+    ("28", "weeks/28-program/lab_program.py --step whole --trials 600"),
+    ("28", "weeks/28-program/lab_program.py --step ask"),
+    ("28", "weeks/28-program/lab_program.py --step keep"),
+    ("28", "weeks/28-program/lab_program.py --step g1 --seconds 3"),
 ]
 
 LABS = [

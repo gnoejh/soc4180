@@ -1,0 +1,50 @@
+{
+ "v": 4,
+ "title": "Programming the whole brain",
+ "subtitle": "ubrain on the laptop and the G1: Brain(), streams, ticks, asking it, keeping it",
+ "cover": "cover",
+ "order": [
+  "cover",
+  "plan",
+  "circuit",
+  "route",
+  "classes",
+  "code",
+  "tick",
+  "fig_whole",
+  "ask",
+  "keep",
+  "g1",
+  "project",
+  "class2",
+  "questions"
+ ],
+ "sections": {
+  "s1": {
+   "description": "What a whole brain is",
+   "start": "circuit"
+  },
+  "s2": {
+   "description": "Part 2: the code",
+   "start": "code"
+  },
+  "s3": {
+   "description": "Part 3: measured",
+   "start": "fig_whole"
+  },
+  "s4": {
+   "description": "The project and the hands-on class",
+   "start": "project"
+  }
+ },
+ "faces": {
+  "ibm-plex-sans": {
+   "family": "IBM Plex Sans",
+   "href": "https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;600;700&display=swap"
+  },
+  "jetbrains-mono": {
+   "family": "JetBrains Mono",
+   "href": "https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&display=swap"
+  }
+ }
+}

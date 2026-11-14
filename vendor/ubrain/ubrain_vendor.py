@@ -45,8 +45,15 @@ def _missing(what: str) -> SystemExit:
         "Pull the repository again: vendor/ubrain/ should hold wheels/ and g1_body/.")
 
 
-def load() -> None:
-    """Make `import ubrain` work: unpack the matching wheel once, add it to sys.path."""
+#: the release weeks 16-27 were measured on; a week asks for another one by name
+DEFAULT_VERSION = "0.14.0.dev1"
+
+
+def load(version: str = DEFAULT_VERSION) -> None:
+    """Make `import ubrain` work: unpack the matching wheel once, add it to sys.path.
+    `version` picks the release: weeks 16-27 use the default (their numbers were measured
+    on it); week 28 on ask for the release they were written for. A plain sort would pick
+    the newest wheel for every week, so the version is always named."""
     if sys.version_info[:2] != (3, 12):
         raise SystemExit(f"ubrain's wheels here are built for Python 3.12; this is "
                          f"{platform.python_version()}. Run it with `uv run` from the repository.")
@@ -54,7 +61,7 @@ def load() -> None:
     if tag is None:
         raise SystemExit(f"no ubrain wheel for {sys.platform} {platform.machine()}; "
                          "tell the instructor")
-    wheels = sorted(WHEELS.glob(f"ubrain-*-cp312-cp312-{tag}*.whl"))
+    wheels = sorted(WHEELS.glob(f"ubrain-{version}-cp312-cp312-{tag}*.whl"))
     if not wheels:
         raise _missing(f"the ubrain wheel for {tag}")
     wheel = wheels[-1]

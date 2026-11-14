@@ -45,6 +45,7 @@ result. Every deck is readable in a browser at
 | [25](weeks/25-neuromodulators/) | One number each — serotonin and noradrenaline | [deck](https://gnoejh.github.io/soc4180/25-neuromodulators/slides.html) | — | [`lab_patience.py`](weeks/25-neuromodulators/lab_patience.py) | CPU |
 | [26](weeks/26-codecs/) | Plugging in a trained model — CLIP and the certificate | [deck](https://gnoejh.github.io/soc4180/26-codecs/slides.html) | — | [`lab_codecs.py`](weeks/26-codecs/lab_codecs.py) | CPU (`--extra vision`) |
 | [27](weeks/27-explorer/) | The explorer — walking, seeing, remembering | [deck](https://gnoejh.github.io/soc4180/27-explorer/slides.html) | — | [`lab_explore.py`](weeks/27-explorer/lab_explore.py) | CPU (`--extra vision`) |
+| [28](weeks/28-program/) | Programming the whole brain — the project starts | [deck](https://gnoejh.github.io/soc4180/28-program/slides.html) | — | [`lab_program.py`](weeks/28-program/lab_program.py) | CPU |
 
 Every deck derives its equations step by step, defines each symbol, draws each
 concept, and reads its printed numbers aloud; every number on a slide is printed

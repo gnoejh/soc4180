@@ -1,0 +1,18 @@
+<section id="code" data-transition="fade" style="background:#F6F4EE;color:#14213D;font-family:'IBM Plex Sans', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:40px">
+<div style="display:flex;flex-direction:column;gap:16px"><p style="font-size:24px;font-weight:600;letter-spacing:3px;text-transform:uppercase;color:#B0521A">Part 2 · The code</p><h2 style="font-size:64px;font-weight:700;line-height:1.1;color:#14213D">A whole brain in ten lines</h2></div>
+<div style="width:1660px;background:#14213D;padding:36px;border-radius:16px"><p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;line-height:1.45;color:#E8ECF3;white-space:pre">from ubrain import Brain, GaussianCodes
+
+camera = GaussianCodes(dim=64, seed=1)           <span style="color:#8FA3BF"># the frozen model itself: any codec</span>
+brain = Brain(variant="small")
+brain.attach("sense", "vision", codec=camera)    <span style="color:#8FA3BF"># -> key "sense.vision"</span>
+brain.attach("reward")                           <span style="color:#8FA3BF"># -> key "reward"</span>
+brain.attach("action", n=4)                      <span style="color:#8FA3BF"># -> "action" in the output</span>
+
+r = None
+for t in range(3000):
+    p = world.picture()
+    a = brain.tick({"sense.vision": p, "reward": r})["action"]
+    r = world.pay(p, a)                            <span style="color:#8FA3BF"># 1 if a is right for p</span></p></div>
+<p style="position:absolute;left:128px;bottom:64px;width:1664px;font-size:24px;color:#6B7385">Programming the whole brain · 6</p>
+<aside>lab_program.py step whole, section 1. The reward arrives one tick late, with the next picture: the brain credits the choice it made last tick.</aside>
+</section>

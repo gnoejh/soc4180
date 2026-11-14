@@ -1,0 +1,48 @@
+{
+ "v": 4,
+ "title": "Build and measure",
+ "subtitle": "three project starts on the G1: the method, two rules, a failed prediction, the report",
+ "cover": "cover",
+ "order": [
+  "cover",
+  "plan",
+  "method",
+  "choose",
+  "rule",
+  "keep",
+  "brace",
+  "failed",
+  "report",
+  "present",
+  "class2",
+  "questions"
+ ],
+ "sections": {
+  "s1": {
+   "description": "The method",
+   "start": "method"
+  },
+  "s2": {
+   "description": "Three project starts, measured",
+   "start": "choose"
+  },
+  "s3": {
+   "description": "Reporting and presenting",
+   "start": "failed"
+  },
+  "s4": {
+   "description": "The hands-on class",
+   "start": "class2"
+  }
+ },
+ "faces": {
+  "ibm-plex-sans": {
+   "family": "IBM Plex Sans",
+   "href": "https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;600;700&display=swap"
+  },
+  "jetbrains-mono": {
+   "family": "JetBrains Mono",
+   "href": "https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&display=swap"
+  }
+ }
+}

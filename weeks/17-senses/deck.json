@@ -1,0 +1,50 @@
+{
+ "v": 4,
+ "title": "Senses and the body",
+ "subtitle": "ubrain 0.46 on the G1: the body's streams, the twin, a detector, a privilege, the eye",
+ "cover": "cover",
+ "order": [
+  "cover",
+  "plan",
+  "streams",
+  "code",
+  "inside",
+  "twin",
+  "method",
+  "push",
+  "contact",
+  "vision",
+  "rule",
+  "project",
+  "class2",
+  "questions"
+ ],
+ "sections": {
+  "s1": {
+   "description": "What crosses",
+   "start": "streams"
+  },
+  "s2": {
+   "description": "Part 2: the code and the inside",
+   "start": "code"
+  },
+  "s3": {
+   "description": "Part 3-5: measured",
+   "start": "twin"
+  },
+  "s4": {
+   "description": "The rule, the project and the hands-on class",
+   "start": "rule"
+  }
+ },
+ "faces": {
+  "ibm-plex-sans": {
+   "family": "IBM Plex Sans",
+   "href": "https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;600;700&display=swap"
+  },
+  "jetbrains-mono": {
+   "family": "JetBrains Mono",
+   "href": "https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&display=swap"
+  }
+ }
+}

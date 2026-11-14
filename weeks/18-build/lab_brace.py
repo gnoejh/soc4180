@@ -1,7 +1,7 @@
 """lab_brace (ubrain's examples/07_g1_lead.py on the course's copy): how long a warning can the cerebellum use? A prediction, and it failed (needs: the body).
 
-    uv run weeks/30-build/lab_brace.py
-    uv run weeks/30-build/lab_brace.py --leads 5 10 20 40 60
+    uv run weeks/18-build/lab_brace.py
+    uv run weeks/18-build/lab_brace.py --leads 5 10 20 40 60
 
 The question   a tone comes LEAD ticks before each push (250 N from the front). For which leads does the
                whole brain's cerebellum learn to stay up?

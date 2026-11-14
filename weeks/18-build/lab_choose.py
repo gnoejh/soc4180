@@ -1,7 +1,7 @@
 """lab_choose (ubrain's examples/05_g1_choose.py on the course's copy): the whole brain in the G1 learns which way to turn from a picture (needs: the body).
 
-    uv run weeks/30-build/lab_choose.py
-    uv run weeks/30-build/lab_choose.py --viewer
+    uv run weeks/18-build/lab_choose.py
+    uv run weeks/18-build/lab_choose.py --viewer
 
 The world      each trial (2 s) begins with a picture: GO LEFT or GO RIGHT. The brain chooses to turn left
                or right (the program maps the action to the goal: walk at 0.3 m/s turning at +-0.6 rad/s).

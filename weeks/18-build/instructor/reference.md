@@ -1,4 +1,4 @@
-# Week 30 — reference (measured 2026-11-15, ubrain 0.46.0.dev2, the vendored body 4815eedf56d0)
+# Week 18 — reference (measured 2026-11-15, ubrain 0.46.0.dev2, the vendored body 4815eedf56d0)
 
 ## The three labs, defaults
 

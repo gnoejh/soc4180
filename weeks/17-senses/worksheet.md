@@ -1,4 +1,4 @@
-# Week 29 worksheet — Senses and the body
+# Week 17 worksheet — Senses and the body
 
 Name: ______________________   Date: __________
 
@@ -45,7 +45,7 @@ on the ground (0.12 at 0.4 m/s).
 **C2.** Name one experiment that would become unfair if foot contact were given to the brain
 as a sense.
 
-## D. The eye (`uv run --extra vision weeks/29-senses/lab_sense.py --step vision`)
+## D. The eye (`uv run --extra vision weeks/17-senses/lab_sense.py --step vision`)
 
 **D1.** 22 of 199 glances are called new. What would make the brain call a picture new a
 second time? Try it (a longer walk, `--seconds 80`, walks past the end of the gallery).

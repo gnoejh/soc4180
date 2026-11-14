@@ -1,4 +1,4 @@
-# 30 — Build and measure (project week 3)
+# 18 — Build and measure (project week 3)
 
 | | |
 | --- | --- |
@@ -23,19 +23,19 @@ appends it to `results.csv`.
 Two rules the labs found, now in the slides: **the whole brain explores only while its values
 are near zero** (make a wrong choice pay nothing: a first design that paid the wrong action
 half the time was never unlearned), and **a sense that never changes never engages the brain**
-(week 29).
+(week 17).
 
 ## Slides
 
 ```bash
-uv run python weeks/30-build/build.py
+uv run python weeks/18-build/build.py
 ```
 
 ## Before the class (about 5 minutes)
 
 ```bash
-uv run weeks/30-build/lab_choose.py
-uv run weeks/30-build/lab_keep.py
+uv run weeks/18-build/lab_choose.py
+uv run weeks/18-build/lab_keep.py
 ```
 
 Both must end with `CHECK PASS`. `lab_brace.py` takes about 3 minutes (five brains).

@@ -1,7 +1,7 @@
 """lab_keep (ubrain's examples/06_g1_keep.py on the course's copy): train the whole brain in the G1, save it, demonstrate the loaded brain (needs: the body).
 
-    uv run weeks/30-build/lab_keep.py
-    uv run weeks/30-build/lab_keep.py --viewer
+    uv run weeks/18-build/lab_keep.py
+    uv run weeks/18-build/lab_keep.py --viewer
 
 What it shows  a brain's state is its knowledge, so a demonstration runs the SAVED brain, loaded, not a
                lucky live run.

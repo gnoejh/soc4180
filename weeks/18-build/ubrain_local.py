@@ -1,7 +1,6 @@
 """ubrain for this week: the course's one copy is vendor/ubrain/ (see ubrain_vendor.py there).
 
-Week 30 is written for ubrain 0.46 (the project starts); weeks 16-27 stay on 0.14,
-the release their numbers were measured on.
+Part II (weeks 16-18) is written for ubrain 0.46, the whole brain.
 """
 
 import sys

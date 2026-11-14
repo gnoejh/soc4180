@@ -1,4 +1,4 @@
-# Week 28 worksheet — Programming the whole brain
+# Week 16 worksheet — Programming the whole brain
 
 Name: ______________________   Date: __________
 
@@ -12,7 +12,7 @@ with 8 pictures and 4 actions (each action is right for two pictures).
 
 Prediction: ______  Reason: __________________________________________
 
-`uv run weeks/28-program/lab_program.py --step whole --pictures 8`    Measured: ______
+`uv run weeks/16-program/lab_program.py --step whole --pictures 8`    Measured: ______
 
 **A2.** With `--reverse` the right actions are shuffled at trial 1500. How many trials until a
 block of 500 earns 0.9 again? Which part of the brain relearns first? (Hint: `read("source")`.)
@@ -43,7 +43,7 @@ ______________________________________________________________________
 **C2.** The saved file is 10.1 MB for the small variant. Predict its size after 3000 ticks
 instead of 1000. Does a brain's file grow with experience?
 
-## D. The project proposal (one page, hand in at the start of week 29)
+## D. The project proposal (one page, hand in at the start of week 17)
 
 1. **The question** — about the brain in the G1.
 2. **The prediction**, written now, with a number and its reason (a law, an earlier week).

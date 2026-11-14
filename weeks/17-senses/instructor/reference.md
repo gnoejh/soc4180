@@ -1,4 +1,4 @@
-# Week 29 — reference answers (measured 2026-11-15, ubrain 0.46.0.dev2, the vendored body 4815eedf56d0)
+# Week 17 — reference answers (measured 2026-11-15, ubrain 0.46.0.dev2, the vendored body 4815eedf56d0)
 
 Every number below is from a run of `lab_sense.py`.
 

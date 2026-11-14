@@ -1,12 +1,12 @@
 """lab_sense: the whole brain takes the G1's body -- its streams, its senses, and what each is.
 
-    uv run weeks/29-senses/lab_sense.py --step brace          # the twin: the same pushes, heard and unheard
-    uv run weeks/29-senses/lab_sense.py --step push           # which way was it pushed? (a detector)
-    uv run weeks/29-senses/lab_sense.py --step contact        # the feet's forces (privileged)
-    uv run --extra vision weeks/29-senses/lab_sense.py --step vision   # the head camera through CLIP
-    uv run weeks/29-senses/lab_sense.py --step brace --viewer # watch it
+    uv run weeks/17-senses/lab_sense.py --step brace          # the twin: the same pushes, heard and unheard
+    uv run weeks/17-senses/lab_sense.py --step push           # which way was it pushed? (a detector)
+    uv run weeks/17-senses/lab_sense.py --step contact        # the feet's forces (privileged)
+    uv run --extra vision weeks/17-senses/lab_sense.py --step vision   # the head camera through CLIP
+    uv run weeks/17-senses/lab_sense.py --step brace --viewer # watch it
 
-Release 0.46 gives the whole brain the body's classes (week 28 ran the G1 on the walker profile):
+Release 0.46 gives the whole brain the body's classes:
   body.proprio  the body's proprioception: 70 numbers (IMU of torso and pelvis, 29 joint angles, 29 velocities)
   cue.tone      a sound it hears: the tone the experimenter plays before a push
   goal          the walk the program wants, (vx, vy, wz)
@@ -21,7 +21,7 @@ Release 0.46 gives the whole brain the body's classes (week 28 ran the G1 on the
   step contact  the feet's contact forces, asked for each tick (want_contact=True). PRIVILEGED: a real
                 humanoid has no foot force sensors; use them for a reward or an analysis.
   step vision   the G1 walks down the gallery with its head camera; every 10th tick a frame goes to
-                sense.vision through CLIP (week 26). The whole brain's salience gate reports what is NEW
+                sense.vision through CLIP. The whole brain's salience gate reports what is NEW
                 (read("novel")); the brain engages, and chooses, only on what is new or surprising.
 
 Options:
@@ -35,7 +35,7 @@ Options:
     --seed N        the push sides in step push
 
 Every run appends rows to results.csv (step, setting, measure, value).
-ubrain and the body are the course's local copy (week 29: release 0.46).
+ubrain and the body are the course's local copy (week 17: release 0.46).
 """
 
 from __future__ import annotations

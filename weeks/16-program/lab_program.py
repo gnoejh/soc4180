@@ -1,28 +1,27 @@
 """lab_program: programming the whole brain -- Brain(), streams, ticks, asking it, keeping it.
 
-    uv run weeks/28-program/lab_program.py                    # all four steps, headless
-    uv run weeks/28-program/lab_program.py --step whole       # one step: whole | ask | keep | g1
-    uv run weeks/28-program/lab_program.py --step g1 --viewer # the G1, watched in real time
+    uv run weeks/16-program/lab_program.py                    # all four steps, headless
+    uv run weeks/16-program/lab_program.py --step whole       # one step: whole | ask | keep | g1
+    uv run weeks/16-program/lab_program.py --step g1 --viewer # the G1, watched in real time
 
-Week 28 is the project's first week. Until now every lab built a CIRCUIT: a profile (walker,
-explorer, chooser ...) wired from chosen regions. `Brain()` is the WHOLE brain instead: every
-region on the route from the senses to the body, wired once, the same in every copy. A program
-does not wire it; it attaches STREAMS by PORT CLASS and ticks it.
+Week 16 opens Part II and the project. `Brain()` is the WHOLE brain: every region on the route
+from the senses to the body, wired once, the same in every copy. A program does not wire it; it
+attaches STREAMS by PORT CLASS and ticks it.
 
   step whole  a world of pictures and actions: picture p asks for action right[p], the right
               one pays 1. The brain sees the picture through a codec (any frozen model; here a
               fixed random one), gets the reward, chooses. The printout sets what it earned
-              beside the Go race's law on the values it learned (week 18's law, now inside
-              the whole brain).
+              beside the Go race's law on the values it learned (the striatum releases an
+              action in proportion to its value).
   step ask    the brain answers questions about itself before and after running:
               describe() (its classes, its observables, its guarantees), read() (an
               observable as the last tick left it), datasheet() (its capacities from the
               laws), health() (what it holds against its laws).
   step keep   save, load, continue: the loaded brain chooses exactly what the original
               would have, tick for tick.
-  step g1     the G1. In ubrain 0.45 the whole brain has no body classes yet (they come in
-              0.46, week 29), so the body runs through the walker profile (week 16): its
-              cerebellum predicts the body and its error falls as it walks.
+  step g1     the G1: ubrain.bodies.g1.G1 attaches the body's streams (body.proprio, goal,
+              command) to the same whole brain; its cerebellum predicts the body and its error
+              falls as it walks. Week 17 is all about the body.
 
 Options:
     --step S        whole | ask | keep | g1 | all (default all)
@@ -33,7 +32,7 @@ Options:
     --viewer        step g1 in real time with the viewer      --seed N     the world's seed
 
 Every run appends rows to results.csv (step, setting, measure, value).
-ubrain and the body are the course's local copy (week 28: release 0.45).
+ubrain and the body are the course's local copy (release 0.46).
 """
 
 from __future__ import annotations
@@ -73,7 +72,7 @@ def record(rows: list[tuple]) -> None:
 # ---------------------------------------------------------------- 1. the world and the brain
 def make_brain(a, seed: int = 1):
     """The whole brain with three streams: a sense through a codec, a reward, an action. The
-    codec is the frozen model itself (here a fixed random one; CLIP in week 27): the brain maps
+    codec is the frozen model itself (here a fixed random one; CLIP in week 17): the brain maps
     its codes onto its own sphere and keeps its own record of what it meets, at any variant."""
     camera = GaussianCodes(dim=64, seed=1)
     brain = Brain(variant=a.variant, rng=np.random.default_rng(seed))
@@ -193,26 +192,29 @@ def step_keep(a) -> None:
 
 # ---------------------------------------------------------------- 4. the G1
 def step_g1(a) -> None:
-    print("\n== step g1: the body, through the walker profile ==")
-    from ubrain import act_03, manifest_from_hello_03, profile, senses_from_state_03
+    print("\n== step g1: the whole brain walks the G1 ==")
     from ubrain.bodies import BodyClient
+    from ubrain.bodies.g1 import G1
     proc, port = ubrain_local.start_body(viewer=a.viewer)
     try:
         with BodyClient("127.0.0.1", port) as body:
-            manifest = manifest_from_hello_03(body.hello)
-            brain = Brain(profile("walker"), manifest)
+            g1 = G1(body.hello, cue=False)
+            brain = Brain(variant="small", rng=np.random.default_rng(1))
+            brain.attach("sense", "cue", codec=GaussianCodes(dim=32, seed=3))  # a whole brain needs a sense
+            brain.attach("action", n=2)                                       # ... and an action
+            g1.attach(brain)                                                  # body.proprio, goal, command
             state = body.reset(0)
             ticks = int(a.seconds * 50)
             falls, shown, rows = 0, [], []
             t0 = time.perf_counter()
             for t in range(ticks):
-                senses = senses_from_state_03(state) | {"goal": (a.vx, 0.0, 0.0)}
-                state = body.act(*act_03(manifest, brain.tick(senses)))
+                out = brain.tick(g1.streams(state, (a.vx, 0.0, 0.0)) | {"sense.cue": 0})
+                state = body.act(*g1.act(out))
                 if not state["upright"]:
                     falls += 1
                     state = body.reset(0)
                     brain.body_reset()
-                fw = brain.forward
+                fw = brain.regions.get("cerebellum.forward@body")
                 if (t + 1) % 50 == 0 and fw is not None and fw.stride_ratio is not None:
                     shown.append(round(100 * fw.stride_ratio, 1))
                 if a.viewer:

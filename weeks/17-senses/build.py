@@ -1,8 +1,8 @@
-"""Build slides.html: the week 29 deck as one offline page (arrow keys, F for full screen).
+"""Build slides.html: the week 17 deck as one offline page (arrow keys, F for full screen).
 
-    uv run python weeks/29-senses/build.py
+    uv run python weeks/17-senses/build.py
 
-The sources are deck.json and slides/<id>.html (week 16's format). The figure slide,
+The sources are deck.json and slides/<id>.html. The figure slide,
 numbers on every slide come from lab_sense.py's runs.
 This script only assembles. Speaker notes (<aside>) are kept but hidden; N shows them.
 It also writes slides_students.html, the same deck without notes. Both outputs are

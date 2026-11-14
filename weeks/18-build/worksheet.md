@@ -1,4 +1,4 @@
-# Week 30 worksheet — the project checklist
+# Week 18 worksheet — the project checklist
 
 Team: ______________________   Date: __________
 

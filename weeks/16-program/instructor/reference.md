@@ -1,4 +1,4 @@
-# Week 28 — reference answers (measured 2026-11-15, ubrain 0.45.0.dev1, seed 0)
+# Week 16 — reference answers (measured 2026-11-15, ubrain 0.46.0.dev2, seed 0)
 
 Every number below is from a run of `lab_program.py` or the two short checks noted.
 
@@ -53,6 +53,6 @@ values in it, not its size. (The small difference is compression.)
 
 ## D. The proposal
 
-Check that it has all five parts and that the prediction has a number and a reason. Steer
-projects that need the body's classes (proprioception, a push, foot contact) to wait for week
-29's release (0.46), or to use the walker or explorer profile this week.
+Check that it has all five parts and that the prediction has a number and a reason. Projects on
+the robot use the body's streams through `ubrain.bodies.g1.G1` (step g1 already does);
+week 17 covers them in full.

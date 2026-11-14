@@ -1,9 +1,9 @@
 """The course's one copy of ubrain, run inside this repository's environment.
 
-ubrain is not public yet and not on PyPI, so it is not in uv.lock; this folder carries
-a local copy of its wheels, shared by every Part II week:
+ubrain is not on PyPI, so it is not in uv.lock; this folder carries a local copy of its
+wheels (from github.com/untrained-brain/ubrain), shared by every Part II week:
 
-    vendor/ubrain/wheels/ubrain-0.14.0.dev1-cp312-*.whl   (the brain, compiled)
+    vendor/ubrain/wheels/ubrain-0.46.0.dev2-cp312-*.whl   (the whole brain, compiled)
     vendor/ubrain/g1_body/body, robots                    (the G1 body server)
 
 Each week imports it through a three-line `ubrain_local.py` beside its scripts. Two
@@ -45,15 +45,14 @@ def _missing(what: str) -> SystemExit:
         "Pull the repository again: vendor/ubrain/ should hold wheels/ and g1_body/.")
 
 
-#: the release weeks 16-27 were measured on; a week asks for another one by name
-DEFAULT_VERSION = "0.14.0.dev1"
+#: the one release Part II (weeks 16-18) is measured on
+DEFAULT_VERSION = "0.46.0.dev2"
 
 
 def load(version: str = DEFAULT_VERSION) -> None:
     """Make `import ubrain` work: unpack the matching wheel once, add it to sys.path.
-    `version` picks the release: weeks 16-27 use the default (their numbers were measured
-    on it); week 28 on ask for the release they were written for. A plain sort would pick
-    the newest wheel for every week, so the version is always named."""
+    `version` names the release (one release is vendored; naming it keeps a later second
+    release from being picked by a plain sort)."""
     if sys.version_info[:2] != (3, 12):
         raise SystemExit(f"ubrain's wheels here are built for Python 3.12; this is "
                          f"{platform.python_version()}. Run it with `uv run` from the repository.")

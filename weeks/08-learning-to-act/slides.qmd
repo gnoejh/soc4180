@@ -92,6 +92,247 @@ $$s_t \;\xrightarrow{\;{\color{#3b7dd8}{\pi}}\;}\; {\color{#e8743b}{a_t}} \;\xri
 
 ---
 
+## Every algorithm is one loop {.smaller}
+
+The table sorted the methods. The next ten slides give each one's **algorithm**: pseudocode you could type in, its update rule, and what it did in this course. Every algorithm has the same shape:
+
+```text
+initialise what is learned            # V, Q, θ, a plan, or a copy
+repeat:
+    1. get experience                 # sweep a model / act in the world / ask an expert
+    2. compute a target               # what the learned number should have been
+    3. move the learned thing a step toward the target
+```
+
+The next slide fills in the three lines for every method.
+
+---
+
+## The three lines, for each method {.smaller}
+
+| method | 1. experience | 2. target | 3. update |
+| --- | --- | --- | --- |
+| value iteration | every state, from ${\color{#c0392b}{P}}$ | $\max_a [R + \gamma \sum P\,V]$ | overwrite $V(s)$ |
+| Q-learning / SARSA | one step $(s, a, r, s')$ | $r + \gamma\,\max_{a'} Q$ / $r + \gamma\,Q(s', a')$ | $Q \mathrel{+}= \alpha\,(\text{target} - Q)$ |
+| DQN | a minibatch from a replay buffer | $r + \gamma \max_{a'} Q_{w^-}$ | gradient step on $w$ |
+| REINFORCE | whole episodes from ${\color{#3b7dd8}{\pi_\theta}}$ | the return $G$ | $\theta \mathrel{+}= \eta\,\nabla\log\pi\,(G - b)$ |
+| parameter search ★ | pairs of episodes, $\theta \pm \sigma\varepsilon$ | $G^+ - G^-$ | $\theta \mathrel{+}= \eta\,(G^+ - G^-)\,\varepsilon / 2\sigma$ |
+| PPO / SAC | batches of steps (on / off policy) | advantage $A$ / soft $Q$ | gradient steps on two networks |
+| MPPI | $K$ imagined futures from the simulator | $-$cost | a weighted average plan |
+| behaviour cloning | the expert's (state, action) | the expert's action | least squares |
+
+---
+
+## Algorithm 1: value iteration (week 7) {.smaller}
+
+```text
+input: P(s'|s,a), R(s,a), γ, tolerance          # the model, written out as tables
+V(s) ← 0 for every state s
+repeat:                                          # one SWEEP
+    for every state s:
+        for every action a:
+            Q(s,a) ← R(s,a) + γ · Σ_s' P(s'|s,a) · V(s')
+        V_new(s) ← max_a Q(s,a)
+    Δ ← max_s |V_new(s) − V(s)|
+    V ← V_new
+until Δ < tolerance
+π*(s) ← argmax_a Q(s,a)                          # act greedily on the converged values
+```
+
+$$V(s) \;\leftarrow\; \max_{\color{#e8743b}{a}}\Big[{\color{#2a9d5c}{R(s,a)}} + \gamma \sum_{s'} {\color{#c0392b}{P(s' \mid s,a)}}\,V(s')\Big] \qquad \text{(the Bellman optimality equation, used as an update)}$$
+
+- **Converges because each sweep shrinks the error by $\gamma$**: week 7 measured the ratio 0.9900 at $\gamma = 0.99$, 1376 sweeps on 81 × 81 states.
+- **Exact, and needs no episodes** — but only because ${\color{#c0392b}{P}}$ and ${\color{#2a9d5c}{R}}$ were tables. MuJoCo can be *run*, not read: every method after this one gets rid of ${\color{#c0392b}{P}}$.
+
+---
+
+## Algorithm 2: Q-learning (week 7b) — off-policy {.smaller}
+
+```text
+Q(s,a) ← 0 for every s, a;   ε ← 1
+for each episode:
+    s ← reset()
+    until the episode ends:
+        a ← random action with probability ε, else argmax_a Q(s,a)    # ε-greedy: explore
+        s', r, done ← step(a)                                         # ONE sample replaces P
+        target ← r                          if done
+                 r + γ · max_a' Q(s',a')    otherwise                 # the BEST next action
+        Q(s,a) ← Q(s,a) + α · (target − Q(s,a))
+        s ← s'
+    ε ← max(0.05, 0.9995 · ε)                                         # explore less as it learns
+```
+
+$$Q(s,{\color{#e8743b}{a}}) \;\leftarrow\; Q(s,{\color{#e8743b}{a}}) + \alpha\,\Big[{\color{#2a9d5c}{r}} + \gamma\,\max_{a'} Q(s',a') - Q(s,{\color{#e8743b}{a}})\Big]$$
+
+- Value iteration's line with the sum over ${\color{#c0392b}{P}}$ replaced by **one sampled** $s'$, and a step $\alpha$ to average the samples.
+- **Off-policy**: the target's $a'$ is the greedy one, not the one the ε-greedy robot will actually take. It learns $\pi^*$ while acting at random (week 7b: FrozenLake 0.737, equal to value iteration).
+
+---
+
+## Algorithm 3: SARSA (week 7b) — on-policy {.smaller}
+
+```text
+Q(s,a) ← 0;   ε ← 0.1
+for each episode:
+    s ← reset();   a ← ε-greedy(Q, s)
+    until the episode ends:
+        s', r, done ← step(a)
+        a' ← ε-greedy(Q, s')                     # choose the next action FIRST
+        target ← r                  if done
+                 r + γ · Q(s',a')   otherwise    # ...and use it in the target
+        Q(s,a) ← Q(s,a) + α · (target − Q(s,a))
+        s, a ← s', a'                            # and then actually take it
+```
+
+$$Q(s,{\color{#e8743b}{a}}) \;\leftarrow\; Q(s,{\color{#e8743b}{a}}) + \alpha\,\Big[{\color{#2a9d5c}{r}} + \gamma\,Q(s',{\color{#e8743b}{a'}}) - Q(s,{\color{#e8743b}{a}})\Big]$$
+
+- One line differs from Q-learning: the target uses **the $a'$ the robot will take** (State, Action, Reward, State', Action' = SARSA). It learns the value of the ε-greedy policy itself, mistakes included.
+- Week 7b's cliff: SARSA walks the **safe** path (17–19 steps, falls 7–14 of 200); Q-learning walks the **edge** (13 steps, falls 47–51), because its target pretends there will be no random step.
+
+---
+
+## Algorithm 4: DQN — Q-learning with a network (named only) {.smaller}
+
+```text
+Q_w: a network, state → one value per action;   w⁻ ← w   (a frozen copy);   buffer D ← empty
+for each step:
+    a ← ε-greedy on Q_w(s, ·);   s', r, done ← step(a);   D.add(s, a, r, s', done)
+    sample a minibatch of (s, a, r, s', done) from D               # old data: off-policy
+    y ← r + γ · (1 − done) · max_a' Q_w⁻(s', a')                    # target from the FROZEN copy
+    w ← w − lr · ∇_w  mean (Q_w(s,a) − y)²                          # regression toward y
+    every C steps: w⁻ ← w
+```
+
+$$\min_w \;\mathbb{E}_{(s,a,r,s') \sim D}\Big[\big(Q_w(s,{\color{#e8743b}{a}}) - ({\color{#2a9d5c}{r}} + \gamma \max_{a'} Q_{w^-}(s',a'))\big)^2\Big]$$
+
+- The table becomes a network so states never seen can still be valued (Atari from pixels, 2015).
+- Two fixes make it stable: the **replay buffer** (reuses data, breaks the correlation between consecutive steps) and the **target network** $w^-$ (the target does not move with every step).
+- **Not on the G1**: $\max_{a'}$ needs a list of actions; 12 continuous leg actions have none.
+
+---
+
+## Algorithm 5: REINFORCE — the policy gradient {.smaller}
+
+```text
+θ ← initial parameters of a random policy π_θ(a|s)
+repeat:
+    run N episodes, sampling a_t ~ π_θ(·|s_t); record s_t, a_t, r_t
+    for each episode:  G ← Σ_t γ^t r_t                       # (or the return from t onward)
+    b ← mean of the N returns                                # a baseline: lowers the noise
+    ĝ ← (1/N) Σ_episodes Σ_t ∇_θ log π_θ(a_t|s_t) · (G − b)
+    θ ← θ + η · ĝ                                            # climb J
+```
+
+$$\nabla_{\color{#3b7dd8}{\theta}} J = \mathbb{E}\Big[\sum_t \nabla_{\color{#3b7dd8}{\theta}} \log {\color{#3b7dd8}{\pi_\theta}}({\color{#e8743b}{a_t}}\mid s_t)\,\big({\color{#2a9d5c}{G}} - b\big)\Big] \qquad \text{(derived on the slides below)}$$
+
+- **No values, no ${\color{#c0392b}{P}}$, any action space**: the policy is the learned thing. On-policy: each batch is used once and thrown away.
+- Measured: CartPole 60 → 489 with **8 episodes per update** (one per update: 260 and 88 on two runs); week 7's MDP 12.7 → 70.8 against the optimum 72.1.
+- On the G1 its **action noise** makes every exploring episode fall (8 of 8): the slides below show why, and the fix.
+
+---
+
+## Algorithm 6: parameter-space search — today's `lab.py` ★ {.smaller}
+
+```text
+θ ← 0                                                    # hold the crouch
+repeat for each update:
+    draw PAIRS pushes p_i (60–80 N, left or right) and PAIRS directions ε_i ~ N(0, 1)
+    for each i:
+        G⁺_i ← return of ONE episode with gain θ + σ ε_i on push p_i     # no noise inside
+        G⁻_i ← return of ONE episode with gain θ − σ ε_i on push p_i     # the same push
+    ĝ ← mean_i (G⁺_i − G⁻_i) · ε_i / (2σ)
+    θ ← θ + η · ĝ
+```
+
+$$\hat g = \frac{1}{N}\sum_i \frac{\big({\color{#2a9d5c}{G^+_i}} - {\color{#2a9d5c}{G^-_i}}\big)\,{\color{#8e44ad}{\varepsilon_i}}}{2{\color{#8e44ad}{\sigma}}}, \qquad {\color{#3b7dd8}{\theta}} \leftarrow {\color{#3b7dd8}{\theta}} + \eta\,\hat g \qquad (\sigma = 0.5,\ \eta = 0.01,\ N = 8)$$
+
+- REINFORCE with the randomness moved **from the action to the parameter**: one steady rule per episode, so a good try stands.
+- Also called evolution strategies (OpenAI ES, 2017) or random search (ARS, 2018); on a few parameters it is hard to beat.
+- Measured: $\theta$ 0 → 1.82 / 2.00 / 1.53 in 20 updates (seeds 0–2, ~50 s).
+
+---
+
+## Algorithm 7: PPO — actor–critic, on-policy (week 9) {.smaller}
+
+```text
+actor π_θ(a|s) (a network, Gaussian actions);  critic V_φ(s) (a second network)
+repeat:
+    run π_θ for T steps in N environments; keep s, a, r, and log π_old(a|s)
+    advantages Â_t ← GAE from r and V_φ (how much better than the critic expected)
+    returns   R̂_t ← Â_t + V_φ(s_t)
+    for K epochs, over minibatches of that one batch:
+        ρ ← π_θ(a|s) / π_old(a|s)
+        θ ← θ + lr · ∇_θ mean[ min(ρ Â, clip(ρ, 1−0.2, 1+0.2) Â) ] (+ a small entropy bonus)
+        φ ← φ − lr · ∇_φ mean[ (V_φ(s) − R̂)² ]
+```
+
+$$L({\color{#3b7dd8}{\theta}}) = \mathbb{E}_t\Big[\min\big(\rho_t\,{\color{#2a9d5c}{\hat A_t}},\ \operatorname{clip}(\rho_t, 1-\epsilon, 1+\epsilon)\,{\color{#2a9d5c}{\hat A_t}}\big)\Big], \qquad {\color{#2a9d5c}{\hat A_t}} = \sum_k (\gamma\lambda)^k\big(r_{t+k} + \gamma V(s_{t+k+1}) - V(s_{t+k})\big)$$
+
+- REINFORCE plus two parts: the **critic** replaces the batch-mean baseline with $V(s)$ for each state; the **clip** lets one batch be reused for $K$ small, safe steps.
+- The default for robot locomotion. Week 9's shipped policies: 3 M steps each, 16 processes, ~16 min on 36 cores.
+
+---
+
+## Algorithm 8: SAC — actor–critic, off-policy (named only) {.smaller}
+
+```text
+actor π_θ (Gaussian);  critics Q_1, Q_2 and slow copies Q̄_1, Q̄_2;  buffer D;  temperature α
+for each step:
+    a ~ π_θ(·|s);   s', r, done ← step(a);   D.add(s, a, r, s', done)
+    sample a minibatch from D                                      # old data: off-policy
+    a' ~ π_θ(·|s')
+    y ← r + γ (1 − done) · [ min_i Q̄_i(s', a') − α log π_θ(a'|s') ]   # soft target
+    Q_i ← minimise (Q_i(s, a) − y)²            for i = 1, 2
+    θ  ← minimise  α log π_θ(ã|s) − min_i Q_i(s, ã),   ã ~ π_θ(·|s)    # the actor climbs Q
+    Q̄_i ← 0.005 · Q_i + 0.995 · Q̄_i                                # slowly follow
+```
+
+$$J({\color{#3b7dd8}{\pi}}) = \mathbb{E}\Big[\sum_t \gamma^t\big({\color{#2a9d5c}{r_t}} + \alpha\,\mathcal{H}({\color{#3b7dd8}{\pi}}(\cdot\mid s_t))\big)\Big] \qquad \text{(reward plus a bonus for staying random)}$$
+
+- DQN's ideas (buffer, slow target) for **continuous** actions: the actor replaces $\max_{a'}$.
+- **Off-policy reuses every sample many times**: far fewer steps than PPO, but each step costs more and it is harder to run in thousands of parallel simulators — one reason GPU locomotion training mostly uses PPO.
+
+---
+
+## Algorithm 9: MPPI — planning with the simulator (week 10) {.smaller}
+
+```text
+U ← zeros(H knots, 12 leg targets)                         # the current plan
+every decision (40 ms):
+    x ← the simulator's full state now                      # MODEL-BASED: restart from here
+    for k = 1..K:
+        E_k ~ N(0, σ²) of shape (H, 12)   (E_1 = 0: keep the old plan as a candidate)
+        J_k ← cost of rolling out U + E_k from x            # K imagined futures, in parallel
+    w_k ← exp(−(J_k − min J) / λ);   w ← w / Σ w             # cheap futures weigh most
+    U ← Σ_k w_k (U + E_k)                                   # the weighted average plan
+    apply U[0];   shift U one knot left, append zeros       # then plan again
+```
+
+$$U \;\leftarrow\; \sum_{k} w_k\,(U + E_k), \qquad w_k = \frac{\exp(-J_k/\lambda)}{\sum_j \exp(-J_j/\lambda)}$$
+
+- **Nothing is learned and kept**: it re-plans every 40 ms from the true state. It needs a simulator it can restart, which the G1 in MuJoCo has (`mj_getState`, `rollout`).
+- $\lambda$ small: the best sample wins; $\lambda$ large: a plain average. Week 10: it survives a 150 N shove by stepping (the feet move 3.04 m).
+
+---
+
+## Algorithm 10: behaviour cloning and DAgger (week 10) — no reward {.smaller}
+
+```text
+BEHAVIOUR CLONING                                   DAgger (Dataset Aggregation)
+D ← (observation, action) pairs                     D ← the expert's pairs;  π ← fit(D)
+     from the expert's own runs                     repeat:
+π ← argmin_π Σ_D |π(o) − a_expert|²                     run π (the student) — or mix in the expert
+     (week 10: a linear least-squares fit)               at every state it visits, ASK the expert: a*
+                                                        D ← D ∪ {(o, a*)};   π ← fit(D)
+```
+
+$$\min_{W,\,b}\ \sum_{(o,\,a) \in D} \big\lVert W o + b - {\color{#e8743b}{a_{\text{expert}}}}\big\rVert^2 \qquad \text{(supervised learning: no } {\color{#2a9d5c}{r}}\text{, no } J\text{)}$$
+
+- Cloning only sees states the **expert** visited; one small mistake leads somewhere it never saw. DAgger fixes that by labelling the student's own states.
+- Week 10's rule, measured: the expert's action must be **a function of what the student sees**. Copy week 8's ankle rule from the tilt: as good as the expert. Copy MPPI from 29 inputs: the fit misses 0.188 of a 0.202 rad spread, because MPPI's action is mostly its random samples, and the copy falls.
+
+---
+
 ## Why the G1 pushes us toward policy methods {.smaller}
 
 ::: {style="font-size: 0.85em"}

@@ -21,7 +21,10 @@ reward. Layer 5: learning.
 **It opens with a map of RL** (five slides of tables): the problem and its vocabulary on the G1;
 four questions that sort every method (value- or policy-based, model-based or free, on- or
 off-policy, table or function); ten methods sorted by them, each with the week it appears in (★
-today's); why the G1 pushes toward policy methods; and the route through weeks 7–11. Weeks 9–11
+today's); **the algorithms** (one loop -- experience, target, update -- then one slide per
+method: pseudocode, the update rule, and what it measured in this course: value iteration,
+Q-learning, SARSA, DQN, REINFORCE, parameter-space search, PPO, SAC, MPPI, behaviour cloning and
+DAgger); why the G1 pushes toward policy methods; and the route through weeks 7–11. Weeks 9–11
 open with the same route, their own row in bold.
 
 Then: from week 7's MDP to a policy with a parameter and its return J(θ); the policy gradient

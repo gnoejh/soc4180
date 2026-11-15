@@ -97,7 +97,10 @@ course package only, no ubrain, no GPU needed. Old week numbers in the 00-07b de
 **The RL map (user, 2026-11-15: "summary of overall RL methods must appear with tables" at the
 start of 08).** Week 8 opens with five map slides before its task: the RL problem and vocabulary,
 four sorting questions (value/policy/actor-critic, model-based/free, on/off-policy, table/function),
-"The methods, sorted" (value iteration ... behaviour cloning, each with its week), why the G1 pushes
+"The methods, sorted" (value iteration ... behaviour cloning, each with its week), then (user,
+2026-11-15: "RL tables exists but no algorithms") 12 algorithm slides: "Every algorithm is one loop",
+"The three lines, for each method", and "Algorithm 1..10" (pseudocode in a ```text block, the update
+equation, course numbers), then why the G1 pushes
 toward policy methods, and the route through weeks 7-11. Weeks 9-11 each open with "Where this week
 sits on the map" (the route table, that week's row bold). Each deck also has line-by-line slides
 (`| code | what it does | why |`) for every major function of its `lab.py`; tables too tall for one

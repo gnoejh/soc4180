@@ -1030,7 +1030,7 @@ two networks, and only one of them goes onto the robot:
 This is **asymmetric actor-critic**: asymmetric because the two networks get
 different inputs (the drawing two slides back). The critic's better view makes
 its scores more accurate, which makes the actor learn faster; the actor stays
-deployable. You will meet it again in Week 10, where production G1 training
+deployable. You will meet it again in Week 9, where production G1 training
 does exactly this.
 
 The discipline starts today: *what does the robot know, and how does it know it?*

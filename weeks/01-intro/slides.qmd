@@ -27,7 +27,7 @@ By week 4 you will make a humanoid walk using nothing but geometry and physics
 you derived yourself.
 
 From week 7 on you will replace hand-written control with policies the robot
-learns on its own (weeks 8–10 train them, week 12 makes one survive pushes).
+learns on its own (weeks 8–9 train them, week 9 makes one survive pushes).
 
 Today: why simulation, and how to drive one — the file that describes a robot
 (**MJCF**), the arrays it compiles into (`qpos`, `qvel`), and the loop that
@@ -81,7 +81,7 @@ fall over:
 - Sensors are noiseless in sim and never noiseless in reality
 
 The distance between simulation and reality is the **sim-to-real gap**. We return
-to it in week 12.
+to it in week 9.
 
 ---
 
@@ -175,7 +175,7 @@ except ImportError:
     import soc4180
 ```
 
-Versions are pinned, so the robot you see today is the robot you see in week 15.
+Versions are pinned, so the robot you see today is the robot you see in your term project (weeks 12–15).
 
 ---
 
@@ -970,7 +970,7 @@ print(f"   time {d.time}")
 
 `model` is the blueprint; `data` is one robot, at one instant, in one universe.
 
-**One `model` can serve many `data`.** That is not a curiosity — it is how week 10
+**One `model` can serve many `data`.** That is not a curiosity — it is how week 9
 runs thousands of robots at once on a GPU: one description, thousands of moments.
 
 ---
@@ -996,7 +996,7 @@ what to write into `data.ctrl` before each step:
 
 ```python
 while not done:
-    data.ctrl[:] = my_controller(data)   # weeks 2-6: maths.  weeks 7-10: a policy.
+    data.ctrl[:] = my_controller(data)   # weeks 2-6: maths.  weeks 7-11: a policy.
     mujoco.mj_step(model, data)
 ```
 
@@ -1374,7 +1374,7 @@ A 29-joint humanoid, tens of times faster than reality, on one core of whatever
 machine you happen to be on. A real G1 falls over in real time, once, and then
 needs repairing.
 
-Hold on to your number. In week 10 you will want **150 million** steps, and this
+Hold on to your number. In week 9 you will want **150 million** steps, and this
 is the figure that decides whether that takes an afternoon or a month.
 
 ---
@@ -1408,7 +1408,7 @@ answer one question —
 
 > what should the motors do, at each instant, so that it does not fall?
 
-Weeks 2–6 answer it with mathematics. Weeks 7–15 answer it with learning.
+Weeks 2–6 answer it with mathematics. Weeks 7–11 answer it with learning (and planning), and the term project asks it of you.
 
 ---
 
@@ -1682,7 +1682,7 @@ gravity as flags: compile → print → simulate → replay, in six numbered ste
 8. Make two `MjData` from the one `model`. Step one 500 times and leave the other
    alone. Confirm `model` is unchanged and the two `data` disagree — this is the
    week-10 trick in miniature.
-9. From your measured steps-per-second, work out how long week 10's **150 million**
+9. From your measured steps-per-second, work out how long week 9's **150 million**
    steps would take on this machine, in hours. Then read the week-10 title again.
 10. Watch `data.ncon` during the fall — print it every 100 steps. When does it
     exceed 8, and which body has just hit the floor?

@@ -1,12 +1,12 @@
-"""A small embodied agent: instructions -> a plan of skills -> physics -> a check that each one worked. Week 15.
+"""A small embodied agent: instructions -> a plan of skills -> physics -> a check that each one worked. Week 11.
 
 Needs torch (``uv sync --extra rl``) and a GL backend. Not imported by
 ``soc4180`` itself: ``from soc4180 import agent``.
 
 The pieces, each small enough to read:
 
-- ``Body``                 the G1 in the four-ball scene (weeks 14-15), standing on its servos
-- ``Eyes``                 week 15's HeatNet: words + a head-camera picture -> where
+- ``Body``                 the G1 in the four-ball scene (week 11), standing on its servos
+- ``Eyes``                 week 11's HeatNet: words + a head-camera picture -> where
 - skills                   ``look``, ``raise_arm``, ``lower_arm``, ``search`` -- each runs the
                            physics and returns a ``Result`` saying whether it worked,
                            judged by a sensor, not by the skill's own belief

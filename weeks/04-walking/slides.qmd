@@ -534,7 +534,7 @@ print(f"CoM at x = {x0} m moving {v0} m/s:  capture point = x + v/omega = {xi:.4
 
 A body moving at 0.3 m/s needs a foot **7.4 cm ahead** to stop in one step. A
 G1 foot reaches 12 cm in front of the ankle, so in this model the ankle alone
-could just about absorb it; twice the speed needs 15 cm and a step. Week 11's
+could just about absorb it; twice the speed needs 15 cm and a step. Week 10's
 planner found stepping by search; this is the reason it had to.
 
 ---
@@ -952,7 +952,7 @@ happen with flat feet — and the theory is right; the assumptions are what fail
 | Perfectly rigid position control | Uses servos of finite stiffness that sag |
 
 It walks anyway. **A model does not have to be true to be useful — it has to be
-wrong in ways that do not matter yet.** Weeks 11 and 12 are where they start to matter.
+wrong in ways that do not matter yet.** Weeks 9 and 10 are where they start to matter.
 
 ---
 
@@ -971,8 +971,8 @@ Consequences you can see in the data:
   re-deriving
 
 Every one of these is a reason the field moved to feedback — capture-point
-stepping, model-predictive control (week 11) and learned policies (weeks
-8–13). **Not because the mathematics is wrong** — you just watched it work —
+stepping, model-predictive control (week 10) and learned policies (weeks
+8–10). **Not because the mathematics is wrong** — you just watched it work —
 but because a plan made in advance is brittle outside the conditions it was
 made for.
 

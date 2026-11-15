@@ -1,7 +1,7 @@
 """Model-predictive control by sampling (MPPI), with MuJoCo itself as the model.
 
-Week 11. Every controller so far was either written down in advance (weeks
-4-5) or learned in advance (weeks 8-9). MPPI decides at run time instead: at
+Week 10. Every controller so far was either written down in advance (weeks
+4-5) or learned in advance (week 8). MPPI decides at run time instead: at
 every decision it copies the current state into the simulator, tries K
 perturbed futures, scores each with a cost function, and executes the first
 step of their cost-weighted average. Then it throws the plan away and does

@@ -1,14 +1,14 @@
 """A camera on the G1, coloured balls to look at, and the small networks that read the pictures.
 
-Weeks 14 and 15. Needs torch (``uv sync --extra rl``) and a GL backend to
+Week 11. Needs torch (``uv sync --extra rl``) and a GL backend to
 render. Not imported by ``soc4180`` itself: ``from soc4180 import vision``.
 
 - ``camera_model(balls)``        the G1 scene + a camera in the head + mocap balls
 - ``place_ball`` / ``ball_direction``   put a ball at (azimuth, elevation, distance)
                                   from the camera, and read the true direction back
 - ``render_dataset``             pictures and labels, rendered from the head camera
-- ``BallNet``                    pixels -> (azimuth, elevation) of the one ball (week 14)
-- ``Vocab``, ``HeatNet``         words + pixels -> a heat map of WHERE the named ball is (week 15)
+- ``BallNet``                    pixels -> (azimuth, elevation) of the one ball (week 11)
+- ``Vocab``, ``HeatNet``         words + pixels -> a heat map of WHERE the named ball is (week 11)
 
 Angles are radians, azimuth positive to the robot's LEFT, elevation positive
 UP, both measured from the camera's optical axis. The camera looks along the
@@ -32,7 +32,7 @@ from torch import nn
 __all__ = ["COLOURS", "BallNet", "HeatNet", "Vocab", "ball_direction", "camera_model",
            "cell_of", "place_ball", "render_dataset", "uv_of", "angles_of_uv", "heat_to_uv"]
 
-#: The balls of weeks 14-15, name -> RGB.
+#: The balls of week 11, name -> RGB.
 COLOURS = {"red": (0.9, 0.1, 0.1), "green": (0.1, 0.8, 0.1), "blue": (0.1, 0.2, 0.9), "yellow": (0.9, 0.85, 0.1)}
 
 CAMERA = "head"

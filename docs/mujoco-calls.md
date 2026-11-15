@@ -27,7 +27,7 @@ Two conventions run through everything:
 | Joint limits | `model.jnt_range[j]` | 03 `lab_connected.py --joints` (ranges in degrees) |
 | Physics options | `model.opt.timestep`, `model.opt.gravity`, `model.opt.disableflags` | 00 `stack.py`, 01 `mjcf_run.py` |
 | Switch every servo off | `model.opt.disableflags \|= mjDSBL_ACTUATION` | 00 `stack.py --layer limp` |
-| Many robots in one model | `MjSpec.from_string`, `MjSpec.from_file(str)`, `worldbody.add_frame()`, `frame.attach_body(child.worldbody.first_body(), "r0_", "")`, `compile()` | 10 `many.py`, `lab_many.py` |
+| Many robots in one model | `MjSpec.from_string`, `MjSpec.from_file(str)`, `worldbody.add_frame()`, `frame.attach_body(child.worldbody.first_body(), "r0_", "")`, `compile()` | (old week 10 `many.py`, removed 2026-11-15; git 7e79ce0) |
 
 ## Kinematics: positions from angles
 
@@ -89,39 +89,31 @@ Two conventions run through everything:
 | A table learned from samples | `soc4180.tabular.Learner(env, algo="q" or "sarsa")`: `env.reset(seed)`, `env.step(a)` only, never `P`; `value_iteration(env.unwrapped.P, ...)` for the exact answer on toy-text | 07b `qlearn.py`, `lab_tables.py` |
 | A MuJoCo env through gymnasium | `gym.make("InvertedPendulum-v5")`; its `unwrapped.model` / `unwrapped.data` go straight into `launch_viewer(passive=True)`, so ctrl + right-drag pushes the pole the table is balancing | 07b |
 | A grid world drawn in MuJoCo | MJCF built as a string (one box geom per tile, a `mocap` body for the agent); move it with `data.mocap_pos`, then `mj_forward` before drawing | 07b `lab_tables.py` |
-| One decision | `obs, r, terminated, truncated, info = env.step(a)`; `info` carries every reward term | 07, 08, 09 |
+| One decision | `obs, r, terminated, truncated, info = env.step(a)`; `info` carries every reward term | 07, 08 |
 | The week 4 walker as actions | `soc4180.envs.walker_actions(env, controller, t)` | 07 |
-| A policy and its sampling | `PPO("MlpPolicy", env, policy_kwargs=dict(log_std_init=…))`, `predict(obs, deterministic=True)`, `policy.log_std`; a sample is `mean + exp(log_std) · N(0, 1)`, clipped | 08 `train.py`, `lab_train.py` |
-| Training with progress | `agent.learn(total_timesteps, callback=BaseCallback)`, `ep_info_buffer` | 08, 09 |
-| Change the reward without touching the env | `gym.Wrapper.step` adding a term; potential-based `γΦ(s′) − Φ(s)` | 09 `shape.py`, `lab_reward.py` |
-| Throughput | `multiprocessing.get_context("spawn").Pool(n).map(...)`; robot-steps per second | 10 `many.py` |
+| A policy with one parameter, learned from reward | `env.reset`, `env.step`; a shove through `data.xfrc_applied[torso, 1]`; two tries `theta ± sigma·eps` on the same push, `theta += lr·mean((G+ − G−)·eps)/(2 sigma)` | 08 `lab.py` |
+| Load a trained policy and act with it | `PPO.load(path, device="cpu")`, `predict(obs, deterministic=True)` | 09 `lab.py` |
+| Change the world per episode | `geom_friction[:, 0]`, `body_mass[torso]`, `actuator_gainprm[:, 0]` with `actuator_biasprm[:, 1:3]`; `soc4180.envs.G1PushEnv(world=...).set_world(...)` | 09 `lab.py` |
+| A shove of exact size | `G1PushEnv.push_force`, `push_time`; or `data.xfrc_applied[torso, :2]` for 0.2 s | 08, 09, 10 `lab.py` |
 
-## Planning (week 11)
-
-| Idea | Call / array | Week, script |
-| --- | --- | --- |
-| Add sensors to a model before compiling | `spec.add_sensor(name=, type=mjSENS_FRAMEPOS / mjSENS_SUBTREECOM, objtype=mjOBJ_SITE / mjOBJ_BODY, objname=)`, `spec.compile()`; `soc4180.planning.planning_model()` | 11 `plan.py` step 1 |
-| The whole state as one vector | `mj_stateSize(model, mjSTATE_FULLPHYSICS)`, `mj_getState(model, data, state, spec)` | 11 `MPPI.plan` step 1 |
-| Many futures, in parallel threads | `mujoco.rollout.rollout(model, [MjData] * nthread, states (K × nstate), ctrl (K × T × nu), persistent_pool=True)` → states (K × T × nstate), sensordata (K × T × nsensordata) | 11 `planning.MPPI`, `plan.py` |
-| Read a sensor out of a rollout | `model.sensor_adr[mj_name2id(model, mjOBJ_SENSOR, name)]` | 11 `planning.Rollouts` |
-| MPPI | `planning.MPPI(model, ctrl0, actuators, samples, horizon, knot, sigma, temperature)`, `.cost = fn(Rollouts) -> (K,)`, `.plan(data)` | 11 `plan.py`, `lab_plan.py` |
-| A wrong model on purpose | the planner's own `model.body_mass[torso] += kg`; the world unchanged | 11 `plan.py --model-mass` |
-
-## Robustness, imitation, pixels, language (weeks 12–15)
+## Planning and copying (week 10)
 
 | Idea | Call / array | Week, script |
 | --- | --- | --- |
-| Change the world per episode | `geom_friction[:, 0]`, `body_mass[torso]`, `actuator_gainprm[:, 0]` with `actuator_biasprm[:, 1:3]`; `soc4180.envs.G1PushEnv(world=RANDOM_WORLD).set_world(...)` | 12 `robust.py` |
-| A shove | `data.xfrc_applied[torso, :2]` for 0.2 s (`G1PushEnv.push_force`, `push_time`) | 11, 12, 13 |
-| Train on many processes, save, load | `SubprocVecEnv`, `VecMonitor`, `PPO(..., log_std_init=-2)`, `agent.save`, `PPO.load(path, device="cpu")` | 12 `robust.py --train` |
-| Demonstrations, cloning, DAgger | `soc4180.imitation.walker_demos`, `policy_demos`, `Student.fit`, `dagger`, `shove_test`, `walk` | 13 `imitate.py`, `lab_imitate.py` |
-| A camera on a body | `spec.body("torso_link").add_camera(name=, pos=, xyaxes=, fovy=)`; MuJoCo cameras look down their own −z | 14 `vision.camera_model` |
-| A target you move by hand | `spec.worldbody.add_body(mocap=True)`, `data.mocap_pos[i]`, then `mj_forward` to move its body; `contype = conaffinity = 0` | 14, 15 |
-| What the camera sees | `data.cam_xpos`, `data.cam_xmat`; `Renderer.update_scene(data, camera="head")`, `render()` | 14 `look.py`, 15 `ground.py` |
-| Change colours and lights | `model.geom_rgba[g]`, `model.light_diffuse` (restore them after) | 14 `render_dataset` |
-| A picture in the viewer's corner | `viewer.set_images([(mujoco.MjrRect(left, bottom, w, h), image)])`, `clear_images()` (rows bottom-up: `np.flipud`) | 14 `lab_look.py` |
-| An agent's skills and checks | `soc4180.agent.Body`, `Eyes`, `parse`, `run`, `SKILLS` | 15 `lab_agent.py` |
-| A lab game's referee | `soc4180.game.read_answers` (data, `...` → `Blank`), `need`, `Problem`, `Attempt`, `grade_headless`, `run_viewer`, `scorer_code` | 11–15 `lab_*.py` |
+| Add sensors to a model before compiling | `spec.add_sensor(name=, type=mjSENS_FRAMEPOS / mjSENS_SUBTREECOM, objtype=mjOBJ_SITE / mjOBJ_BODY, objname=)`, `spec.compile()`; `soc4180.planning.planning_model()` | 10 `lab.py` (`World`) |
+| The whole state as one vector | `mj_stateSize(model, mjSTATE_FULLPHYSICS)`, `mj_getState(model, data, state, spec)` | 10 `planning.MPPI.plan` |
+| Many futures, in parallel threads | `mujoco.rollout.rollout(model, [MjData] * nthread, states (K × nstate), ctrl (K × T × nu), persistent_pool=True)` | 10 `planning.MPPI` |
+| MPPI | `planning.MPPI(model, ctrl0, actuators, samples, horizon, knot, sigma, temperature)`, `.cost = fn(Rollouts) -> (K,)`, `.plan(data)` | 10 `lab.py` |
+| Copy an expert | record (inputs, action) pairs, least squares `np.linalg.solve(ZᵀZ + λI, ZᵀY)` | 10 `lab.py` (`fit`) |
+
+## Pixels and words (week 11)
+
+| Idea | Call / array | Week, script |
+| --- | --- | --- |
+| A camera on a body | `spec.body("torso_link").add_camera(name=, pos=, xyaxes=, fovy=)`; MuJoCo cameras look down their own −z; `soc4180.vision.camera_model` | 11 `lab.py` |
+| A target you move by hand | `spec.worldbody.add_body(mocap=True)`, `data.mocap_pos[i]`, then `mj_forward`; `contype = conaffinity = 0` | 11 `lab.py` (`scene`) |
+| What the camera sees | `Renderer.update_scene(data, camera="head")`, `render()` (through `soc4180.render._new_renderer`) | 11 `lab.py` (`obey`) |
+| Dim the lights | `model.light_diffuse`, `model.light_ambient` | 11 `lab.py --dim` |
 
 ## Showing it
 

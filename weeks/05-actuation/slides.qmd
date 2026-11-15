@@ -927,7 +927,7 @@ failure is not one joint ringing; it is a *whole-body gait whose timing was
 tuned against this particular plant*. Change the plant and the trajectory no
 longer fits it.
 
-Remember that when a learned policy shrugs this off in Week 11.
+Remember that when a learned policy shrugs this off in Week 9.
 
 ---
 

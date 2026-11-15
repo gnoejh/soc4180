@@ -25,7 +25,7 @@ import mujoco
 
 __all__ = ["DEFAULT_REWARD", "G1PushEnv", "G1WalkEnv", "NOMINAL_WORLD", "RANDOM_WORLD", "walker_actions"]
 
-#: Reward term weights. Week 9 removes these one at a time.
+#: Reward term weights. Week 8 removes these one at a time.
 DEFAULT_REWARD = {
     "tracking": 1.5,   # match the commanded forward velocity -- the actual goal
     "upright": 0.5,    # shaping: stay vertical
@@ -51,7 +51,7 @@ class G1WalkEnv(_BASE):
     """Forward walking with the Unitree G1.
 
     Reward is deliberately simple this week — track a forward velocity, pay for
-    effort, stay alive. Week 9 takes it apart.
+    effort, stay alive. Week 8 takes it apart.
     """
 
     metadata = {"render_modes": []}
@@ -214,7 +214,7 @@ RANDOM_WORLD = {"friction": (0.3, 1.2), "mass": (-5.0, 10.0), "kp": (0.7, 1.3)}
 
 
 class G1PushEnv(G1WalkEnv):
-    """Stand in the crouch and survive a shove. Weeks 12 and 13.
+    """Stand in the crouch and survive a shove. Weeks 9 and 10.
 
     Same observation, action and reward as ``G1WalkEnv`` (with the target
     velocity at zero, so standing still is the goal), but every episode:
@@ -224,13 +224,13 @@ class G1PushEnv(G1WalkEnv):
       moment inside ``push_window``;
     - the world is drawn from ``world`` -- friction, added torso mass and
       servo stiffness, each uniform in its range (``NOMINAL_WORLD`` fixes them,
-      ``RANDOM_WORLD`` is week 12's domain randomisation);
+      ``RANDOM_WORLD`` is week 9's domain randomisation);
     - with ``privileged=True`` the observation gains nine numbers no real
       robot can measure: the pelvis's linear velocity (3) and height (1), the
       push force being applied now (2), and this episode's friction, mass and
-      stiffness (3). That is a *teacher's* observation (week 13).
+      stiffness (3). That is a *teacher's* observation (week 10).
 
-    Measured (week 12, `robust.py`, sideways shoves, 10 episodes): holding
+    Measured (week 9, `robust.py`, sideways shoves, 10 episodes): holding
     the crouch survives 60 N; PPO trained 3M steps in the nominal world 80 N;
     on randomised worlds, 100 N -- and 120 N with a torso 15 kg heavier,
     where holding the crouch falls with no shove at all.

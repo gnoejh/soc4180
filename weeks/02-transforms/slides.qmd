@@ -30,7 +30,7 @@ above it works without it.
 
 - Week 3 inverts it to decide joint angles from a desired foot position
 - Week 4 uses that to place footsteps
-- Week 12 feeds it into a policy's observations
+- Week 9 feeds it into a policy's observations
 
 Today you will work it out **on paper for a two-link leg**, then write it in code
 for all six joints, and check it against MuJoCo to the last decimal place.

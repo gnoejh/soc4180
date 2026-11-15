@@ -1,4 +1,4 @@
-"""Imitation learning: demonstrations, a student network, behaviour cloning and DAgger. Week 13.
+"""Imitation learning: demonstrations, a student network, behaviour cloning and DAgger. Week 10.
 
 Needs torch (``uv sync --extra rl``). Not imported by ``soc4180`` itself:
 ``from soc4180 import imitation``.
@@ -164,7 +164,7 @@ def walk(student, features, *, seeds=(100, 101, 102), env=None, params=None, rec
     return (out, frames) if record else out
 
 
-# --- a policy as an expert (weeks 12-13) -----------------------------------------------------------------
+# --- a policy as an expert (weeks 9-10) -----------------------------------------------------------------
 
 def _student_view(history, features, h):
     views = [observe(o, 0.0, features) for o in history[-h:]]

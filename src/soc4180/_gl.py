@@ -79,8 +79,8 @@ def _block_triton() -> None:
     torch 2.14, triton 3.8): once libOSMesa is loaded — which ``import mujoco``
     does at import time when ``MUJOCO_GL=osmesa`` — loading triton's native
     library segfaults. torch imports triton lazily, the first time an optimizer
-    is constructed, so the kernel died at the first *training* cell of weeks 8
-    and 9 and nowhere else; week 10 imports torch and survived because it never
+    is constructed, so the kernel died at the first *training* cell of the old weeks 8
+    and 9 (now week 8) and nowhere else; old week 10 (now 9) imports torch and survived because it never
     trains. The reverse order (triton first, then OSMesa) works, and so does
     blocking triton: torch treats a failed ``import triton`` as "not installed"
     and runs eagerly. Software rendering means there is no GPU, so nothing is

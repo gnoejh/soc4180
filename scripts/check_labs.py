@@ -8,11 +8,7 @@ Each week's pipeline script (`stack.py`, `walk.py`, ...) runs with
 `--no-viewer` and the smallest arguments that exercise it; each interactive lab
 (`lab_*.py`) runs with `SOC4180_AUTOCLOSE=4`, which closes its window after
 four seconds. A script passes if it exits 0 within its time limit. Failures
-print the tail of their output. The RL weeks (7 on) need `uv sync --extra rl`. Weeks 11-15's
-`lab_*.py` are graded games; their `--grade --problem N` runs one problem headless.
-Weeks 16-18 (Part II) run on ubrain 0.46 from vendor/ubrain/; their scripts are headless
-by default and run exactly as written. Week 17's vision step needs CLIP and is not in this
-list: run it as `uv run --extra vision weeks/17-senses/lab_sense.py --step vision`.
+print the tail of their output. The RL weeks (7 on) need `uv sync --extra rl`. Weeks 08-11 have one `lab.py` each (2026-11-15), run as written from AS_IS.
 
 This is the smoke test behind the "every script passed" claims in CLAUDE.md;
 run it after touching the package.
@@ -22,6 +18,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import shlex
 import subprocess
 import sys
 import time
@@ -42,33 +39,15 @@ PIPELINES = [
     ("07", "weeks/07-mdp/mdp.py --grid 41"),
     ("07b", "weeks/07b-tabular/qlearn.py --task cliff --episodes 100"),
     ("07b", "weeks/07b-tabular/lab_tables.py --grade --problem 3 4"),
-    ("08", "weeks/08-ppo/train.py --steps 0 --episodes 1"),
-    ("09", "weeks/09-reward/shape.py --steps 2048 --episodes 1"),
-    ("10", "weeks/10-scaling/many.py --robots 1 2 --procs 1 --seconds 0.5"),
-    ("11", "weeks/11-planning/plan.py --seconds 0.5 --samples 8"),
-    ("11", "weeks/11-planning/lab_plan.py --grade --problem 1"),
-    ("12", "weeks/12-robustness/robust.py --episodes 1"),
-    ("12", "weeks/12-robustness/lab_robust.py --grade --problem 1"),
-    ("13", "weeks/13-imitation/imitate.py --expert policy --demos 2"),
-    ("13", "weeks/13-imitation/lab_imitate.py --grade --problem 1"),
-    ("14", "weeks/14-vision/look.py --train 200 --test 50 --epochs 1"),
-    ("14", "weeks/14-vision/lab_look.py --grade --problem 1"),
-    ("15", "weeks/15-language/ground.py --train 200 --epochs 1"),
-    ("15", "weeks/15-language/lab_agent.py --grade --problem 1"),
+    ("projects", "weeks/projects/templates/project_template.py --forces 65 75"),
 ]
 
-# run as written: no --no-viewer appended (week 16's scripts use --headless, or no flag)
+# run as written: no --no-viewer appended (weeks 08-11's lab.py, with their own small flags)
 AS_IS = [
-    ("16", "weeks/16-program/lab_program.py --step whole --trials 600"),
-    ("16", "weeks/16-program/lab_program.py --step ask"),
-    ("16", "weeks/16-program/lab_program.py --step keep"),
-    ("16", "weeks/16-program/lab_program.py --step g1 --seconds 3"),
-    ("17", "weeks/17-senses/lab_sense.py --step brace --pushes 3"),
-    ("17", "weeks/17-senses/lab_sense.py --step push --pushes 4"),
-    ("17", "weeks/17-senses/lab_sense.py --step contact --seconds 2"),
-    ("18", "weeks/18-build/lab_choose.py"),
-    ("18", "weeks/18-build/lab_keep.py"),
-    ("18", "weeks/18-build/lab_brace.py --leads 10"),
+    ("08", "weeks/08-learning-to-act/lab.py --updates 2 --test 70 --no-viewer"),
+    ("09", "weeks/09-scale-and-robustness/lab.py --episodes 1 --no-viewer"),
+    ("10", "weeks/10-planning-and-imitation/lab.py --no-viewer"),
+    ("11", "weeks/11-pixels-and-language/lab.py --say \"look at the red ball\" --no-viewer"),
 ]
 
 LABS = [
@@ -82,14 +61,6 @@ LABS = [
     ("06", "weeks/06-sensing/lab_imu.py"),
     ("07", "weeks/07-mdp/lab_env.py"),
     ("07b", "weeks/07b-tabular/lab_tables.py"),
-    ("08", "weeks/08-ppo/lab_train.py"),
-    ("09", "weeks/09-reward/lab_reward.py"),
-    ("10", "weeks/10-scaling/lab_many.py"),
-    ("11", "weeks/11-planning/lab_plan.py"),
-    ("12", "weeks/12-robustness/lab_robust.py"),
-    ("13", "weeks/13-imitation/lab_imitate.py"),
-    ("14", "weeks/14-vision/lab_look.py"),
-    ("15", "weeks/15-language/lab_agent.py"),
 ]
 
 
@@ -101,7 +72,7 @@ def run(cmd: str, viewer: bool, limit: float) -> tuple[bool, float, str]:
         cmd += " --no-viewer"
     t0 = time.time()
     try:
-        p = subprocess.run([sys.executable, *cmd.split()], cwd=ROOT, env=env, stdin=subprocess.DEVNULL,
+        p = subprocess.run([sys.executable, *shlex.split(cmd)], cwd=ROOT, env=env, stdin=subprocess.DEVNULL,
                            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=limit, text=True,
                            encoding="utf-8", errors="replace")
         ok, out = p.returncode == 0, p.stdout
@@ -114,7 +85,7 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--no-viewer", action="store_true", help="skip the interactive labs")
     ap.add_argument("--only", nargs="*", default=None, help="week prefixes to run, e.g. 03 07")
-    ap.add_argument("--limit", type=float, default=300.0, help="seconds per script")
+    ap.add_argument("--limit", type=float, default=420.0, help="seconds per script (week 10 takes ~4 min)")
     args = ap.parse_args(argv)
 
     jobs = [(w, c, False) for w, c in PIPELINES + AS_IS]
@@ -127,7 +98,7 @@ def main(argv=None) -> int:
     print(f"{'week':>4}  {'kind':8}  {'result':6}  {'s':>6}  script")
     for week, cmd, viewer in jobs:
         ok, secs, out = run(cmd, viewer, args.limit)
-        print(f"{week:>4}  {'lab' if viewer else 'pipeline':8}  {'ok' if ok else 'FAIL':6}  {secs:6.1f}  {cmd.split()[0]}", flush=True)
+        print(f"{week:>4}  {'lab' if viewer else 'pipeline':8}  {'ok' if ok else 'FAIL':6}  {secs:6.1f}  {shlex.split(cmd)[0]}", flush=True)
         if not ok:
             failed.append((cmd, out))
     for cmd, out in failed:

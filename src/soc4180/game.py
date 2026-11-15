@@ -1,4 +1,4 @@
-"""The lab-game machinery of weeks 11-15, shared: an answers file read as data, problems, a score, a scorer code.
+"""The lab-game machinery of weeks 9-11, shared: an answers file read as data, problems, a score, a scorer code.
 
 Week 3's ``lab_connected.py`` is the model: students edit ONE data file, each
 problem is played live in the viewer with a gauge, ``G`` grades them all to a

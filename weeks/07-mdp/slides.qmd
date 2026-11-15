@@ -93,7 +93,7 @@ An MDP is the tuple $(\,{\color{#3b7dd8}{\mathcal{S}}},\ {\color{#e8743b}{\mathc
 | ${\color{#c0392b}{P(s'\mid s,a)}}$ | transition | "in ${\color{#3b7dd8}{s}}$, doing ${\color{#e8743b}{a}}$, you land in ${\color{#3b7dd8}{s'}}$" | **MuJoCo** — ten `mj_step` calls |
 | ${\color{#2a9d5c}{R(s,a)}}$ | reward | a number saying how good that step was | four terms + an alive bonus |
 | ${\color{#3b7dd8}{\rho_0}}$ | start distribution | where episodes begin | the crouch, each leg joint ± 0.02 rad at random |
-| ${\color{#8e44ad}{\gamma}}$ | discount | how much a reward one step later counts | 0.99 (weeks 8–10) |
+| ${\color{#8e44ad}{\gamma}}$ | discount | how much a reward one step later counts | 0.99 (weeks 8–9) |
 
 ---
 
@@ -160,7 +160,7 @@ fig, ax = plt.subplots(figsize=(9.6, 3.6)); ax.axis("off"); ax.set_xlim(0, 10.4)
 def block(x, y, w, h, text, col, alpha=0.9):
     ax.add_patch(FancyBboxPatch((x, y), w, h, boxstyle="round,pad=0.1", color=col, alpha=alpha))
     ax.text(x + w / 2, y + h / 2, text, ha="center", va="center", fontsize=10, color="w")
-block(0.4, 1.2, 2.6, 1.6, "policy  $\\pi(a\\mid o)$\n(weeks 8–10: a network)", "0.35")
+block(0.4, 1.2, 2.6, 1.6, "policy  $\\pi(a\\mid o)$\n(weeks 8–9: a network)", "0.35")
 block(5.6, 0.3, 4.4, 3.3, "", RED, alpha=0.25)
 ax.text(7.8, 3.35, "environment  (G1WalkEnv)", ha="center", fontsize=10, color=RED, weight="bold")
 block(5.9, 1.9, 1.8, 0.95, "MuJoCo\n$P(s'\\mid s,a)$", RED)
@@ -462,7 +462,7 @@ $r$ is only added up and printed. Two different things are both called "the MDP"
 | ${\color{#c0392b}{P}}$ | hidden: one sample ${\color{#3b7dd8}{s'}}$ per call | an array you can print |
 | ${\color{#2a9d5c}{R}}$ | one number per step | an array, every $(s, a)$ at once |
 | state | 71 numbers (the policy sees 42) | 2 numbers on a grid |
-| solved by | sampling and learning (weeks 8–10) | **value iteration**, exactly |
+| solved by | sampling and learning (weeks 8–9) | **value iteration**, exactly |
 
 The tables let us do what the simulator cannot: **solve** the MDP, and watch
 ${\color{#2a9d5c}{R}}$ and ${\color{#8e44ad}{\gamma}}$ decide the policy. The
@@ -673,7 +673,7 @@ for label, gamma, wts in (("gamma 0.99 (default)", 0.99, {}), ("gamma 0.8", 0.8,
 
 ---
 
-## Why weeks 8–10 cannot do this {.smaller}
+## Why weeks 8–9 cannot do this {.smaller}
 
 Value iteration needs two things the G1 does not give us:
 
@@ -1006,7 +1006,7 @@ Reasons, all from Week 0's timescale table:
 - fewer decisions per second means a shorter chain from an action to its
   consequence — the horizon in *decisions* is what $\gamma$ controls
 - the learned-locomotion work we follow does the same: MuJoCo Playground's G1
-  walking config (week 10) sets `ctrl_dt = 0.02` over `sim_dt = 0.002` — 50 Hz
+  walking config (week 9) sets `ctrl_dt = 0.02` over `sim_dt = 0.002` — 50 Hz
   over 500 Hz, exactly ours
 
 The servos still run at 500 Hz underneath. **The policy sets targets; the PD loop
@@ -1291,7 +1291,7 @@ $$R \approx \bar r \cdot n = \bar r \cdot T\,f_{\text{control}} \qquad\Longright
 > Return is only comparable between runs that share an episode structure.
 
 Report metrics that mean something physically — distance travelled, time upright,
-average velocity — alongside return. Week 9 leans on this hard.
+average velocity — alongside return. Week 8's second half leans on this hard.
 
 ---
 
@@ -1310,9 +1310,9 @@ $${\color{#2a9d5c}{r}} = 1.5\,\underbrace{e^{-(v-0.5)^2/0.25}}_{\text{tracking}}
 - $v$ — forward velocity of the pelvis (m/s); target 0.5
 - $-g_z$ — the vertical component of the body-frame gravity direction, sign
   flipped: 1 upright, $\cos\theta$ at tilt $\theta$
-- `stand_still` and `air_time` are printed too, but their weights are 0 this week (week 9 turns them on)
+- `stand_still` and `air_time` are printed too, but their weights are 0 this week (week 8 turns them on)
 
-Every one of those is a decision, and every one is exploitable. **Week 9 breaks
+Every one of those is a decision, and every one is exploitable. **Week 8 breaks
 them on purpose.**
 
 ---

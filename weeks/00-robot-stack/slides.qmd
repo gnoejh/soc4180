@@ -682,7 +682,7 @@ the layer that *replaces* hand-written parts of Layer 4.
 | Task planning | Decompose a goal into steps |
 | Vision-language-action models | Map instructions to robot actions |
 
-Weeks 7–15 are Layer 5. This is where the "AI" in the course title lives.
+Weeks 7–11 are Layer 5, and the term project (weeks 12–15) puts them to work. This is where the "AI" in the course title lives.
 
 ---
 
@@ -786,7 +786,7 @@ chases it.
 | **2 Model** | Onboard kinematic and dynamic model | **MJCF** from Menagerie, pinned |
 | **3 Middleware** | Vendor SDK + ROS 2 bridge | One Python process |
 | **4 Control** | Onboard joint servos, WBC, MPC | Controllers we write (weeks 2–6) |
-| **5 AI** | Policies deployed to the onboard computer | Policies we train (weeks 8–15) |
+| **5 AI** | Policies deployed to the onboard computer | Policies we train (weeks 8–11) |
 | **Body** | Motors, encoders, IMU, battery, frame | Numbers in the MJCF |
 
 **Layers 2–5 transfer between the columns. Layer 1 never does.**
@@ -810,7 +810,7 @@ Because **Layer 1 was replaced by reality**, and reality disagrees:
 
 None of these appear in the MJCF unless somebody puts them there.
 
-**Week 12** attacks this directly: a policy meets physics it did not train in
+**Week 9** attacks this directly: a policy meets physics it did not train in
 (other friction, extra mass, weaker servos), and we measure how far it degrades.
 
 ---

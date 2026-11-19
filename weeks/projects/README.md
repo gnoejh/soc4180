@@ -20,8 +20,11 @@ Contents of this folder:
 | file | what it is |
 | --- | --- |
 | this README | the introduction: deliverables, calendar, method, rules, grading |
-| [`catalogue.md`](catalogue.md) | thirteen starting projects (P1-P13) with measured baselines, plus P14, your own |
+| [`catalogue.md`](catalogue.md) | fifteen starting projects (P1-P13, P15, P16) with measured baselines, plus P14, your own |
+| [`templates/actions_demo.py`](templates/actions_demo.py) | **the actions lab**: 19 numbered G1 actions (body, arms, hands, legs) and a dance of snapshots, run by typing a number; the library is `soc4180.actions` |
 | [`templates/project_template.py`](templates/project_template.py) | a runnable experiment: a controller, its twin, a sweep, `results.csv`, the table, a `CHECK` line, a replay |
+| [`examples/p15_dance.py`](examples/p15_dance.py) | a complete default solution of P15: how fast can a dance of snapshots be played? |
+| [`examples/p16_learn_timing.py`](examples/p16_learn_timing.py) | a complete default solution of P16: week 8's learner learns the dance's timing |
 | [`templates/proposal.md`](templates/proposal.md) | the one-page proposal |
 | [`templates/report.md`](templates/report.md) | the report, section by section |
 | [`templates/presentation.md`](templates/presentation.md) | the talk and the live demo |
@@ -100,6 +103,7 @@ the trap we already know about. They cover the whole course:
 | robustness | P8 learned push recovery | 9 |
 | planning and imitation | P5 push recovery by planning, P6 new tasks for the planner, P7 a planner with a wrong model, P10 distil the expert | 10 |
 | perception and language | P11 eyes on the ball, P12 words to actions | 11 |
+| whole-body actions | P15 how fast can the G1 dance, P16 learn to dance faster (lab first: `templates/actions_demo.py`) | 2-4, 7, 8 |
 | anything else | P14 your own proposal (approved in week 12) | - |
 
 **Mind the compute.** A laptop runs a few hours of simulation per evening. Week 9's push

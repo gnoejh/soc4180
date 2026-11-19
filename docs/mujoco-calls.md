@@ -115,6 +115,16 @@ Two conventions run through everything:
 | What the camera sees | `Renderer.update_scene(data, camera="head")`, `render()` (through `soc4180.render._new_renderer`) | 11 `lab.py` (`obey`) |
 | Dim the lights | `model.light_diffuse`, `model.light_ambient` | 11 `lab.py --dim` |
 
+## Whole-body actions (the projects' actions lab, `soc4180.actions`)
+
+| Idea | Call / array | Week, script |
+| --- | --- | --- |
+| Add a ball to a compiled scene | `MjSpec.from_file(str(robot_path(...)))`, `worldbody.add_body(name="ball").add_freejoint()`, `add_geom(type=mjGEOM_SPHERE, ...)`; extend every `spec.keys[i].qpos` by the ball's 7 numbers, then `compile()` | projects `templates/actions_demo.py` (19 kick) |
+| Gravity load of a pose (feedforward) | `mj_kinematics`, `mj_comPos`, `mj_rne(model, data, 0, g)` with `qvel = 0`; the planted feet's `mj_jacSite` rows carry the base, `tau = g - J^T w`; servo target `q + tau / kp` | `soc4180/actions.py` `_sag_ahead` |
+| Leg IK with indices cached | `mj_kinematics` **and `mj_comPos`** every iteration (`mj_jacSite` reads `subtree_com`; stale, the Jacobian is wrong and IK diverges), `mj_jacSite`, damped least squares | `soc4180/actions.py` `_ik_legs` |
+| Whole-body centre of mass and its speed | `data.subtree_com[pelvis]`; `mj_subtreeVel(model, data)` then `data.subtree_linvel[pelvis]` | `soc4180/actions.py` `measured`, `_ankles` |
+| A palm point and its Jacobian (reach) | `xpos[b] + xmat[b] @ PALM`; `mj_jac(model, data, jacp, None, point, body)` | projects `templates/actions_demo.py` (11 reach) |
+
 ## Showing it
 
 | Idea | Call / array | Week, script |

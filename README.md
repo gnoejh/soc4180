@@ -29,7 +29,7 @@ result. Every deck is readable in a browser at
 | [09](weeks/09-scale-and-robustness/) | Scale and robustness — parallel training, domain randomisation | [deck](https://gnoejh.github.io/soc4180/09-scale-and-robustness/slides.html) | [![Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gnoejh/soc4180/blob/main/weeks/09-scale-and-robustness/lab.ipynb) | [`lab.py`](weeks/09-scale-and-robustness/lab.py) — test PPO push policies across worlds | CPU (checkpoints shipped) |
 | [10](weeks/10-planning-and-imitation/) | Planning and imitation — MPPI, copying an expert | [deck](https://gnoejh.github.io/soc4180/10-planning-and-imitation/slides.html) | [![Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gnoejh/soc4180/blob/main/weeks/10-planning-and-imitation/lab.ipynb) | [`lab.py`](weeks/10-planning-and-imitation/lab.py) — survive a shove by planning, then copy it | CPU |
 | [11](weeks/11-pixels-and-language/) | Pixels and language — a camera, words, a check | [deck](https://gnoejh.github.io/soc4180/11-pixels-and-language/slides.html) | [![Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gnoejh/soc4180/blob/main/weeks/11-pixels-and-language/lab.ipynb) | [`lab.py`](weeks/11-pixels-and-language/lab.py) — "look at the green ball" | CPU (Colab: GPU to render) |
-| [12–15](weeks/projects/) | **Term project** — one question about the G1, answered by measurement | [intro](weeks/projects/README.md) | — | [`catalogue.md`](weeks/projects/catalogue.md), [`project_template.py`](weeks/projects/templates/project_template.py) | CPU (laptop) |
+| [12–15](weeks/projects/) | **Term project** — one question about the G1, answered by measurement | [intro](weeks/projects/README.md) | — | [`catalogue.md`](weeks/projects/catalogue.md), [`project_template.py`](weeks/projects/templates/project_template.py), [`actions_demo.py`](weeks/projects/templates/actions_demo.py) — 19 numbered G1 actions and a dance | CPU (laptop) |
 
 Every deck derives its equations step by step, defines each symbol, draws each
 concept, and reads its printed numbers aloud; every number on a slide is printed
@@ -58,6 +58,11 @@ deck walks through; no week needs a GPU on a laptop.
 **Weeks 12–15 are the term project** ([`weeks/projects/`](weeks/projects/README.md)):
 teams pick a question from the [catalogue](weeks/projects/catalogue.md) or propose one,
 predict, measure against a twin, and present in the final-exam slot.
+The project's lab class is [`actions_demo.py`](weeks/projects/templates/actions_demo.py): type a
+number and the G1 squats, waves, reaches, stands on one leg, steps, turns or kicks a ball
+(`soc4180.actions`); dances are chained snapshots. Two projects come with complete default
+solutions: P15 (how fast can a dance be played?) and P16 (week 8's learner learns its timing),
+in [`examples/`](weeks/projects/examples/).
 
 ## For students
 

@@ -1,6 +1,6 @@
 # Project catalogue
 
-Thirteen starting projects plus P14, your own. Each one gives:
+Fifteen starting projects (P1-P13, P15, P16) plus P14, your own. Each one gives:
 
 - **Question**: a starting question. Narrow it, and change the numbers.
 - **Start from**: the course script or package code that already does most of the work.
@@ -252,6 +252,56 @@ rule that survives pushes as well as week 7's hand-designed ankle strategy?
 - **Trap.** `BalanceLearner.advance` has a known defect: `np.add.at` applies many
   updates to one entry per tick, so the 81-bin number is mostly the defect. Write your
   own update, one α step per entry per tick.
+
+## P15. Choreograph from snapshots: how fast can the G1 dance? ●●
+
+**Question.** You compose a dance from named whole-body snapshots. How fast can it be
+played before the G1 falls, and which rule of choreography decides it?
+
+- **Start from.** The lab `templates/actions_demo.py` (try every action and snapshot
+  first), then the default solution `examples/p15_dance.py`, which is a complete project:
+  question, prediction, twin, sweep, `p15_results.csv`, `CHECK`. Library:
+  `soc4180.actions` (`G1.play(dance, tempo)`, `G1.check(dance)`, `SNAPSHOTS`).
+- **Measured (the default solution, 25 tempos, 37 s on 36 cores).** The sample dance
+  (18 snapshots, 19 s at tempo 1) stands at every tempo from 0.5 to 1.35 and falls from
+  1.4. Its twin -- one glide changed so an arm swings out while a knee lifts -- falls at
+  every tempo from 0.5 to 1.05, stands at 1.1-1.3 and falls from 1.35. The library
+  measured too: a weight shift onto one foot stands in 1.0 s and falls in 0.8 s; squat
+  depth 0.18 m stands, 0.21 falls; the soles are 5-6 cm wide.
+- **Twin.** Your dance with one snapshot or one duration changed.
+- **Stretch.** Find the rule behind your fastest tempo: which glide falls first, and does
+  giving it more time (and the rest less) raise the limit? That is P16 by hand.
+- **Trap.** Reading "falls at tempo x" off one run near the edge. Sweep the tempo in
+  steps of 0.05 and report the range that stands. And slower is not always safer: the
+  twin falls slow and stands fast, because the creep toward the sole's edge needs time.
+
+## P16. Learn to dance faster ●●●
+
+**Question.** Keep a dance's length fixed at a tempo where it falls. Can the G1 learn
+how to split that time between its glides so that it stands -- and what does it learn
+to spend the time on?
+
+- **Start from.** `examples/p16_learn_timing.py` (default solution; reads P15's dance).
+  The learner is week 8's antithetic parameter-space policy gradient, unchanged, on 18
+  numbers (one per glide); the reward is the fraction of the dance done before a fall,
+  plus 1 for standing.
+- **Measured (seed 0, 30 updates of 8 pairs, 219 s on 36 cores; expect 15-30 minutes
+  on a laptop; the run repeats exactly).** At target tempo 1.5, the default split falls; the learned
+  split stands from update 18 on (14 of the 16 tries of update 30 stand). Tested: the
+  default split stands up to 1.35, the learned one at every tested tempo from 1.0 to 1.5.
+  It moved time to the weight shifts onto one foot (1.00 -> 2.33 s and 1.00 -> 1.55 s)
+  and to the arms-up sways, and took it from the waves, twists and returns.
+  Two first attempts failed, and both are worth knowing: lr 1.0 found splits that
+  stood, then jumped into a split that rushes everything (stuck at 93 % of the dance);
+  target 1.6 with lr 0.3 crept to 90 % in 25 updates and never stood.
+- **Twin.** The same dance and length with the default split (`--updates 0`).
+- **Stretch.** Reward smoothness too (the `tracking` number), or learn the balance
+  gains together with the timing. Full reinforcement learning of the joints (PPO
+  tracking the snapshots) is the research version; it needs a GPU and hours -- ask
+  first.
+- **Trap.** Partial credit can teach the robot to survive longer instead of finishing:
+  watch whether the number of tries that *stand* rises, not only the mean reward. Keep
+  the best theta (week 7b's KeepBest): the learner can find a good split and lose it.
 
 ## P14. Your own proposal
 

@@ -48,6 +48,10 @@ AS_IS = [
     ("09", "weeks/09-scale-and-robustness/lab.py --episodes 1 --no-viewer"),
     ("10", "weeks/10-planning-and-imitation/lab.py --no-viewer"),
     ("11", "weeks/11-pixels-and-language/lab.py --say \"look at the red ball\" --no-viewer"),
+    # the actions lab and the two default project solutions (soc4180.actions)
+    ("projects", "weeks/projects/templates/actions_demo.py --no-viewer --action 9"),
+    ("projects", "weeks/projects/examples/p15_dance.py --tempos 1.0 1.4 --no-viewer"),
+    ("projects", "weeks/projects/examples/p16_learn_timing.py --updates 0 --no-viewer"),
 ]
 
 LABS = [
@@ -61,6 +65,7 @@ LABS = [
     ("06", "weeks/06-sensing/lab_imu.py"),
     ("07", "weeks/07-mdp/lab_env.py"),
     ("07b", "weeks/07b-tabular/lab_tables.py"),
+    ("projects", "weeks/projects/templates/actions_demo.py"),
 ]
 
 

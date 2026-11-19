@@ -128,6 +128,56 @@ Found earlier while merging: week 8's old "valley" claim was false by a hair (am
 scores 774.12 vs standing's 774.09); the old 13 deck pointed at `robust.py --privileged`,
 which was never shipped.
 
+## The actions lab and projects P15/P16 (user, 2026-11-19)
+
+User: "lab.py is awfully uninteresting ... include more advanced actions of G1"; then a
+library of stable basic actions, snapshots chained into motions, and learning to follow
+them ("1 as lab and 2&3 for project ... each completed with default solution").
+- **`src/soc4180/actions.py`**: `G1()` (the G1 with hands + a ball), 19 actions (squat,
+  lean, sway, bow, twist, raise_arms, wave, hands, reach, point_at, clap, one_leg, step,
+  walk, side_step, turn, kick, ...), `move(seconds, **targets)` as the one verb,
+  `SNAPSHOTS` (36 named poses, join with '+'), `play(dance, tempo)`, `check(dance)`.
+- **The lab** is `weeks/projects/templates/actions_demo.py` (numbers typed in the terminal,
+  live viewer); **P15** `examples/p15_dance.py` and **P16** `examples/p16_learn_timing.py`
+  are complete default solutions; both are in `catalogue.md`. All three are in
+  `check_labs.py`.
+
+Measured while building it; each cost a debugging round, so do not undo them:
+- **Without gravity feedforward no one-leg stance stands.** The loaded leg's kp-500 servos
+  sag (~0.04 rad at the hip roll, ~2.8 cm at the pelvis), the body rolls onto that leg,
+  and it falls; integral terms, tilt/CoM/ankle feedback alone all failed. The fix is
+  `_sag_ahead`: inverse dynamics (`mj_rne`, qvel 0), the planted feet carry the base
+  (weighted by the *commanded* CoM; weighting by the measured CoM was worse), servo target
+  `q + tau/kp`.
+- **The CoM target must be over the middle of the sole, 0.03 m in front of the ankle**
+  (the foot runs -0.05..+0.12 m); over the ankle the robot falls backwards. Soles are 5-6
+  cm wide (contact spheres at y +-0.025/0.03).
+- **Ankle reflex signs (pitch +1, roll -1)**; the other three pairs all fall. With
+  ankle 2 / 0.3 and COM_GAIN 0.5 the margins are wide (ankle 0.5-10, CoM gain 0-2.5 all
+  stand). Without the reflexes the second of two steps falls.
+- **The G1's elbow 0 is a right angle**; the arm is straightest at 1.45. A wave needs
+  shoulder yaw 1.57 so the forearm points up. Look at renders: the first poses were wrong.
+- **Stepping outward is limited by the ankle roll's +-0.262 rad**: side steps 4 cm a pair.
+- **Week 4's LIPM walker could not be reused**: from the library's stance the 0.14 m step
+  falls (0.10 stands); turning/sideways versions fell. Walk/turn/side_step are chains of
+  quasi-static steps (4.6 s each).
+- **`mj_jacSite` reads `subtree_com`**: the cached-index leg IK must call `mj_comPos`
+  every iteration, or after a fall `reset()` diverges (IK error 1.19 m).
+- Limits: shift onto one foot 1.0 s stands, 0.8 falls; squat 0.18 m stands, 0.21 falls;
+  step 0.22 stands, 0.25 falls; kick strength 0.5/0.75/1/1.25/1.5 -> 0.55/1.43/2.27/1.37/
+  1.06 m, 1.75 falls. 50 random chains of 8 actions stood.
+- **P15**: the sample dance stands at every tempo 0.5-1.35, falls from 1.4. Its twin (an
+  arm swings out while a knee lifts) falls at 0.5-1.05, stands 1.1-1.3: the CoM creeps
+  ~2.6 cm toward the lifted foot, and slow tempos give it time. No gain setting fixed it;
+  `check()` warns about it.
+- **P16**: week 8's antithetic learner on 18 log-weights (the glides' share of a fixed
+  length), reward = fraction done + 1 if stood. Target 1.5, lr 0.3, |theta| <= 1, keep
+  best: stands from update 18 (about 4 min on 36 cores). lr 1.0 found standing splits and
+  jumped away; target 1.6 crept to 90 % and never stood. It uses no GPU (MuJoCo on CPU);
+  Vast.ai (`VASTAI_KEY` in `.env`) is for GPU work only, confirm the cost with the user first.
+- Worker processes must reuse one `G1` (reset between tries): a new one per try ran two
+  learners out of memory.
+
 ## Syllabus
 
 ### Part I, weeks 0-15: the robot
@@ -156,7 +206,7 @@ training; an LLM planner appears only as a non-executed code block).
 | 09 | Scale and robustness | `09-scale-and-robustness` | **one `lab.py`**: test hold / week 8 ankle / PPO nominal / PPO random (shipped `checkpoints/push_*.zip`) across editable WORLDS at exact sideways pushes; ~3.5 min; CPU; GPU training taught as a concept only |
 | 10 | Planning and imitation | `10-planning-and-imitation` | **one `lab.py`**: MPPI with an editable `cost()` survives 150 N (feet move 3.04 m), then a least-squares linear copy of an EXPERT (planner or ankle) from chosen INPUTS; ~4 min; CPU |
 | 11 | Pixels and language | `11-pixels-and-language` | **one `lab.py`**: "look at the <colour> ball": colour_of, find_ball (colour distance + centroid), atan(-u), P control on the waist, a check from the picture; 8/8 within 0.3 deg, refuses hidden ball and "crimson"; CPU |
-| 12-15 | **Term project** on the G1 | `weeks/projects/` | written 2026-11-15: README (deliverables, calendar, method, rules, grading), `catalogue.md` (P1-P14 with measured baselines), `templates/` (proposal, report, presentation, checklist, `project_template.py`: ankle strategy vs hold, hold falls from 70 N, ankle from 80 N, CHECK PASS, 20 runs in 5 s), `teams/` |
+| 12-15 | **Term project** on the G1 | `weeks/projects/` | written 2026-11-15: README (deliverables, calendar, method, rules, grading), `catalogue.md` (P1-P14 with measured baselines), `templates/` (proposal, report, presentation, checklist, `project_template.py`: ankle strategy vs hold, hold falls from 70 N, ankle from 80 N, CHECK PASS, 20 runs in 5 s), `teams/`; lab class `templates/actions_demo.py` (19 actions + a dance on `soc4180.actions`), P15/P16 default solutions in `examples/` (2026-11-19) |
 
 ### Part II, weeks 16-18: the whole brain in the G1 (one project)
 
